@@ -19,18 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Pages
-        uses: actions/configure-pages@v3
+        uses: actions/configure-pages@v5
         with:
           enablement: true
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'  # adjust as needed
+          path: '.'  # Or your build output directory (e.g. 'dist')
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
