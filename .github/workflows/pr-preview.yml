@@ -1,0 +1,28 @@
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy files into PR-specific folder
+        run: |
+          mkdir -p pr-preview/pr-${{ github.event.number }}
+          cp -r * pr-preview/pr-${{ github.event.number }}/
+          touch pr-preview/.nojekyll  # ensures GitHub Pages doesn't process files
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./pr-preview
+          publish_branch: gh-pages
+          keep_files: true
