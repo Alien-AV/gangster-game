@@ -19,18 +19,25 @@
 <h1>Mafia Manager Prototype</h1>
 <div class="counter">Money: $<span id="money">0</span></div>
 <div class="counter">Mooks: <span id="mooks">0</span></div>
-<div class="counter">Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">1</span> block(s)</div>
 <div class="counter">Heat: <span id="heat">0</span></div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
 <div class="counter">Faces: <span id="faces">0</span></div>
+<div class="counter">Faces Extorting: <span id="facesExtorting">0</span></div>
+<div class="counter">Faces Hiring: <span id="facesHiring">0</span></div>
 <div class="counter">Fists: <span id="fists">0</span></div>
 <div class="counter">Brains: <span id="brains">0</span></div>
 <div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
 <hr>
 <div class="action">
-    <button id="bossExtort">Extort with Boss</button>
-    <div id="bossExtortProgress" class="progress hidden"><div class="progress-bar"></div></div>
+    <label for="bossTask">Boss Task:</label>
+    <select id="bossTask">
+        <option value="extort">Extort</option>
+        <option value="hire">Hire</option>
+        <option value="fist">Fist</option>
+    </select>
+    <button id="bossDoTask">Do Boss Task</button>
+    <div id="bossTaskProgress" class="progress hidden"><div class="progress-bar"></div></div>
 </div>
 
 <div class="action">
@@ -38,9 +45,6 @@
     <div id="recruitMookProgress" class="progress hidden"><div class="progress-bar"></div></div>
 </div>
 
-<div class="action">
-    <button id="assignPatrol" class="hidden">Assign Mook to Patrol</button>
-</div>
 
 <div class="action">
     <button id="recruitLieutenant" class="hidden">Recruit Lieutenant ($20)</button>
@@ -53,9 +57,19 @@
     <button id="chooseBrain">Brain</button>
 </div>
 
+<div class="action hidden" id="faceAssign">
+    <button id="assignFaceExtort">Assign Face to Extort</button>
+    <button id="assignFaceHire">Assign Face to Hire</button>
+</div>
+
 <div class="action">
     <button id="faceExtort" class="hidden">Extort with Face</button>
     <div id="faceExtortProgress" class="progress hidden"><div class="progress-bar"></div></div>
+</div>
+
+<div class="action">
+    <button id="faceHire" class="hidden">Hire Mooks with Face</button>
+    <div id="faceHireProgress" class="progress hidden"><div class="progress-bar"></div></div>
 </div>
 
 <div class="action">
@@ -76,15 +90,15 @@
 const state = {
     money: 0,
     mooks: 0,
-    patrol: 0,
     territory: 1,
     heat: 0,
     businesses: 0,
     faces: 0,
+    facesExtort: 0,
+    facesHire: 0,
     fists: 0,
     brains: 0,
     unlockedMook: false,
-    unlockedPatrol: false,
     unlockedLieutenant: false,
     unlockedFaceExtort: false,
     unlockedBusiness: false,
@@ -95,19 +109,23 @@ const state = {
 function updateUI() {
     document.getElementById('money').textContent = state.money;
     document.getElementById('mooks').textContent = state.mooks;
-    document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
     document.getElementById('businesses').textContent = state.businesses;
     document.getElementById('faces').textContent = state.faces;
+    document.getElementById('facesExtorting').textContent = state.facesExtort;
+    document.getElementById('facesHiring').textContent = state.facesHire;
     document.getElementById('fists').textContent = state.fists;
     document.getElementById('brains').textContent = state.brains;
 
     document.getElementById('illicit').textContent = state.illicit;
     if (state.unlockedMook) document.getElementById('recruitMook').classList.remove('hidden');
-    if (state.unlockedPatrol) document.getElementById('assignPatrol').classList.remove('hidden');
     if (state.unlockedLieutenant) document.getElementById('recruitLieutenant').classList.remove('hidden');
-    if (state.unlockedFaceExtort && state.faces > 0) document.getElementById('faceExtort').classList.remove('hidden');
+    if (state.unlockedFaceExtort && state.faces > 0) {
+        document.getElementById('faceExtort').classList.remove('hidden');
+        document.getElementById('faceHire').classList.remove('hidden');
+        document.getElementById('faceAssign').classList.remove('hidden');
+    }
     if (state.unlockedBusiness) document.getElementById('buyBusiness').classList.remove('hidden');
     if (state.unlockedIllicit && state.businesses > state.illicit && state.brains > 0) document.getElementById("buildIllicit").classList.remove("hidden");
     else document.getElementById("buildIllicit").classList.add("hidden");
@@ -133,6 +151,12 @@ function runProgress(progressId, duration, callback) {
     }, 100);
 }
 
+function checkHeat() {
+    if (state.mooks < state.territory) {
+        state.heat += 1;
+    }
+}
+
 function showLieutenantTypeSelection(callback) {
     const container = document.getElementById('lieutenantChoice');
     container.classList.remove('hidden');
@@ -151,16 +175,30 @@ function showLieutenantTypeSelection(callback) {
     document.getElementById('chooseBrain').onclick = () => choose('brain');
 }
 
-function bossExtort() {
-    document.getElementById('bossExtort').disabled = true;
-    runProgress('bossExtortProgress', 3000, () => {
-        state.money += 10;
-        state.unlockedMook = true;
-        document.getElementById('bossExtort').disabled = false;
+function bossAction() {
+    const task = document.getElementById('bossTask').value;
+    document.getElementById('bossDoTask').disabled = true;
+    runProgress('bossTaskProgress', 3000, () => {
+        if (task === 'extort') {
+            state.money += 10 * state.territory;
+            state.territory += 1;
+            state.unlockedMook = true;
+            checkHeat();
+        } else if (task === 'hire') {
+            if (state.money < 5) { alert('Not enough money'); }
+            else {
+                state.money -= 5;
+                state.mooks += 1;
+                state.unlockedLieutenant = true;
+            }
+        } else if (task === 'fist') {
+            // placeholder for future fist actions
+        }
+        document.getElementById('bossDoTask').disabled = false;
     });
 }
 
-document.getElementById('bossExtort').onclick = bossExtort;
+document.getElementById('bossDoTask').onclick = bossAction;
 
 function recruitMook() {
     if (state.money < 5) return alert('Not enough money');
@@ -168,7 +206,6 @@ function recruitMook() {
     state.money -= 5;
     runProgress('recruitMookProgress', 2000, () => {
         state.mooks += 1;
-        state.unlockedPatrol = true;
         state.unlockedLieutenant = true;
         document.getElementById('recruitMook').disabled = false;
     });
@@ -176,17 +213,6 @@ function recruitMook() {
 
 document.getElementById('recruitMook').onclick = recruitMook;
 
-function assignPatrol() {
-    if (state.mooks <= 0) return alert('No available mooks');
-    state.mooks -= 1;
-    state.patrol += 1;
-    if (state.patrol < state.territory) {
-        state.heat += 1; // not enough patrol, heat rises
-    }
-    updateUI();
-}
-
-document.getElementById('assignPatrol').onclick = assignPatrol;
 
 function recruitLieutenant() {
     if (state.money < 20) return alert('Not enough money');
@@ -204,19 +230,51 @@ function recruitLieutenant() {
 
 document.getElementById('recruitLieutenant').onclick = recruitLieutenant;
 
+function assignFaceExtort() {
+    if (state.faces - state.facesExtort - state.facesHire <= 0) return alert('No idle faces');
+    state.facesExtort += 1;
+    updateUI();
+}
+
+function assignFaceHire() {
+    if (state.faces - state.facesExtort - state.facesHire <= 0) return alert('No idle faces');
+    state.facesHire += 1;
+    updateUI();
+}
+
+document.getElementById('assignFaceExtort').onclick = assignFaceExtort;
+document.getElementById('assignFaceHire').onclick = assignFaceHire;
+
 function faceExtort() {
-    if (state.faces <= 0) return alert('Need a face lieutenant');
+    if (state.facesExtort <= 0) return alert('No faces assigned to extort');
     document.getElementById('faceExtort').disabled = true;
+    const count = state.facesExtort;
     runProgress('faceExtortProgress', 4000, () => {
-        state.money += 15 * state.territory;
-        state.territory += 1;
-        if (state.patrol < state.territory) state.heat += 1;
+        state.money += 15 * state.territory * count;
+        state.territory += count;
+        checkHeat();
         document.getElementById('faceExtort').disabled = false;
         state.unlockedBusiness = true;
     });
 }
 
 document.getElementById('faceExtort').onclick = faceExtort;
+
+function faceHire() {
+    if (state.facesHire <= 0) return alert('No faces assigned to hire');
+    const neededMoney = 5 * state.facesHire;
+    if (state.money < neededMoney) return alert('Not enough money');
+    document.getElementById('faceHire').disabled = true;
+    state.money -= neededMoney;
+    const count = state.facesHire;
+    runProgress('faceHireProgress', 3000, () => {
+        state.mooks += count;
+        state.unlockedLieutenant = true;
+        document.getElementById('faceHire').disabled = false;
+    });
+}
+
+document.getElementById('faceHire').onclick = faceHire;
 
 function buyBusiness() {
     if (state.money < 100) return alert('Not enough money');

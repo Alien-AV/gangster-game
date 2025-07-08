@@ -4,22 +4,22 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 
 ## Core Resources
 - **Money** – needed to recruit mooks, hire lieutenants and pay off the police.
-- **Mooks** – basic manpower. They can patrol your territory or be assigned to lieutenants.
-- **Territory** – city blocks under your control. More territory means more potential profit but requires more patrols or heat rises.
+- **Mooks** – basic manpower. They automatically patrol your territory unless reassigned.
+- **Territory** – city blocks under your control. Expanding territory requires enough mooks on patrol or heat will rise.
 - **Heat** – unwanted attention from law enforcement. Can be reduced by paying off cops.
 - **Businesses** – legitimate fronts that can host illicit operations.
 
 ## Lieutenants
-- **Face** – used to extort surrounding blocks, expanding territory and generating cash.
+- **Face** – gangsters that can be assigned to extort new territory or hire additional mooks.
 - **Fist** – keeps unruly businesses in line when patrols are thin (not yet implemented).
 - **Brain** – sets up illicit businesses behind purchased fronts.
 
 ## Gameplay Loop Example
 1. Extort with the boss to earn starting cash.
-2. Recruit mooks and assign them to patrol to keep heat down.
+2. Recruit mooks (they automatically patrol) to keep heat down.
 3. Hire lieutenants and choose their specialty.
-4. Use Face lieutenants to expand territory and earn more money.
+4. Use Face lieutenants to expand territory or hire additional mooks.
 5. Buy a business and assign a Brain lieutenant to create an illicit operation.
-6. Balance money, territory, patrols and heat while gradually growing your empire.
+6. Balance money, territory, mook coverage and heat while gradually growing your empire.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.
