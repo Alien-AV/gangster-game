@@ -2,23 +2,25 @@ name: PR Preview
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  issues: write
 
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Create PR preview folder
         run: |
           mkdir -p pr-preview/pr-${{ github.event.number }}
-          rsync -av --exclude=pr-preview ./ pr-preview/pr-${{ github.event.number }}/
+          rsync -av --exclude=pr-preview --exclude=.git --exclude=.github ./ pr-preview/pr-${{ github.event.number }}/
           touch pr-preview/.nojekyll
 
       - name: Deploy to gh-pages
@@ -42,11 +44,16 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const prNumber = context.payload.pull_request.number;
-            const url = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr-${prNumber}/`;
-            github.rest.issues.createComment({
-              issue_number: prNumber,
+            const pr = context.payload.pull_request.number;
+            const pages = await github.rest.repos.getPages({
               owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `📦 Preview available: [View it here](${url})`
+              repo: context.repo.repo
+            });
+            const base = pages.data.html_url.replace(/\/$/, '');
+            const url  = `${base}/pr-${pr}/`;
+            github.rest.issues.createComment({
+              issue_number: pr,
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              body:         `📦 Preview available: [View it here](${url})`
             });
