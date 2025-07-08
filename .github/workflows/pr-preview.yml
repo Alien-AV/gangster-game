@@ -18,8 +18,7 @@ jobs:
       - name: Create PR preview folder
         run: |
           mkdir -p pr-preview/pr-${{ github.event.number }}
-          shopt -s extglob
-          cp -r * pr-preview/pr-${{ github.event.number }}/
+          rsync -av --exclude=pr-preview ./ pr-preview/pr-${{ github.event.number }}/
           touch pr-preview/.nojekyll
 
       - name: Deploy to gh-pages
