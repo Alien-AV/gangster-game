@@ -6,8 +6,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
   deploy-main:
@@ -15,13 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare dist/
+      - name: Prepare main site
         run: |
           mkdir dist
           rsync -av --exclude=pr-preview --exclude=.git --exclude=.github ./ dist/
           touch dist/.nojekyll
 
-      - name: Deploy to gh-pages
+      - name: Deploy to gh-pages root
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
