@@ -23,6 +23,7 @@
 <div class="counter">Faces: <span id="faces">0</span></div>
 <div class="counter">Fists: <span id="fists">0</span></div>
 <div class="counter">Brains: <span id="brains">0</span></div>
+<div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
 <hr>
 <button id="bossExtort">Extort with Boss</button>
 <div id="bossExtortProgress" class="progress hidden"><div class="progress-bar"></div></div>
@@ -46,6 +47,8 @@
 
 <button id="buyBusiness" class="hidden">Buy Business ($100)</button>
 <div id="buyBusinessProgress" class="progress hidden"><div class="progress-bar"></div></div>
+<button id="buildIllicit" class="hidden">Build Illicit Business</button>
+<div id="buildIllicitProgress" class="progress hidden"><div class="progress-bar"></div></div>
 
 <button id="payCops" class="hidden">Pay Off Cops ($50)</button>
 <div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
@@ -66,6 +69,8 @@ const state = {
     unlockedLieutenant: false,
     unlockedFaceExtort: false,
     unlockedBusiness: false
+    illicit: 0,
+    unlockedIllicit: false,
 };
 
 function updateUI() {
@@ -79,11 +84,14 @@ function updateUI() {
     document.getElementById('fists').textContent = state.fists;
     document.getElementById('brains').textContent = state.brains;
 
+    document.getElementById('illicit').textContent = state.illicit;
     if (state.unlockedMook) document.getElementById('recruitMook').classList.remove('hidden');
     if (state.unlockedPatrol) document.getElementById('assignPatrol').classList.remove('hidden');
     if (state.unlockedLieutenant) document.getElementById('recruitLieutenant').classList.remove('hidden');
     if (state.unlockedFaceExtort && state.faces > 0) document.getElementById('faceExtort').classList.remove('hidden');
     if (state.unlockedBusiness) document.getElementById('buyBusiness').classList.remove('hidden');
+    if (state.unlockedIllicit && state.businesses > state.illicit && state.brains > 0) document.getElementById("buildIllicit").classList.remove("hidden");
+    else document.getElementById("buildIllicit").classList.add("hidden");
     if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
 }
 
@@ -182,6 +190,8 @@ function faceExtort() {
     document.getElementById('faceExtort').disabled = true;
     runProgress('faceExtortProgress', 4000, () => {
         state.money += 15 * state.territory;
+        state.territory += 1;
+        if (state.patrol < state.territory) state.heat += 1;
         document.getElementById('faceExtort').disabled = false;
         state.unlockedBusiness = true;
     });
@@ -195,11 +205,25 @@ function buyBusiness() {
     state.money -= 100;
     runProgress('buyBusinessProgress', 5000, () => {
         state.businesses += 1;
+        state.unlockedIllicit = true;
         document.getElementById('buyBusiness').disabled = false;
     });
 }
 
 document.getElementById('buyBusiness').onclick = buyBusiness;
+
+function buildIllicit() {
+    if (state.businesses <= state.illicit) return alert("No available fronts");
+    if (state.brains <= 0) return alert("Need a brain lieutenant");
+    document.getElementById("buildIllicit").disabled = true;
+    state.brains -= 1;
+    runProgress("buildIllicitProgress", 4000, () => {
+        state.illicit += 1;
+        document.getElementById("buildIllicit").disabled = false;
+    });
+}
+
+document.getElementById("buildIllicit").onclick = buildIllicit;
 
 function payCops() {
     if (state.money < 50) return alert('Not enough money');
@@ -213,6 +237,12 @@ function payCops() {
 }
 
 document.getElementById('payCops').onclick = payCops;
+setInterval(() => {
+    if (state.illicit > 0) {
+        state.money += state.illicit * 5;
+        updateUI();
+    }
+}, 5000);
 
 updateUI();
 </script>
