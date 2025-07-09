@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Mafia Manager Prototype</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .counter { margin: 4px 0; }
+        button { margin: 4px 0; }
+        .action { display: flex; align-items: center; margin: 4px 0; }
+        .action button { margin: 0; }
+        .action .progress { margin-left: 8px; }
+        .hidden { display: none; }
+        .progress { width: 200px; background: #ccc; height: 16px; margin: 0; position: relative; }
+        .progress-bar { height: 100%; width: 0%; background: #4caf50; transition: width 0.1s linear; }
+    </style>
+</head>
+<body>
+<h1>Mafia Manager Prototype</h1>
+<div class="counter">Money: $<span id="money">0</span></div>
+<div class="counter">Mooks: <span id="mooks">0</span></div>
+<div class="counter">Territory: <span id="territory">1</span> block(s)</div>
+<div class="counter">Heat: <span id="heat">0</span></div>
+<div class="counter">Businesses: <span id="businesses">0</span></div>
+<div class="counter">Faces: <span id="faces">0</span></div>
+<div class="counter">Fists: <span id="fists">0</span></div>
+<div class="counter">Brains: <span id="brains">0</span></div>
+<div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
+<hr>
+<div id="lieutenants"></div>
+
+<div class="action">
+    <button id="recruitLieutenant" class="hidden">Recruit Lieutenant ($20)</button>
+    <div id="recruitLieutenantProgress" class="progress hidden"><div class="progress-bar"></div></div>
+</div>
+<div id="lieutenantChoice" class="hidden">
+    <p>Select lieutenant type:</p>
+    <button id="chooseFace">Face</button>
+    <button id="chooseFist">Fist</button>
+    <button id="chooseBrain">Brain</button>
+</div>
+
+
+<div class="action">
+    <button id="buyBusiness" class="hidden">Buy Business ($100)</button>
+    <div id="buyBusinessProgress" class="progress hidden"><div class="progress-bar"></div></div>
+</div>
+
+<div class="action">
+    <button id="payCops" class="hidden">Pay Off Cops ($50)</button>
+    <div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
+</div>
+
+<script>
+const state = {
+    money: 0,
+    mooks: 0,
+    territory: 1,
+    heat: 0,
+    businesses: 0,
+    illicit: 0,
+    lieutenants: [{ type: 'boss', busy: false }],
+    unlocks: new Set(),
+};
+
+function updateUI() {
+    document.getElementById('money').textContent = state.money;
+    document.getElementById('mooks').textContent = state.mooks;
+    document.getElementById('territory').textContent = state.territory;
+    document.getElementById('heat').textContent = state.heat;
+    document.getElementById('businesses').textContent = state.businesses;
+    document.getElementById('faces').textContent = countType('face');
+    document.getElementById('fists').textContent = countType('fist');
+    document.getElementById('brains').textContent = countType('brain');
+
+    document.getElementById('illicit').textContent = state.illicit;
+    if (isUnlocked('recruitLieutenant')) document.getElementById('recruitLieutenant').classList.remove('hidden');
+    if (isUnlocked('business')) document.getElementById('buyBusiness').classList.remove('hidden');
+    if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
+    renderLieutenants();
+}
+
+function runProgress(progressId, duration, callback) {
+    const bar = document.querySelector(`#${progressId} .progress-bar`);
+    const container = document.getElementById(progressId);
+    container.classList.remove('hidden');
+    bar.style.width = '0%';
+    const start = Date.now();
+    const interval = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const percent = Math.min(elapsed / duration * 100, 100);
+        bar.style.width = percent + '%';
+        if (elapsed >= duration) {
+            clearInterval(interval);
+            container.classList.add('hidden');
+            callback();
+            updateUI();
+        }
+    }, 100);
+}
+
+function showLieutenantTypeSelection(callback) {
+    const container = document.getElementById('lieutenantChoice');
+    container.classList.remove('hidden');
+
+    function choose(type) {
+        container.classList.add('hidden');
+        document.getElementById('chooseFace').onclick = null;
+        document.getElementById('chooseFist').onclick = null;
+        document.getElementById('chooseBrain').onclick = null;
+        callback(type);
+        updateUI();
+    }
+
+    document.getElementById('chooseFace').onclick = () => choose('face');
+    document.getElementById('chooseFist').onclick = () => choose('fist');
+    document.getElementById('chooseBrain').onclick = () => choose('brain');
+}
+
+function countType(type) {
+    return state.lieutenants.filter(l => l.type === type).length;
+}
+
+function isUnlocked(key) {
+    return state.unlocks.has(key);
+}
+
+function unlock(key) {
+    state.unlocks.add(key);
+}
+
+function renderLieutenants() {
+    const container = document.getElementById('lieutenants');
+    container.innerHTML = '';
+    state.lieutenants.forEach((lt, i) => {
+        const div = document.createElement('div');
+        div.className = 'action';
+        const label = document.createElement('span');
+        label.textContent = lt.type.charAt(0).toUpperCase() + lt.type.slice(1);
+        div.appendChild(label);
+
+        if (lt.busy) {
+            const prog = document.createElement('div');
+            prog.id = `lt${i}Progress`;
+            prog.className = 'progress';
+            prog.innerHTML = '<div class="progress-bar"></div>';
+            div.appendChild(prog);
+        } else {
+            if (lt.type === 'face' || lt.type === 'boss') {
+                const extBtn = document.createElement('button');
+                extBtn.textContent = 'Extort';
+                extBtn.onclick = () => startTask(i, 'extort');
+                div.appendChild(extBtn);
+                if (isUnlocked('recruitMook')) {
+                    const recBtn = document.createElement('button');
+                    recBtn.textContent = 'Recruit Mook';
+                    recBtn.onclick = () => startTask(i, 'recruit');
+                    div.appendChild(recBtn);
+                }
+            }
+            if ((lt.type === 'brain' || lt.type === 'boss') && isUnlocked('illicit')) {
+                const buildBtn = document.createElement('button');
+                buildBtn.textContent = 'Build Illicit';
+                buildBtn.onclick = () => startTask(i, 'build');
+                if (state.businesses <= state.illicit) buildBtn.disabled = true;
+                div.appendChild(buildBtn);
+            }
+        }
+        container.appendChild(div);
+    });
+}
+
+function startTask(index, task) {
+    const lt = state.lieutenants[index];
+    if (lt.busy) return;
+    let duration = 3000;
+    let action = () => {};
+    if (task === 'extort') {
+        duration = 4000;
+        action = () => {
+            state.money += 15 * state.territory;
+            state.territory += 1;
+            if (state.mooks < state.territory) state.heat += 1;
+            unlock('recruitMook');
+            unlock('business');
+        };
+    } else if (task === 'recruit') {
+        if (state.money < 5) return alert('Not enough money');
+        state.money -= 5;
+        duration = 2000;
+        action = () => {
+            state.mooks += 1;
+            unlock('recruitLieutenant');
+        };
+    } else if (task === 'build') {
+        if (state.businesses <= state.illicit) return alert('No available fronts');
+        duration = 4000;
+        action = () => {
+            state.illicit += 1;
+        };
+    }
+    lt.busy = true;
+    runProgress(`lt${index}Progress`, duration, () => {
+        action();
+        lt.busy = false;
+        renderLieutenants();
+    });
+}
+
+
+
+function recruitLieutenant() {
+    if (state.money < 20) return alert('Not enough money');
+    document.getElementById('recruitLieutenant').disabled = true;
+    state.money -= 20;
+    runProgress('recruitLieutenantProgress', 3000, () => {
+        showLieutenantTypeSelection(choice => {
+            state.lieutenants.push({ type: choice, busy: false });
+            document.getElementById('recruitLieutenant').disabled = false;
+            updateUI();
+        });
+    });
+}
+
+document.getElementById('recruitLieutenant').onclick = recruitLieutenant;
+
+function buyBusiness() {
+    if (state.money < 100) return alert('Not enough money');
+    document.getElementById('buyBusiness').disabled = true;
+    state.money -= 100;
+    runProgress('buyBusinessProgress', 5000, () => {
+        state.businesses += 1;
+        unlock('illicit');
+        document.getElementById('buyBusiness').disabled = false;
+    });
+}
+
+document.getElementById('buyBusiness').onclick = buyBusiness;
+
+
+function payCops() {
+    if (state.money < 50) return alert('Not enough money');
+    document.getElementById('payCops').disabled = true;
+    state.money -= 50;
+    runProgress('payCopsProgress', 3000, () => {
+        state.heat = Math.max(0, state.heat - 1);
+        document.getElementById('payCops').disabled = false;
+        if (state.heat === 0) document.getElementById('payCops').classList.add('hidden');
+    });
+}
+
+document.getElementById('payCops').onclick = payCops;
+setInterval(() => {
+    if (state.illicit > 0) {
+        state.money += state.illicit * 5;
+        updateUI();
+    }
+}, 5000);
+
+updateUI();
+</script>
+</body>
+</html>
