@@ -15,7 +15,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Brain** – sets up illicit businesses behind purchased fronts.
 
 ## Gameplay Loop Example
-1. Extort with the boss to earn starting cash.
+1. Extort with your starting lieutenant (the boss) to earn cash.
 2. Recruit mooks and assign them to patrol to keep heat down.
 3. Hire lieutenants and choose their specialty.
 4. Use Face lieutenants to expand territory and earn more money.
