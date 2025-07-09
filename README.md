@@ -8,7 +8,7 @@ For a high level overview of the gameplay ideas, see [game-design.md](game-desig
 
 Open `index.html` in any modern web browser. No build step or server is required.
 
-You start with only the ability to extort with the boss. As you perform actions new options will unlock. Use the buttons to recruit mooks, assign them to patrols, recruit lieutenants and buy businesses. Progress bars show how long each action takes.
+You start with only the ability to extort with your first lieutenant. As you perform actions new options will unlock. Use the buttons to recruit mooks, assign them to patrols, recruit lieutenants and buy businesses. Progress bars show how long each action takes. Each lieutenant appears in a list where you can assign tasks individually.
 
 This prototype intentionally uses a very minimal user interface to focus purely on testing the core gameplay loop.
 
