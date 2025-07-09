@@ -28,10 +28,7 @@
 <div class="counter">Brains: <span id="brains">0</span></div>
 <div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
 <hr>
-<div class="action">
-    <button id="bossExtort">Extort with Boss</button>
-    <div id="bossExtortProgress" class="progress hidden"><div class="progress-bar"></div></div>
-</div>
+<div id="lieutenantList"></div>
 
 <div class="action">
     <button id="recruitMook" class="hidden">Recruit Mook ($5)</button>
@@ -53,18 +50,10 @@
     <button id="chooseBrain">Brain</button>
 </div>
 
-<div class="action">
-    <button id="faceExtort" class="hidden">Extort with Face</button>
-    <div id="faceExtortProgress" class="progress hidden"><div class="progress-bar"></div></div>
-</div>
 
 <div class="action">
     <button id="buyBusiness" class="hidden">Buy Business ($100)</button>
     <div id="buyBusinessProgress" class="progress hidden"><div class="progress-bar"></div></div>
-</div>
-<div class="action">
-    <button id="buildIllicit" class="hidden">Build Illicit Business</button>
-    <div id="buildIllicitProgress" class="progress hidden"><div class="progress-bar"></div></div>
 </div>
 
 <div class="action">
@@ -80,38 +69,40 @@ const state = {
     territory: 1,
     heat: 0,
     businesses: 0,
-    faces: 0,
-    fists: 0,
-    brains: 0,
+    lieutenants: [
+        { id: 0, type: 'face', name: 'Boss', busy: false }
+    ],
+    nextLieutenantId: 1,
     unlockedMook: false,
     unlockedPatrol: false,
     unlockedLieutenant: false,
-    unlockedFaceExtort: false,
     unlockedBusiness: false,
     illicit: 0,
-    unlockedIllicit: false,
 };
 
 function updateUI() {
+    const faces = state.lieutenants.filter(l => l.type === 'face').length;
+    const fists = state.lieutenants.filter(l => l.type === 'fist').length;
+    const brains = state.lieutenants.filter(l => l.type === 'brain').length;
+
     document.getElementById('money').textContent = state.money;
     document.getElementById('mooks').textContent = state.mooks;
     document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
     document.getElementById('businesses').textContent = state.businesses;
-    document.getElementById('faces').textContent = state.faces;
-    document.getElementById('fists').textContent = state.fists;
-    document.getElementById('brains').textContent = state.brains;
+    document.getElementById('faces').textContent = faces;
+    document.getElementById('fists').textContent = fists;
+    document.getElementById('brains').textContent = brains;
 
     document.getElementById('illicit').textContent = state.illicit;
     if (state.unlockedMook) document.getElementById('recruitMook').classList.remove('hidden');
     if (state.unlockedPatrol) document.getElementById('assignPatrol').classList.remove('hidden');
     if (state.unlockedLieutenant) document.getElementById('recruitLieutenant').classList.remove('hidden');
-    if (state.unlockedFaceExtort && state.faces > 0) document.getElementById('faceExtort').classList.remove('hidden');
     if (state.unlockedBusiness) document.getElementById('buyBusiness').classList.remove('hidden');
-    if (state.unlockedIllicit && state.businesses > state.illicit && state.brains > 0) document.getElementById("buildIllicit").classList.remove("hidden");
-    else document.getElementById("buildIllicit").classList.add("hidden");
     if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
+
+    renderLieutenants();
 }
 
 function runProgress(progressId, duration, callback) {
@@ -151,16 +142,67 @@ function showLieutenantTypeSelection(callback) {
     document.getElementById('chooseBrain').onclick = () => choose('brain');
 }
 
-function bossExtort() {
-    document.getElementById('bossExtort').disabled = true;
-    runProgress('bossExtortProgress', 3000, () => {
-        state.money += 10;
-        state.unlockedMook = true;
-        document.getElementById('bossExtort').disabled = false;
+function renderLieutenants() {
+    const container = document.getElementById('lieutenantList');
+    container.innerHTML = '';
+    state.lieutenants.forEach(lt => {
+        const div = document.createElement('div');
+        div.className = 'action';
+        const label = document.createElement('span');
+        label.textContent = `${lt.name} (${lt.type})`;
+        div.appendChild(label);
+        if (!lt.busy) {
+            if (lt.type === 'face') {
+                const btn = document.createElement('button');
+                btn.textContent = 'Extort';
+                btn.onclick = () => lieutenantExtort(lt.id);
+                div.appendChild(btn);
+            } else if (lt.type === 'brain') {
+                const btn = document.createElement('button');
+                btn.textContent = 'Build Illicit';
+                btn.disabled = state.businesses <= state.illicit;
+                btn.onclick = () => lieutenantBuildIllicit(lt.id);
+                div.appendChild(btn);
+            }
+        }
+        const prog = document.createElement('div');
+        prog.id = `lt-progress-${lt.id}`;
+        prog.className = 'progress hidden';
+        prog.innerHTML = '<div class="progress-bar"></div>';
+        div.appendChild(prog);
+        container.appendChild(div);
     });
 }
 
-document.getElementById('bossExtort').onclick = bossExtort;
+function lieutenantExtort(id) {
+    const lt = state.lieutenants.find(l => l.id === id);
+    if (!lt || lt.busy) return;
+    lt.busy = true;
+    runProgress(`lt-progress-${id}`, lt.id === 0 && !state.unlockedMook ? 3000 : 4000, () => {
+        if (id === 0 && !state.unlockedMook) {
+            state.money += 10;
+            state.unlockedMook = true;
+        } else {
+            state.money += 15 * state.territory;
+            state.territory += 1;
+            if (state.patrol < state.territory) state.heat += 1;
+            state.unlockedBusiness = true;
+        }
+        lt.busy = false;
+    });
+}
+
+function lieutenantBuildIllicit(id) {
+    const lt = state.lieutenants.find(l => l.id === id);
+    if (!lt || lt.busy) return;
+    if (state.businesses <= state.illicit) return alert('No available fronts');
+    lt.busy = true;
+    runProgress(`lt-progress-${id}`, 4000, () => {
+        state.illicit += 1;
+        lt.busy = false;
+    });
+}
+
 
 function recruitMook() {
     if (state.money < 5) return alert('Not enough money');
@@ -194,29 +236,15 @@ function recruitLieutenant() {
     state.money -= 20;
     runProgress('recruitLieutenantProgress', 3000, () => {
         showLieutenantTypeSelection(choice => {
-            if (choice === 'face') { state.faces += 1; state.unlockedFaceExtort = true; }
-            else if (choice === 'fist') { state.fists += 1; }
-            else if (choice === 'brain') { state.brains += 1; }
+            const id = state.nextLieutenantId++;
+            state.lieutenants.push({ id, type: choice, name: `Lt ${id}`, busy: false });
             document.getElementById('recruitLieutenant').disabled = false;
+            updateUI();
         });
     });
 }
 
 document.getElementById('recruitLieutenant').onclick = recruitLieutenant;
-
-function faceExtort() {
-    if (state.faces <= 0) return alert('Need a face lieutenant');
-    document.getElementById('faceExtort').disabled = true;
-    runProgress('faceExtortProgress', 4000, () => {
-        state.money += 15 * state.territory;
-        state.territory += 1;
-        if (state.patrol < state.territory) state.heat += 1;
-        document.getElementById('faceExtort').disabled = false;
-        state.unlockedBusiness = true;
-    });
-}
-
-document.getElementById('faceExtort').onclick = faceExtort;
 
 function buyBusiness() {
     if (state.money < 100) return alert('Not enough money');
@@ -224,25 +252,11 @@ function buyBusiness() {
     state.money -= 100;
     runProgress('buyBusinessProgress', 5000, () => {
         state.businesses += 1;
-        state.unlockedIllicit = true;
         document.getElementById('buyBusiness').disabled = false;
     });
 }
 
 document.getElementById('buyBusiness').onclick = buyBusiness;
-
-function buildIllicit() {
-    if (state.businesses <= state.illicit) return alert("No available fronts");
-    if (state.brains <= 0) return alert("Need a brain lieutenant");
-    document.getElementById("buildIllicit").disabled = true;
-    state.brains -= 1;
-    runProgress("buildIllicitProgress", 4000, () => {
-        state.illicit += 1;
-        document.getElementById("buildIllicit").disabled = false;
-    });
-}
-
-document.getElementById("buildIllicit").onclick = buildIllicit;
 
 function payCops() {
     if (state.money < 50) return alert('Not enough money');
