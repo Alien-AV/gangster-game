@@ -18,8 +18,7 @@
 <body>
 <h1>Mafia Manager Prototype</h1>
 <div class="counter">Money: $<span id="money">0</span></div>
-<div class="counter">Mooks: <span id="mooks">0</span></div>
-<div class="counter">Patrolling: <span id="patrol">0</span></div>
+<div class="counter">Mooks Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">1</span> block(s)</div>
 <div class="counter">Heat: <span id="heat">0</span></div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
@@ -40,9 +39,6 @@
     <div id="recruitMookProgress" class="progress hidden"><div class="progress-bar"></div></div>
 </div>
 
-<div class="action">
-    <button id="assignPatrol" class="hidden">Assign Mook to Patrol</button>
-</div>
 
 <div class="action">
     <button id="recruitLieutenant" class="hidden">Recruit Lieutenant ($20)</button>
@@ -67,13 +63,11 @@
 <script>
 const state = {
     money: 0,
-    mooks: 0,
     patrol: 0,
     territory: 1,
     heat: 0,
     businesses: 0,
     unlockedMook: false,
-    unlockedPatrol: false,
     unlockedLieutenant: false,
     unlockedBusiness: false,
     illicit: 0,
@@ -84,7 +78,6 @@ const state = {
 
 function updateUI() {
     document.getElementById('money').textContent = state.money;
-    document.getElementById('mooks').textContent = state.mooks;
     document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
@@ -98,7 +91,6 @@ function updateUI() {
 
     document.getElementById('illicit').textContent = state.illicit;
     if (state.unlockedMook) document.getElementById('recruitMook').classList.remove('hidden');
-    if (state.unlockedPatrol) document.getElementById('assignPatrol').classList.remove('hidden');
     if (state.unlockedLieutenant) document.getElementById('recruitLieutenant').classList.remove('hidden');
     if (state.unlockedBusiness) document.getElementById('buyBusiness').classList.remove('hidden');
     if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
@@ -205,8 +197,7 @@ function recruitMook() {
     document.getElementById('recruitMook').disabled = true;
     state.money -= 5;
     runProgress(document.getElementById('recruitMookProgress'), 2000, () => {
-        state.mooks += 1;
-        state.unlockedPatrol = true;
+        state.patrol += 1;
         state.unlockedLieutenant = true;
         document.getElementById('recruitMook').disabled = false;
     });
@@ -214,17 +205,6 @@ function recruitMook() {
 
 document.getElementById('recruitMook').onclick = recruitMook;
 
-function assignPatrol() {
-    if (state.mooks <= 0) return alert('No available mooks');
-    state.mooks -= 1;
-    state.patrol += 1;
-    if (state.patrol < state.territory) {
-        state.heat += 1; // not enough patrol, heat rises
-    }
-    updateUI();
-}
-
-document.getElementById('assignPatrol').onclick = assignPatrol;
 
 function recruitLieutenant() {
     if (state.money < 20) return alert('Not enough money');
