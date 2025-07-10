@@ -10,12 +10,13 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Businesses** – legitimate fronts that can host illicit operations.
 
 ## Lieutenants
+- **Boss** – functions like a lieutenant capable of any action.
 - **Face** – used to extort surrounding blocks, expanding territory and generating cash.
 - **Fist** – keeps unruly businesses in line when patrols are thin (not yet implemented).
 - **Brain** – sets up illicit businesses behind purchased fronts.
 
 ## Gameplay Loop Example
-1. Extort with the boss to earn starting cash.
+1. Extort with the boss to claim your first territory and start earning income.
 2. Recruit mooks (they automatically patrol your territory) to keep heat down.
 3. Hire lieutenants and choose their specialty.
 4. Use Face lieutenants to expand territory and earn more money.
