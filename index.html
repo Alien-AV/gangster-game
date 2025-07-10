@@ -17,6 +17,7 @@
 </head>
 <body>
 <h1>Mafia Manager Prototype</h1>
+<div class="counter">Time: <span id="time">0</span>s</div>
 <div class="counter">Money: $<span id="money">0</span></div>
 <div class="counter">Mooks Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">1</span> block(s)</div>
@@ -62,6 +63,7 @@
 
 <script>
 const state = {
+    time: 0,
     money: 0,
     patrol: 0,
     territory: 1,
@@ -77,6 +79,7 @@ const state = {
 };
 
 function updateUI() {
+    document.getElementById('time').textContent = state.time;
     document.getElementById('money').textContent = state.money;
     document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
@@ -161,7 +164,6 @@ function renderLieutenants() {
                     if (lt.type === 'face') {
                         state.money += 15 * state.territory;
                         state.territory += 1;
-                        if (state.patrol < state.territory) state.heat += 1;
                         state.unlockedBusiness = true;
                     } else if (lt.type === 'brain') {
                         state.illicit += 1;
@@ -249,11 +251,18 @@ function payCops() {
 
 document.getElementById('payCops').onclick = payCops;
 setInterval(() => {
-    if (state.illicit > 0) {
-        state.money += state.illicit * 5;
-        updateUI();
+    state.time += 1;
+    // income from territory protection
+    state.money += state.territory;
+    // income from legitimate and illicit businesses
+    state.money += state.businesses * 2;
+    state.money += state.illicit * 5;
+    // heat accrues if territory is not fully patrolled
+    if (state.patrol < state.territory) {
+        state.heat += 1;
     }
-}, 5000);
+    updateUI();
+}, 1000);
 
 updateUI();
 </script>
