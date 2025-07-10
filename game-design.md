@@ -14,6 +14,8 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Fist** – keeps unruly businesses in line when patrols are thin (not yet implemented).
 - **Brain** – sets up illicit businesses behind purchased fronts.
 
+Each lieutenant is tracked individually and can perform their action independently, allowing multiple extortions or builds to run at the same time.
+
 ## Gameplay Loop Example
 1. Extort with the boss to earn starting cash.
 2. Recruit mooks and assign them to patrol to keep heat down.
