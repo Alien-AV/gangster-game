@@ -20,8 +20,8 @@
 <div class="counter">Time: <span id="time">0</span>s</div>
 <div class="counter">Money: $<span id="money">0</span></div>
 <div class="counter">Mooks Patrolling: <span id="patrol">0</span></div>
-<div class="counter">Territory: <span id="territory">1</span> block(s)</div>
-<div class="counter">Heat: <span id="heat">0</span></div>
+<div class="counter">Territory: <span id="territory">0</span> block(s)</div>
+<div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
 <div class="counter">Faces: <span id="faces">0</span></div>
 <div class="counter">Fists: <span id="fists">0</span></div>
@@ -66,8 +66,9 @@ const state = {
     time: 0,
     money: 0,
     patrol: 0,
-    territory: 1,
+    territory: 0,
     heat: 0,
+    heatProgress: 0,
     businesses: 0,
     unlockedMook: false,
     unlockedLieutenant: false,
@@ -84,6 +85,7 @@ function updateUI() {
     document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
+    document.getElementById('heatProgress').textContent = state.heatProgress;
     document.getElementById('businesses').textContent = state.businesses;
     const faces = state.lieutenants.filter(l => l.type === 'face').length;
     const fists = state.lieutenants.filter(l => l.type === 'fist').length;
@@ -259,7 +261,13 @@ setInterval(() => {
     state.money += state.illicit * 5;
     // heat accrues if territory is not fully patrolled
     if (state.patrol < state.territory) {
-        state.heat += 1;
+        state.heatProgress += 1;
+        if (state.heatProgress >= 10) {
+            state.heat += 1;
+            state.heatProgress = 0;
+        }
+    } else {
+        state.heatProgress = 0;
     }
     updateUI();
 }, 1000);
