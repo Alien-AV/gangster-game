@@ -13,6 +13,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Face** – used to extort surrounding blocks, expanding territory and generating cash.
 - **Fist** – keeps unruly businesses in line when patrols are thin (not yet implemented).
 - **Brain** – sets up illicit businesses behind purchased fronts.
+- Lieutenants can also recruit additional mooks to expand patrol coverage.
 
 ## Gameplay Loop Example
 1. Extort with the boss to earn starting cash.

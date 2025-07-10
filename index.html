@@ -146,11 +146,29 @@ function renderLieutenants() {
             prog.innerHTML = '<div class="progress-bar"></div>';
             row.appendChild(btn);
             row.appendChild(prog);
+
+            const recruitRow = document.createElement('div');
+            recruitRow.className = 'action';
+            const recruitBtn = document.createElement('button');
+            const recruitProg = document.createElement('div');
+            recruitProg.className = 'progress hidden';
+            recruitProg.innerHTML = '<div class="progress-bar"></div>';
+            recruitRow.appendChild(recruitBtn);
+            recruitRow.appendChild(recruitProg);
+
             lt.element = row;
             lt.button = btn;
             lt.progress = prog;
-            if (lt.type === 'face') faceDiv.appendChild(row);
-            else if (lt.type === 'brain') brainDiv.appendChild(row);
+            lt.recruitElement = recruitRow;
+            lt.recruitButton = recruitBtn;
+            lt.recruitProgress = recruitProg;
+            if (lt.type === 'face') {
+                faceDiv.appendChild(row);
+                faceDiv.appendChild(recruitRow);
+            } else if (lt.type === 'brain') {
+                brainDiv.appendChild(row);
+                brainDiv.appendChild(recruitRow);
+            }
             btn.onclick = () => {
                 if (lt.busy) return;
                 if (lt.type === 'brain' && state.businesses <= state.illicit) return alert('No available fronts');
@@ -170,13 +188,32 @@ function renderLieutenants() {
                     btn.disabled = false;
                 });
             };
+
+            recruitBtn.onclick = () => {
+                if (lt.busy) return;
+                if (state.money < 5) return alert('Not enough money');
+                lt.busy = true;
+                recruitBtn.disabled = true;
+                state.money -= 5;
+                runProgress(recruitProg, 2000, () => {
+                    state.patrol += 1;
+                    state.unlockedLieutenant = true;
+                    lt.busy = false;
+                    recruitBtn.disabled = false;
+                    updateUI();
+                });
+            };
         }
         if (lt.type === 'face') {
             lt.button.textContent = `Face #${lt.id} Extort`;
             lt.button.disabled = lt.busy;
+            lt.recruitButton.textContent = `Face #${lt.id} Recruit Mook`;
+            lt.recruitButton.disabled = lt.busy;
         } else if (lt.type === 'brain') {
             lt.button.textContent = `Brain #${lt.id} Build Illicit`;
             lt.button.disabled = lt.busy || !state.unlockedIllicit;
+            lt.recruitButton.textContent = `Lt #${lt.id} Recruit Mook`;
+            lt.recruitButton.disabled = lt.busy;
         }
     });
 }
