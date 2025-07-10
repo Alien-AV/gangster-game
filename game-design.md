@@ -10,7 +10,8 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Businesses** – legitimate fronts that can host illicit operations.
 
 ## Lieutenants
-- **Face** – used to extort surrounding blocks, expanding territory and generating cash.
+Each lieutenant is its own agent and can be given orders independently.
+- **Face** – extorts surrounding blocks to expand territory and earn cash.
 - **Fist** – keeps unruly businesses in line when patrols are thin (not yet implemented).
 - **Brain** – sets up illicit businesses behind purchased fronts.
 
