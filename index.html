@@ -17,10 +17,11 @@
 </head>
 <body>
 <h1>Mafia Manager Prototype</h1>
+<div class="counter">Time: <span id="time">0</span>s</div>
 <div class="counter">Money: $<span id="money">0</span></div>
 <div class="counter">Mooks Patrolling: <span id="patrol">0</span></div>
-<div class="counter">Territory: <span id="territory">1</span> block(s)</div>
-<div class="counter">Heat: <span id="heat">0</span></div>
+<div class="counter">Territory: <span id="territory">0</span> block(s)</div>
+<div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
 <div class="counter">Faces: <span id="faces">0</span></div>
 <div class="counter">Fists: <span id="fists">0</span></div>
@@ -62,10 +63,12 @@
 
 <script>
 const state = {
+    time: 0,
     money: 0,
     patrol: 0,
-    territory: 1,
+    territory: 0,
     heat: 0,
+    heatProgress: 0,
     businesses: 0,
     unlockedMook: false,
     unlockedLieutenant: false,
@@ -77,10 +80,12 @@ const state = {
 };
 
 function updateUI() {
+    document.getElementById('time').textContent = state.time;
     document.getElementById('money').textContent = state.money;
     document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
+    document.getElementById('heatProgress').textContent = state.heatProgress;
     document.getElementById('businesses').textContent = state.businesses;
     const faces = state.lieutenants.filter(l => l.type === 'face').length;
     const fists = state.lieutenants.filter(l => l.type === 'fist').length;
@@ -176,7 +181,6 @@ function renderLieutenants() {
                     if (lt.type === 'face') {
                         state.money += 15 * state.territory;
                         state.territory += 1;
-                        if (state.patrol < state.territory) state.heat += 1;
                         state.unlockedBusiness = true;
                     } else if (lt.type === 'brain') {
                         state.illicit += 1;
@@ -283,11 +287,24 @@ function payCops() {
 
 document.getElementById('payCops').onclick = payCops;
 setInterval(() => {
-    if (state.illicit > 0) {
-        state.money += state.illicit * 5;
-        updateUI();
+    state.time += 1;
+    // income from territory protection
+    state.money += state.territory;
+    // income from legitimate and illicit businesses
+    state.money += state.businesses * 2;
+    state.money += state.illicit * 5;
+    // heat accrues if territory is not fully patrolled
+    if (state.patrol < state.territory) {
+        state.heatProgress += 1;
+        if (state.heatProgress >= 10) {
+            state.heat += 1;
+            state.heatProgress = 0;
+        }
+    } else {
+        state.heatProgress = 0;
     }
-}, 5000);
+    updateUI();
+}, 1000);
 
 updateUI();
 </script>
