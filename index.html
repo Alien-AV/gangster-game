@@ -140,22 +140,37 @@ function renderLieutenants() {
         if (!lt.element) {
             const row = document.createElement('div');
             row.className = 'action';
+
             const btn = document.createElement('button');
             const prog = document.createElement('div');
             prog.className = 'progress hidden';
             prog.innerHTML = '<div class="progress-bar"></div>';
+
+            const recruitBtn = document.createElement('button');
+            const recruitProg = document.createElement('div');
+            recruitProg.className = 'progress hidden';
+            recruitProg.innerHTML = '<div class="progress-bar"></div>';
+
             row.appendChild(btn);
             row.appendChild(prog);
+            row.appendChild(recruitBtn);
+            row.appendChild(recruitProg);
+
             lt.element = row;
             lt.button = btn;
             lt.progress = prog;
+            lt.recruitButton = recruitBtn;
+            lt.recruitProgress = recruitProg;
+
             if (lt.type === 'face') faceDiv.appendChild(row);
             else if (lt.type === 'brain') brainDiv.appendChild(row);
+
             btn.onclick = () => {
                 if (lt.busy) return;
                 if (lt.type === 'brain' && state.businesses <= state.illicit) return alert('No available fronts');
                 lt.busy = true;
                 btn.disabled = true;
+                recruitBtn.disabled = true;
                 const duration = lt.type === 'face' ? 4000 : 4000;
                 runProgress(prog, duration, () => {
                     if (lt.type === 'face') {
@@ -168,6 +183,23 @@ function renderLieutenants() {
                     }
                     lt.busy = false;
                     btn.disabled = false;
+                    recruitBtn.disabled = false;
+                });
+            };
+
+            recruitBtn.onclick = () => {
+                if (lt.busy) return;
+                if (state.money < 5) return alert('Not enough money');
+                lt.busy = true;
+                recruitBtn.disabled = true;
+                btn.disabled = true;
+                state.money -= 5;
+                runProgress(recruitProg, 2000, () => {
+                    state.patrol += 1;
+                    state.unlockedLieutenant = true;
+                    lt.busy = false;
+                    recruitBtn.disabled = false;
+                    btn.disabled = false;
                 });
             };
         }
@@ -178,6 +210,8 @@ function renderLieutenants() {
             lt.button.textContent = `Brain #${lt.id} Build Illicit`;
             lt.button.disabled = lt.busy || !state.unlockedIllicit;
         }
+        lt.recruitButton.textContent = `Lt #${lt.id} Recruit Mook`;
+        lt.recruitButton.disabled = lt.busy;
     });
 }
 
