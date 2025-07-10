@@ -12,6 +12,9 @@ permissions:
 jobs:
   deploy-preview:
     if: github.event.action != 'closed'
+    concurrency:
+      group: gh-pages-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +58,9 @@ jobs:
 
   cleanup-preview:
     if: github.event.action == 'closed'
+    concurrency:
+      group: gh-pages-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
 
     steps:
