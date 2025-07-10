@@ -28,12 +28,9 @@
 <div class="counter">Brains: <span id="brains">0</span></div>
 <div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
 <hr>
+<div id="bossContainer"></div>
 <div id="facesContainer"></div>
 <div id="brainsContainer"></div>
-<div class="action">
-    <button id="bossExtort">Extort with Boss</button>
-    <div id="bossExtortProgress" class="progress hidden"><div class="progress-bar"></div></div>
-</div>
 
 <div class="action">
     <button id="recruitMook" class="hidden">Recruit Mook ($5)</button>
@@ -75,6 +72,7 @@ const state = {
     unlockedBusiness: false,
     illicit: 0,
     unlockedIllicit: false,
+    boss: { busy: false },
     lieutenants: [],
     nextLtId: 1,
 };
@@ -99,6 +97,7 @@ function updateUI() {
     if (state.unlockedLieutenant) document.getElementById('recruitLieutenant').classList.remove('hidden');
     if (state.unlockedBusiness) document.getElementById('buyBusiness').classList.remove('hidden');
     if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
+    renderBoss();
     renderLieutenants();
 }
 
@@ -136,6 +135,106 @@ function showLieutenantTypeSelection(callback) {
     document.getElementById('chooseFace').onclick = () => choose('face');
     document.getElementById('chooseFist').onclick = () => choose('fist');
     document.getElementById('chooseBrain').onclick = () => choose('brain');
+}
+
+function renderBoss() {
+    const container = document.getElementById('bossContainer');
+    const boss = state.boss;
+    if (!boss.element) {
+        const row = document.createElement('div');
+        row.className = 'action';
+
+        const extortBtn = document.createElement('button');
+        const extortProg = document.createElement('div');
+        extortProg.className = 'progress hidden';
+        extortProg.innerHTML = '<div class="progress-bar"></div>';
+
+        const illicitBtn = document.createElement('button');
+        const illicitProg = document.createElement('div');
+        illicitProg.className = 'progress hidden';
+        illicitProg.innerHTML = '<div class="progress-bar"></div>';
+
+        const recruitBtn = document.createElement('button');
+        const recruitProg = document.createElement('div');
+        recruitProg.className = 'progress hidden';
+        recruitProg.innerHTML = '<div class="progress-bar"></div>';
+
+        row.appendChild(extortBtn);
+        row.appendChild(extortProg);
+        row.appendChild(illicitBtn);
+        row.appendChild(illicitProg);
+        row.appendChild(recruitBtn);
+        row.appendChild(recruitProg);
+
+        boss.element = row;
+        boss.extortButton = extortBtn;
+        boss.extortProgress = extortProg;
+        boss.illicitButton = illicitBtn;
+        boss.illicitProgress = illicitProg;
+        boss.recruitButton = recruitBtn;
+        boss.recruitProgress = recruitProg;
+
+        container.appendChild(row);
+
+        extortBtn.onclick = () => {
+            if (boss.busy) return;
+            boss.busy = true;
+            extortBtn.disabled = true;
+            illicitBtn.disabled = true;
+            recruitBtn.disabled = true;
+            runProgress(extortProg, 3000, () => {
+                state.money += 15 * state.territory;
+                state.territory += 1;
+                state.unlockedBusiness = true;
+                state.unlockedMook = true;
+                boss.busy = false;
+                extortBtn.disabled = false;
+                illicitBtn.disabled = false;
+                recruitBtn.disabled = false;
+            });
+        };
+
+        illicitBtn.onclick = () => {
+            if (boss.busy) return;
+            if (state.businesses <= state.illicit) return alert('No available fronts');
+            boss.busy = true;
+            extortBtn.disabled = true;
+            illicitBtn.disabled = true;
+            recruitBtn.disabled = true;
+            runProgress(illicitProg, 4000, () => {
+                state.illicit += 1;
+                boss.busy = false;
+                extortBtn.disabled = false;
+                illicitBtn.disabled = false;
+                recruitBtn.disabled = false;
+            });
+        };
+
+        recruitBtn.onclick = () => {
+            if (boss.busy) return;
+            if (state.money < 5) return alert('Not enough money');
+            boss.busy = true;
+            extortBtn.disabled = true;
+            illicitBtn.disabled = true;
+            recruitBtn.disabled = true;
+            state.money -= 5;
+            runProgress(recruitProg, 2000, () => {
+                state.patrol += 1;
+                state.unlockedLieutenant = true;
+                boss.busy = false;
+                extortBtn.disabled = false;
+                illicitBtn.disabled = false;
+                recruitBtn.disabled = false;
+            });
+        };
+    }
+
+    boss.extortButton.textContent = 'Boss Extort';
+    boss.extortButton.disabled = boss.busy;
+    boss.illicitButton.textContent = 'Boss Build Illicit';
+    boss.illicitButton.disabled = boss.busy || !state.unlockedIllicit;
+    boss.recruitButton.textContent = 'Boss Recruit Mook';
+    boss.recruitButton.disabled = boss.busy;
 }
 
 function renderLieutenants() {
@@ -219,16 +318,6 @@ function renderLieutenants() {
     });
 }
 
-function bossExtort() {
-    document.getElementById('bossExtort').disabled = true;
-    runProgress(document.getElementById('bossExtortProgress'), 3000, () => {
-        state.money += 10;
-        state.unlockedMook = true;
-        document.getElementById('bossExtort').disabled = false;
-    });
-}
-
-document.getElementById('bossExtort').onclick = bossExtort;
 
 function recruitMook() {
     if (state.money < 5) return alert('Not enough money');
