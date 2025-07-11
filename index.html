@@ -13,10 +13,15 @@
         .hidden { display: none; }
         .progress { width: 200px; background: #ccc; height: 16px; margin: 0; position: relative; }
         .progress-bar { height: 100%; width: 0%; background: #4caf50; transition: width 0.1s linear; }
+        body.dark { background: #121212; color: #eee; }
+        body.dark .progress { background: #444; }
+        body.dark .progress-bar { background: #2196f3; }
+        body.dark button { background: #333; color: #eee; border-color: #555; }
     </style>
 </head>
 <body>
 <h1>Mafia Manager Prototype</h1>
+<button id="toggleDark">Toggle Dark Mode</button>
 <div class="counter">Time: <span id="time">0</span>s</div>
 <div class="counter">Money: $<span id="money">0</span></div>
 <div class="counter">Mooks Patrolling: <span id="patrol">0</span></div>
@@ -59,6 +64,17 @@
 </div>
 
 <script>
+const darkKey = 'darkMode';
+function setDark(on) {
+    if (on) document.body.classList.add('dark');
+    else document.body.classList.remove('dark');
+}
+document.getElementById('toggleDark').addEventListener('click', () => {
+    const on = !document.body.classList.contains('dark');
+    setDark(on);
+    localStorage.setItem(darkKey, on ? '1' : '0');
+});
+setDark(localStorage.getItem(darkKey) === '1');
 const state = {
     time: 0,
     money: 0,

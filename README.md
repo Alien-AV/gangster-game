@@ -12,6 +12,8 @@ You start with only the ability to extort with the boss. Extortion now claims a 
 
 This prototype intentionally uses a very minimal user interface to focus purely on testing the core gameplay loop.
 
+Click the **Toggle Dark Mode** button to switch between light and dark themes. Your preference is stored in `localStorage` so it persists between sessions.
+
 ## Deployment
 
 Changes merged into `main` are automatically published to **GitHub Pages**
