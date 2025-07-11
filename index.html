@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <title>Mafia Manager Prototype</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
+        body { font-family: sans-serif; padding: 20px; background: #fff; color: #000; }
+        body.dark-mode { background: #121212; color: #eee; }
+        body.dark-mode .progress { background: #555; }
+        body.dark-mode .progress-bar { background: #81c784; }
         .counter { margin: 4px 0; }
         button { margin: 4px 0; }
         .action { display: flex; align-items: center; margin: 4px 0; }
@@ -17,6 +20,7 @@
 </head>
 <body>
 <h1>Mafia Manager Prototype</h1>
+<button id="toggleDark">Toggle Dark Mode</button>
 <div class="counter">Time: <span id="time">0</span>s</div>
 <div class="counter">Money: $<span id="money">0</span></div>
 <div class="counter">Mooks Patrolling: <span id="patrol">0</span></div>
@@ -375,6 +379,9 @@ function payCops() {
 }
 
 document.getElementById('payCops').onclick = payCops;
+document.getElementById('toggleDark').onclick = () => {
+    document.body.classList.toggle('dark-mode');
+};
 setInterval(() => {
     state.time += 1;
     // income from territory protection
