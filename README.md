@@ -8,7 +8,7 @@ For a high level overview of the gameplay ideas, see [game-design.md](game-desig
 
 Open `index.html` in any modern web browser. No build step or server is required.
 
-You start with only the ability to extort with the boss. Extortion now claims a block of territory while providing a small cash boost. As you perform actions new options will unlock. Use the buttons to recruit mooks, recruit lieutenants and buy businesses. Recruited mooks automatically patrol your territory. Progress bars show how long each action takes.
+You start with only the ability to extort with the boss. Extortion now claims a block of territory while providing a small cash boost. As you perform actions new options will unlock. Faces can recruit additional lieutenants, brains buy new businesses and fists bring in more mooks. The boss can perform any of these tasks. Recruited mooks automatically patrol your territory. Progress bars show how long each action takes.
 
 This prototype intentionally uses a very minimal user interface to focus purely on testing the core gameplay loop.
 
