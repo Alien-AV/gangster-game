@@ -5,18 +5,18 @@
     <title>Mafia Manager Prototype</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #fff; color: #000; }
-        body.dark { background: #121212; color: #e0e0e0; }
+        body.dark-mode { background: #121212; color: #eee; }
         .counter { margin: 4px 0; }
         button { margin: 4px 0; }
-        body.dark button { background: #333; color: #e0e0e0; border-color: #555; }
+        body.dark-mode button { background: #333; color: #eee; border-color: #555; }
         .action { display: flex; align-items: center; margin: 4px 0; }
         .action button { margin: 0; }
         .action .progress { margin-left: 8px; }
         .hidden { display: none; }
         .progress { width: 200px; background: #ccc; height: 16px; margin: 0; position: relative; }
         .progress-bar { height: 100%; width: 0%; background: #4caf50; transition: width 0.1s linear; }
-        body.dark .progress { background: #444; }
-        body.dark .progress-bar { background: #bb86fc; }
+        body.dark-mode .progress { background: #555; }
+        body.dark-mode .progress-bar { background: #81c784; }
     </style>
 </head>
 <body>
@@ -85,9 +85,9 @@ const state = {
 const darkToggle = document.getElementById('darkToggle');
 const storedDark = localStorage.getItem('dark') === '1';
 darkToggle.checked = storedDark;
-document.body.classList.toggle('dark', storedDark);
+document.body.classList.toggle('dark-mode', storedDark);
 darkToggle.addEventListener('change', e => {
-    document.body.classList.toggle('dark', e.target.checked);
+    document.body.classList.toggle('dark-mode', e.target.checked);
     localStorage.setItem('dark', e.target.checked ? '1' : '0');
 });
 
