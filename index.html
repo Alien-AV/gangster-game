@@ -36,6 +36,8 @@
       padding: 20px;
       background: var(--bg);
       color: var(--text);
+      max-width: 900px;
+      margin: 0 auto;
     }
     .counter { margin: 4px 0; }
 
@@ -65,7 +67,10 @@
       width: 200px;
       height: 16px;
       margin: 0;
-      position: relative;
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
       background: var(--prog-bg);
     }
     .progress-bar {
@@ -79,12 +84,14 @@
       display: flex;
       align-items: center;
       margin: 4px 0;
+      position: relative;
+      padding-right: 210px;
     }
     .action button {
       margin: 0;
     }
     .action .progress {
-      margin-left: 8px;
+      margin-left: 0;
     }
     </style>
 </head>
@@ -114,6 +121,7 @@
     <button id="chooseBrain">Brain</button>
 </div>
 
+<div class="action">
     <button id="payCops" class="hidden">Pay Off Cops ($50)</button>
     <div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
 </div>
