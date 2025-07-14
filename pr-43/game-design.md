@@ -8,6 +8,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Territory** – city blocks under your control. More territory means more potential profit but requires more patrols or heat rises.
 - **Heat** – unwanted attention from law enforcement. Can be reduced by paying off cops.
 - **Businesses** – legitimate fronts that can host illicit operations.
+- **Available Fronts** – businesses not yet hosting illicit operations.
 
 ## Gangsters
 - **Face** – used to extort surrounding blocks, expanding territory and generating cash.
