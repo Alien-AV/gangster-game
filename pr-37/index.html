@@ -5,6 +5,8 @@
     <title>Mafia Manager Prototype</title>
     <style>
         :root {
+        --bg: #fff;
+        --text: #000;
         --btn-bg: #f0f0f0;
         --btn-color: #222;
         --btn-border: #ccc;
@@ -14,7 +16,16 @@
         --btn-disabled-border: #bbb;
         }
 
+        body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: sans-serif;
+        padding: 20px;
+        }
+
         body.dark-mode {
+        --bg: #121212;
+        --text: #eee;
         --btn-bg: #444;
         --btn-color: #fff;
         --btn-border: #666;
