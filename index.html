@@ -36,6 +36,8 @@
       padding: 20px;
       background: var(--bg);
       color: var(--text);
+      max-width: 800px;
+      margin: 0 auto;
     }
     .counter { margin: 4px 0; }
 
@@ -78,13 +80,18 @@
     .action {
       display: flex;
       align-items: center;
+      position: relative;
+      padding-right: 208px;
       margin: 4px 0;
     }
     .action button {
       margin: 0;
     }
     .action .progress {
-      margin-left: 8px;
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
     }
     </style>
 </head>
