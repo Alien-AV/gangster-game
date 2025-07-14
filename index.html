@@ -5,56 +5,87 @@
     <title>Mafia Manager Prototype</title>
     <style>
         :root {
-        --bg: #fff;
-        --text: #000;
-        --btn-bg: #f0f0f0;
-        --btn-color: #222;
-        --btn-border: #ccc;
-        --btn-hover-bg: #e0e0e0;
-        --btn-disabled-bg: #ddd;
-        --btn-disabled-color: #888;
-        --btn-disabled-border: #bbb;
-        }
+      --bg: #fff;
+      --text: #000;
+      --btn-bg: #f0f0f0;
+      --btn-color: #222;
+      --btn-border: #ccc;
+      --btn-hover: #e0e0e0;
+      --btn-disabled-bg: #ddd;
+      --btn-disabled-color: #888;
+      --btn-disabled-border: #bbb;
+      --prog-bg: #ccc;
+      --prog-bar: #4caf50;
+    }
+    body.dark-mode {
+      --bg: #121212;
+      --text: #eee;
+      --btn-bg: #333;
+      --btn-color: #eee;
+      --btn-border: #555;
+      --btn-hover: #444;
+      --btn-disabled-bg: #555;
+      --btn-disabled-color: #aaa;
+      --btn-disabled-border: #777;
+      --prog-bg: #555;
+      --prog-bar: #81c784;
+    }
 
-        body {
-        background: var(--bg);
-        color: var(--text);
-        font-family: sans-serif;
-        padding: 20px;
-        }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .counter { margin: 4px 0; }
 
-        body.dark-mode {
-        --bg: #121212;
-        --text: #eee;
-        --btn-bg: #444;
-        --btn-color: #fff;
-        --btn-border: #666;
-        --btn-hover-bg: #555;
-        --btn-disabled-bg: #333;
-        --btn-disabled-color: #777;
-        --btn-disabled-border: #555;
-        }
+    button {
+      margin: 4px 0;
+      padding: 0.5em 1em;
+      background: var(--btn-bg);
+      color: var(--btn-color);
+      border: 1px solid var(--btn-border);
+      border-radius: 4px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    button:hover:not(:disabled) {
+      background: var(--btn-hover);
+    }
+    button:disabled {
+      background: var(--btn-disabled-bg);
+      color: var(--btn-disabled-color);
+      border-color: var(--btn-disabled-border);
+      cursor: not-allowed;
+      opacity: 0.8;
+    }
 
-        button {
-        background: var(--btn-bg);
-        color: var(--btn-color);
-        border: 1px solid var(--btn-border);
-        padding: 0.5em 1em;
-        border-radius: 4px;
-        transition: background 0.2s, border-color 0.2s;
-        }
+    .hidden { display: none; }
 
-        button:hover:not(:disabled) {
-        background: var(--btn-hover-bg);
-        }
+    .progress {
+      width: 200px;
+      height: 16px;
+      margin: 0;
+      position: relative;
+      background: var(--prog-bg);
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--prog-bar);
+      transition: width 0.1s linear;
+    }
 
-        button:disabled {
-        background: var(--btn-disabled-bg);
-        color: var(--btn-disabled-color);
-        border-color: var(--btn-disabled-border);
-        cursor: not-allowed;
-        opacity: 0.8;
-        }
+    .action {
+      display: flex;
+      align-items: center;
+      margin: 4px 0;
+    }
+    .action button {
+      margin: 0;
+    }
+    .action .progress {
+      margin-left: 8px;
+    }
     </style>
 </head>
 <body>
