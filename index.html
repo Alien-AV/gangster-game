@@ -4,30 +4,57 @@
     <meta charset="UTF-8">
     <title>Mafia Manager Prototype</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #fff; color: #000; }
-        body.dark-mode { background: #121212; color: #eee; }
-        .counter { margin: 4px 0; }
-        button { margin: 4px 0; }
-        body.dark-mode button { background: #333; color: #eee; border-color: #555; }
+        :root {
+        --bg: #fff;
+        --text: #000;
+        --btn-bg: #f0f0f0;
+        --btn-color: #222;
+        --btn-border: #ccc;
+        --btn-hover-bg: #e0e0e0;
+        --btn-disabled-bg: #ddd;
+        --btn-disabled-color: #888;
+        --btn-disabled-border: #bbb;
+        }
+
+        body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: sans-serif;
+        padding: 20px;
+        }
+
+        body.dark-mode {
+        --bg: #121212;
+        --text: #eee;
+        --btn-bg: #444;
+        --btn-color: #fff;
+        --btn-border: #666;
+        --btn-hover-bg: #555;
+        --btn-disabled-bg: #333;
+        --btn-disabled-color: #777;
+        --btn-disabled-border: #555;
+        }
+
+        button {
+        background: var(--btn-bg);
+        color: var(--btn-color);
+        border: 1px solid var(--btn-border);
+        padding: 0.5em 1em;
+        border-radius: 4px;
+        transition: background 0.2s, border-color 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+        background: var(--btn-hover-bg);
+        }
+
         button:disabled {
-            background: #e0e0e0;
-            color: #777;
-            border-color: #999;
-            cursor: not-allowed;
+        background: var(--btn-disabled-bg);
+        color: var(--btn-disabled-color);
+        border-color: var(--btn-disabled-border);
+        cursor: not-allowed;
+        opacity: 0.8;
         }
-        body.dark-mode button:disabled {
-            background: #e0e0e0;
-            color: #777;
-            border-color: #999;
-        }
-        .action { display: flex; align-items: center; margin: 4px 0; }
-        .action button { margin: 0; }
-        .action .progress { margin-left: 8px; }
-        .hidden { display: none; }
-        .progress { width: 200px; background: #ccc; height: 16px; margin: 0; position: relative; }
-        .progress-bar { height: 100%; width: 0%; background: #4caf50; transition: width 0.1s linear; }
-        body.dark-mode .progress { background: #555; }
-        body.dark-mode .progress-bar { background: #81c784; }
     </style>
 </head>
 <body>
