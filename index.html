@@ -101,6 +101,7 @@
 <div class="counter">Fists: <span id="fists">0</span></div>
 <div class="counter">Brains: <span id="brains">0</span></div>
 <div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
+<div class="counter">Available Fronts: <span id="availableFronts">0</span></div>
 <hr>
 <div id="bossContainer"></div>
 <div id="facesContainer"></div>
@@ -131,6 +132,7 @@ const state = {
     unlockedLieutenant: false,
     unlockedBusiness: false,
     illicit: 0,
+    illicitProgress: 0,
     unlockedIllicit: false,
     boss: { busy: false },
     lieutenants: [],
@@ -154,6 +156,8 @@ function updateUI() {
     document.getElementById('heat').textContent = state.heat;
     document.getElementById('heatProgress').textContent = state.heatProgress;
     document.getElementById('businesses').textContent = state.businesses;
+    const available = state.businesses - state.illicit - state.illicitProgress;
+    document.getElementById('availableFronts').textContent = available;
     const faces = state.lieutenants.filter(l => l.type === 'face').length;
     const fists = state.lieutenants.filter(l => l.type === 'fist').length;
     const brains = state.lieutenants.filter(l => l.type === 'brain').length;
@@ -284,14 +288,17 @@ function renderBoss() {
 
         illicitBtn.onclick = () => {
             if (boss.busy) return;
-            if (state.businesses <= state.illicit) return alert('No available fronts');
+            if (state.businesses - state.illicit - state.illicitProgress <= 0) return alert('No available fronts');
             boss.busy = true;
             extortBtn.disabled = true;
             illicitBtn.disabled = true;
             recruitBtn.disabled = true;
             hireBtn.disabled = true;
             businessBtn.disabled = true;
+            state.illicitProgress += 1;
+            updateUI();
             runProgress(illicitProg, 4000, () => {
+                state.illicitProgress -= 1;
                 state.illicit += 1;
                 boss.busy = false;
                 extortBtn.disabled = false;
@@ -377,7 +384,8 @@ function renderBoss() {
     boss.extortButton.textContent = 'Boss Extort';
     boss.extortButton.disabled = boss.busy;
     boss.illicitButton.textContent = 'Boss Build Illicit';
-    boss.illicitButton.disabled = boss.busy || !state.unlockedIllicit;
+    const availFronts = state.businesses - state.illicit - state.illicitProgress;
+    boss.illicitButton.disabled = boss.busy || !state.unlockedIllicit || availFronts <= 0;
     boss.recruitButton.textContent = 'Boss Recruit Mook';
     boss.recruitButton.disabled = boss.busy || !state.unlockedMook;
     boss.hireButton.textContent = 'Boss Recruit Lieutenant';
@@ -458,11 +466,14 @@ function renderLieutenants() {
             } else if (lt.type === 'brain') {
                 btn.onclick = () => {
                     if (lt.busy) return;
-                    if (state.businesses <= state.illicit) return alert('No available fronts');
+                    if (state.businesses - state.illicit - state.illicitProgress <= 0) return alert('No available fronts');
                     lt.busy = true;
                     btn.disabled = true;
                     auxBtn.disabled = true;
+                    state.illicitProgress += 1;
+                    updateUI();
                     runProgress(prog, 4000, () => {
+                        state.illicitProgress -= 1;
                         state.illicit += 1;
                         lt.busy = false;
                         btn.disabled = false;
@@ -510,7 +521,8 @@ function renderLieutenants() {
             lt.auxButton.disabled = lt.busy || !state.unlockedLieutenant;
         } else if (lt.type === 'brain') {
             lt.button.textContent = `Brain #${lt.id} Build Illicit`;
-            lt.button.disabled = lt.busy || !state.unlockedIllicit;
+            const avail = state.businesses - state.illicit - state.illicitProgress;
+            lt.button.disabled = lt.busy || !state.unlockedIllicit || avail <= 0;
             lt.auxButton.textContent = `Brain #${lt.id} Buy Business`;
             lt.auxButton.disabled = lt.busy || !state.unlockedBusiness;
         } else if (lt.type === 'fist') {
