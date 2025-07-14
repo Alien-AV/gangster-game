@@ -7,7 +7,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Enforcers** – basic manpower. They can patrol your territory or be assigned to gangsters.
 - **Territory** – city blocks under your control. More territory means more potential profit but requires more patrols or heat rises.
 - **Heat** – unwanted attention from law enforcement. Can be reduced by paying off cops.
-- **Businesses** – legitimate fronts that can host illicit operations.
+- **Businesses** – legitimate fronts that can host illicit operations. Illicit operations currently come in four types: money counterfeiting, drug production, illegal gambling and fencing.
 - **Available Fronts** – businesses not yet hosting illicit operations.
 
 ## Gangsters

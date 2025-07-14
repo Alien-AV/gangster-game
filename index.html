@@ -122,6 +122,14 @@
     <button id="chooseBrain">Brain</button>
 </div>
 
+<div id="illicitChoice" class="hidden">
+    <p>Select illicit business:</p>
+    <button id="chooseCounterfeiting">Money Counterfeiting</button>
+    <button id="chooseDrugs">Drug Production</button>
+    <button id="chooseGambling">Illegal Gambling</button>
+    <button id="chooseFencing">Fencing</button>
+</div>
+
     <button id="payCops" class="hidden">Pay Off Cops ($50)</button>
     <div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
 </div>
@@ -139,6 +147,7 @@ const state = {
     unlockedGangster: false,
     unlockedBusiness: false,
     illicit: 0,
+    illicitBusinesses: [],
     illicitProgress: 0,
     unlockedIllicit: false,
     boss: { busy: false },
@@ -212,6 +221,26 @@ function showGangsterTypeSelection(callback) {
     document.getElementById('chooseFace').onclick = () => choose('face');
     document.getElementById('chooseFist').onclick = () => choose('fist');
     document.getElementById('chooseBrain').onclick = () => choose('brain');
+}
+
+function showIllicitTypeSelection(callback) {
+    const container = document.getElementById('illicitChoice');
+    container.classList.remove('hidden');
+
+    function choose(type) {
+        container.classList.add('hidden');
+        document.getElementById('chooseCounterfeiting').onclick = null;
+        document.getElementById('chooseDrugs').onclick = null;
+        document.getElementById('chooseGambling').onclick = null;
+        document.getElementById('chooseFencing').onclick = null;
+        callback(type);
+        updateUI();
+    }
+
+    document.getElementById('chooseCounterfeiting').onclick = () => choose('counterfeiting');
+    document.getElementById('chooseDrugs').onclick = () => choose('drugs');
+    document.getElementById('chooseGambling').onclick = () => choose('gambling');
+    document.getElementById('chooseFencing').onclick = () => choose('fencing');
 }
 
 function renderBoss() {
@@ -306,13 +335,17 @@ function renderBoss() {
             updateUI();
             runProgress(illicitProg, 4000, () => {
                 state.illicitProgress -= 1;
-                state.illicit += 1;
-                boss.busy = false;
-                extortBtn.disabled = false;
-                illicitBtn.disabled = false;
-                recruitBtn.disabled = false;
-                hireBtn.disabled = false;
-                businessBtn.disabled = false;
+                showIllicitTypeSelection(type => {
+                    state.illicit += 1;
+                    state.illicitBusinesses.push(type);
+                    boss.busy = false;
+                    extortBtn.disabled = false;
+                    illicitBtn.disabled = false;
+                    recruitBtn.disabled = false;
+                    hireBtn.disabled = false;
+                    businessBtn.disabled = false;
+                    updateUI();
+                });
             });
         };
 
@@ -481,10 +514,14 @@ function renderGangsters() {
                     updateUI();
                     runProgress(prog, 4000, () => {
                         state.illicitProgress -= 1;
-                        state.illicit += 1;
-                        g.busy = false;
-                        btn.disabled = false;
-                        auxBtn.disabled = false;
+                        showIllicitTypeSelection(type => {
+                            state.illicit += 1;
+                            state.illicitBusinesses.push(type);
+                            g.busy = false;
+                            btn.disabled = false;
+                            auxBtn.disabled = false;
+                            updateUI();
+                        });
                     });
                 };
 
