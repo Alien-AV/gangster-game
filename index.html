@@ -108,6 +108,10 @@
 <div class="counter">Fists: <span id="fists">0</span></div>
 <div class="counter">Brains: <span id="brains">0</span></div>
 <div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
+<div class="counter">Counterfeiting: <span id="counterfeit">0</span></div>
+<div class="counter">Drug Production: <span id="drugs">0</span></div>
+<div class="counter">Illegal Gambling: <span id="gambling">0</span></div>
+<div class="counter">Fencing: <span id="fencing">0</span></div>
 <div class="counter">Available Fronts: <span id="availableFronts">0</span></div>
 <hr>
 <div id="bossContainer"></div>
@@ -120,6 +124,14 @@
     <button id="chooseFace">Face</button>
     <button id="chooseFist">Fist</button>
     <button id="chooseBrain">Brain</button>
+</div>
+
+<div id="illicitChoice" class="hidden">
+    <p>Select illicit business:</p>
+    <button id="chooseCounterfeit">Money Counterfeiting</button>
+    <button id="chooseDrugs">Drug Production</button>
+    <button id="chooseGambling">Illegal Gambling</button>
+    <button id="chooseFencing">Fencing</button>
 </div>
 
     <button id="payCops" class="hidden">Pay Off Cops ($50)</button>
@@ -140,6 +152,10 @@ const state = {
     unlockedBusiness: false,
     illicit: 0,
     illicitProgress: 0,
+    counterfeit: 0,
+    drugs: 0,
+    gambling: 0,
+    fencing: 0,
     unlockedIllicit: false,
     boss: { busy: false },
     gangsters: [],
@@ -173,6 +189,10 @@ function updateUI() {
     document.getElementById('brains').textContent = brains;
 
     document.getElementById('illicit').textContent = state.illicit;
+    document.getElementById('counterfeit').textContent = state.counterfeit;
+    document.getElementById('drugs').textContent = state.drugs;
+    document.getElementById('gambling').textContent = state.gambling;
+    document.getElementById('fencing').textContent = state.fencing;
     if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
     renderBoss();
     renderGangsters();
@@ -212,6 +232,26 @@ function showGangsterTypeSelection(callback) {
     document.getElementById('chooseFace').onclick = () => choose('face');
     document.getElementById('chooseFist').onclick = () => choose('fist');
     document.getElementById('chooseBrain').onclick = () => choose('brain');
+}
+
+function showIllicitTypeSelection(callback) {
+    const container = document.getElementById('illicitChoice');
+    container.classList.remove('hidden');
+
+    function choose(type) {
+        container.classList.add('hidden');
+        document.getElementById('chooseCounterfeit').onclick = null;
+        document.getElementById('chooseDrugs').onclick = null;
+        document.getElementById('chooseGambling').onclick = null;
+        document.getElementById('chooseFencing').onclick = null;
+        callback(type);
+        updateUI();
+    }
+
+    document.getElementById('chooseCounterfeit').onclick = () => choose('counterfeit');
+    document.getElementById('chooseDrugs').onclick = () => choose('drugs');
+    document.getElementById('chooseGambling').onclick = () => choose('gambling');
+    document.getElementById('chooseFencing').onclick = () => choose('fencing');
 }
 
 function renderBoss() {
@@ -306,13 +346,17 @@ function renderBoss() {
             updateUI();
             runProgress(illicitProg, 4000, () => {
                 state.illicitProgress -= 1;
-                state.illicit += 1;
-                boss.busy = false;
-                extortBtn.disabled = false;
-                illicitBtn.disabled = false;
-                recruitBtn.disabled = false;
-                hireBtn.disabled = false;
-                businessBtn.disabled = false;
+                showIllicitTypeSelection(type => {
+                    state.illicit += 1;
+                    state[type] += 1;
+                    boss.busy = false;
+                    extortBtn.disabled = false;
+                    illicitBtn.disabled = false;
+                    recruitBtn.disabled = false;
+                    hireBtn.disabled = false;
+                    businessBtn.disabled = false;
+                    updateUI();
+                });
             });
         };
 
@@ -481,10 +525,14 @@ function renderGangsters() {
                     updateUI();
                     runProgress(prog, 4000, () => {
                         state.illicitProgress -= 1;
-                        state.illicit += 1;
-                        g.busy = false;
-                        btn.disabled = false;
-                        auxBtn.disabled = false;
+                        showIllicitTypeSelection(type => {
+                            state.illicit += 1;
+                            state[type] += 1;
+                            g.busy = false;
+                            btn.disabled = false;
+                            auxBtn.disabled = false;
+                            updateUI();
+                        });
                     });
                 };
 
