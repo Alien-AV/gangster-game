@@ -93,7 +93,7 @@
 <label class="counter"><input type="checkbox" id="darkToggle"> Dark Mode</label>
 <div class="counter">Time: <span id="time">0</span>s</div>
 <div class="counter">Money: $<span id="money">0</span></div>
-<div class="counter">Mooks Patrolling: <span id="patrol">0</span></div>
+<div class="counter">Enforcers Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">0</span> block(s)</div>
 <div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
@@ -108,8 +108,8 @@
 <div id="fistsContainer"></div>
 <div id="brainsContainer"></div>
 
-<div id="lieutenantChoice" class="hidden">
-    <p>Select lieutenant type:</p>
+<div id="gangsterChoice" class="hidden">
+    <p>Select gangster type:</p>
     <button id="chooseFace">Face</button>
     <button id="chooseFist">Fist</button>
     <button id="chooseBrain">Brain</button>
@@ -128,15 +128,15 @@ const state = {
     heat: 0,
     heatProgress: 0,
     businesses: 0,
-    unlockedMook: false,
-    unlockedLieutenant: false,
+    unlockedEnforcer: false,
+    unlockedGangster: false,
     unlockedBusiness: false,
     illicit: 0,
     illicitProgress: 0,
     unlockedIllicit: false,
     boss: { busy: false },
-    lieutenants: [],
-    nextLtId: 1,
+    gangsters: [],
+    nextGangId: 1,
 };
 
 const darkToggle = document.getElementById('darkToggle');
@@ -158,9 +158,9 @@ function updateUI() {
     document.getElementById('businesses').textContent = state.businesses;
     const available = state.businesses - state.illicit - state.illicitProgress;
     document.getElementById('availableFronts').textContent = available;
-    const faces = state.lieutenants.filter(l => l.type === 'face').length;
-    const fists = state.lieutenants.filter(l => l.type === 'fist').length;
-    const brains = state.lieutenants.filter(l => l.type === 'brain').length;
+    const faces = state.gangsters.filter(g => g.type === 'face').length;
+    const fists = state.gangsters.filter(g => g.type === 'fist').length;
+    const brains = state.gangsters.filter(g => g.type === 'brain').length;
     document.getElementById('faces').textContent = faces;
     document.getElementById('fists').textContent = fists;
     document.getElementById('brains').textContent = brains;
@@ -168,7 +168,7 @@ function updateUI() {
     document.getElementById('illicit').textContent = state.illicit;
     if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
     renderBoss();
-    renderLieutenants();
+    renderGangsters();
 }
 
 function runProgress(container, duration, callback) {
@@ -189,8 +189,8 @@ function runProgress(container, duration, callback) {
     }, 100);
 }
 
-function showLieutenantTypeSelection(callback) {
-    const container = document.getElementById('lieutenantChoice');
+function showGangsterTypeSelection(callback) {
+    const container = document.getElementById('gangsterChoice');
     container.classList.remove('hidden');
 
     function choose(type) {
@@ -276,7 +276,7 @@ function renderBoss() {
                 state.money += 15 * state.territory;
                 state.territory += 1;
                 state.unlockedBusiness = true;
-                state.unlockedMook = true;
+                state.unlockedEnforcer = true;
                 boss.busy = false;
                 extortBtn.disabled = false;
                 illicitBtn.disabled = false;
@@ -321,7 +321,7 @@ function renderBoss() {
             state.money -= 5;
             runProgress(recruitProg, 2000, () => {
                 state.patrol += 1;
-                state.unlockedLieutenant = true;
+                state.unlockedGangster = true;
                 boss.busy = false;
                 extortBtn.disabled = false;
                 illicitBtn.disabled = false;
@@ -333,7 +333,7 @@ function renderBoss() {
 
         hireBtn.onclick = () => {
             if (boss.busy) return;
-            if (!state.unlockedLieutenant) return alert('Recruit mooks first');
+            if (!state.unlockedGangster) return alert('Recruit enforcers first');
             if (state.money < 20) return alert('Not enough money');
             boss.busy = true;
             extortBtn.disabled = true;
@@ -343,9 +343,9 @@ function renderBoss() {
             businessBtn.disabled = true;
             state.money -= 20;
             runProgress(hireProg, 3000, () => {
-                showLieutenantTypeSelection(choice => {
-                    const lt = { id: state.nextLtId++, type: choice, busy: false };
-                    state.lieutenants.push(lt);
+                showGangsterTypeSelection(choice => {
+                    const g = { id: state.nextGangId++, type: choice, busy: false };
+                    state.gangsters.push(g);
                     boss.busy = false;
                     extortBtn.disabled = false;
                     illicitBtn.disabled = false;
@@ -386,20 +386,20 @@ function renderBoss() {
     boss.illicitButton.textContent = 'Boss Build Illicit';
     const availFronts = state.businesses - state.illicit - state.illicitProgress;
     boss.illicitButton.disabled = boss.busy || !state.unlockedIllicit || availFronts <= 0;
-    boss.recruitButton.textContent = 'Boss Recruit Mook';
-    boss.recruitButton.disabled = boss.busy || !state.unlockedMook;
-    boss.hireButton.textContent = 'Boss Recruit Lieutenant';
-    boss.hireButton.disabled = boss.busy || !state.unlockedLieutenant;
+    boss.recruitButton.textContent = 'Boss Recruit Enforcer';
+    boss.recruitButton.disabled = boss.busy || !state.unlockedEnforcer;
+    boss.hireButton.textContent = 'Boss Recruit Gangster';
+    boss.hireButton.disabled = boss.busy || !state.unlockedGangster;
     boss.businessButton.textContent = 'Boss Buy Business';
     boss.businessButton.disabled = boss.busy || !state.unlockedBusiness;
 }
 
-function renderLieutenants() {
+function renderGangsters() {
     const faceDiv = document.getElementById('facesContainer');
     const brainDiv = document.getElementById('brainsContainer');
     const fistDiv = document.getElementById('fistsContainer');
-    state.lieutenants.forEach(lt => {
-        if (!lt.element) {
+    state.gangsters.forEach(g => {
+        if (!g.element) {
             const row = document.createElement('div');
             row.className = 'action';
 
@@ -418,56 +418,56 @@ function renderLieutenants() {
             row.appendChild(auxBtn);
             row.appendChild(auxProg);
 
-            lt.element = row;
-            lt.button = btn;
-            lt.progress = prog;
-            lt.auxButton = auxBtn;
-            lt.auxProgress = auxProg;
+            g.element = row;
+            g.button = btn;
+            g.progress = prog;
+            g.auxButton = auxBtn;
+            g.auxProgress = auxProg;
 
-            if (lt.type === 'face') faceDiv.appendChild(row);
-            else if (lt.type === 'brain') brainDiv.appendChild(row);
-            else if (lt.type === 'fist') fistDiv.appendChild(row);
+            if (g.type === 'face') faceDiv.appendChild(row);
+            else if (g.type === 'brain') brainDiv.appendChild(row);
+            else if (g.type === 'fist') fistDiv.appendChild(row);
 
-            if (lt.type === 'face') {
+            if (g.type === 'face') {
                 btn.onclick = () => {
-                    if (lt.busy) return;
-                    lt.busy = true;
+                    if (g.busy) return;
+                    g.busy = true;
                     btn.disabled = true;
                     auxBtn.disabled = true;
                     runProgress(prog, 4000, () => {
                         state.money += 15 * state.territory;
                         state.territory += 1;
                         state.unlockedBusiness = true;
-                        lt.busy = false;
+                        g.busy = false;
                         btn.disabled = false;
                         auxBtn.disabled = false;
                     });
                 };
 
                 auxBtn.onclick = () => {
-                    if (lt.busy) return;
-                    if (!state.unlockedLieutenant) return alert('Recruit mooks first');
+                    if (g.busy) return;
+                    if (!state.unlockedGangster) return alert('Recruit enforcers first');
                     if (state.money < 20) return alert('Not enough money');
-                    lt.busy = true;
+                    g.busy = true;
                     auxBtn.disabled = true;
                     btn.disabled = true;
                     state.money -= 20;
                     runProgress(auxProg, 3000, () => {
-                        showLieutenantTypeSelection(choice => {
-                            const n = { id: state.nextLtId++, type: choice, busy: false };
-                            state.lieutenants.push(n);
-                            lt.busy = false;
+                        showGangsterTypeSelection(choice => {
+                            const n = { id: state.nextGangId++, type: choice, busy: false };
+                            state.gangsters.push(n);
+                            g.busy = false;
                             auxBtn.disabled = false;
                             btn.disabled = false;
                             updateUI();
                         });
                     });
                 };
-            } else if (lt.type === 'brain') {
+            } else if (g.type === 'brain') {
                 btn.onclick = () => {
-                    if (lt.busy) return;
+                    if (g.busy) return;
                     if (state.businesses - state.illicit - state.illicitProgress <= 0) return alert('No available fronts');
-                    lt.busy = true;
+                    g.busy = true;
                     btn.disabled = true;
                     auxBtn.disabled = true;
                     state.illicitProgress += 1;
@@ -475,59 +475,59 @@ function renderLieutenants() {
                     runProgress(prog, 4000, () => {
                         state.illicitProgress -= 1;
                         state.illicit += 1;
-                        lt.busy = false;
+                        g.busy = false;
                         btn.disabled = false;
                         auxBtn.disabled = false;
                     });
                 };
 
                 auxBtn.onclick = () => {
-                    if (lt.busy) return;
+                    if (g.busy) return;
                     if (!state.unlockedBusiness) return alert('No territory yet');
                     if (state.money < 100) return alert('Not enough money');
-                    lt.busy = true;
+                    g.busy = true;
                     auxBtn.disabled = true;
                     btn.disabled = true;
                     state.money -= 100;
                     runProgress(auxProg, 5000, () => {
                         state.businesses += 1;
                         state.unlockedIllicit = true;
-                        lt.busy = false;
+                        g.busy = false;
                         auxBtn.disabled = false;
                         btn.disabled = false;
                     });
                 };
-            } else if (lt.type === 'fist') {
+            } else if (g.type === 'fist') {
                 auxBtn.style.display = 'none';
                 auxProg.style.display = 'none';
                 btn.onclick = () => {
-                    if (lt.busy) return;
+                    if (g.busy) return;
                     if (state.money < 5) return alert('Not enough money');
-                    lt.busy = true;
+                    g.busy = true;
                     btn.disabled = true;
                     runProgress(prog, 2000, () => {
                         state.patrol += 1;
-                        state.unlockedLieutenant = true;
-                        lt.busy = false;
+                        state.unlockedGangster = true;
+                        g.busy = false;
                         btn.disabled = false;
                     });
                 };
             }
         }
-        if (lt.type === 'face') {
-            lt.button.textContent = `Face #${lt.id} Extort`;
-            lt.button.disabled = lt.busy;
-            lt.auxButton.textContent = `Face #${lt.id} Recruit Lt`;
-            lt.auxButton.disabled = lt.busy || !state.unlockedLieutenant;
-        } else if (lt.type === 'brain') {
-            lt.button.textContent = `Brain #${lt.id} Build Illicit`;
+        if (g.type === 'face') {
+            g.button.textContent = `Face #${g.id} Extort`;
+            g.button.disabled = g.busy;
+            g.auxButton.textContent = `Face #${g.id} Recruit Gangster`;
+            g.auxButton.disabled = g.busy || !state.unlockedGangster;
+        } else if (g.type === 'brain') {
+            g.button.textContent = `Brain #${g.id} Build Illicit`;
             const avail = state.businesses - state.illicit - state.illicitProgress;
-            lt.button.disabled = lt.busy || !state.unlockedIllicit || avail <= 0;
-            lt.auxButton.textContent = `Brain #${lt.id} Buy Business`;
-            lt.auxButton.disabled = lt.busy || !state.unlockedBusiness;
-        } else if (lt.type === 'fist') {
-            lt.button.textContent = `Fist #${lt.id} Recruit Mook`;
-            lt.button.disabled = lt.busy || !state.unlockedMook;
+            g.button.disabled = g.busy || !state.unlockedIllicit  || avail <= 0;
+            g.auxButton.textContent = `Brain #${g.id} Buy Business`;
+            g.auxButton.disabled = g.busy || !state.unlockedBusiness;
+        } else if (g.type === 'fist') {
+            g.button.textContent = `Fist #${g.id} Recruit Enforcer`;
+            g.button.disabled = g.busy || !state.unlockedEnforcer;
         }
     });
 }
