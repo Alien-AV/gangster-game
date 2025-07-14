@@ -9,6 +9,7 @@ For a high level overview of the gameplay ideas, see [game-design.md](game-desig
 Open `index.html` in any modern web browser. No build step or server is required.
 
 You start with only the ability to extort with the boss. Extortion now claims a block of territory while providing a small cash boost. As you perform actions new options will unlock. Faces can recruit additional gangsters, brains buy new businesses and fists bring in more enforcers. The boss can perform any of these tasks. Recruited enforcers automatically patrol your territory. Progress bars show how long each action takes.
+When establishing an illicit business you are prompted to choose between money counterfeiting, drug production, illegal gambling or fencing operations.
 
 This prototype intentionally uses a very minimal user interface to focus purely on testing the core gameplay loop.
 
