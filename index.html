@@ -565,18 +565,33 @@ function renderGangsters() {
                     });
                 };
             } else if (g.type === 'fist') {
-                auxBtn.style.display = 'none';
-                auxProg.style.display = 'none';
                 btn.onclick = () => {
                     if (g.busy) return;
                     if (state.money < 5) return alert('Not enough money');
                     g.busy = true;
                     btn.disabled = true;
+                    auxBtn.disabled = true;
                     runProgress(prog, 2000, () => {
                         state.patrol += 1;
                         state.unlockedGangster = true;
                         g.busy = false;
                         btn.disabled = false;
+                        auxBtn.disabled = false;
+                    });
+                };
+
+                auxBtn.onclick = () => {
+                    if (g.busy) return;
+                    if (state.businesses + state.illicit <= 0) return alert('No businesses to raid');
+                    g.busy = true;
+                    btn.disabled = true;
+                    auxBtn.disabled = true;
+                    runProgress(auxProg, 5000, () => {
+                        state.money += 150;
+                        state.heat += 1;
+                        g.busy = false;
+                        btn.disabled = false;
+                        auxBtn.disabled = false;
                     });
                 };
             }
@@ -595,6 +610,8 @@ function renderGangsters() {
         } else if (g.type === 'fist') {
             g.button.textContent = `Fist #${g.id} Recruit Enforcer`;
             g.button.disabled = g.busy || !state.unlockedEnforcer;
+            g.auxButton.textContent = `Fist #${g.id} Raid Business`;
+            g.auxButton.disabled = g.busy || (state.businesses + state.illicit <= 0);
         }
     });
 }
