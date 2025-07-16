@@ -139,6 +139,7 @@
 
     <button id="payCops" class="hidden">Pay Off Cops ($50)</button>
     <div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
+    <button id="resetGame">Reset Game</button>
 </div>
 
 <script>
@@ -164,6 +165,49 @@ const state = {
     gangsters: [],
     nextGangId: 1,
 };
+
+function saveState() {
+    const data = {
+        time: state.time,
+        cleanMoney: state.cleanMoney,
+        dirtyMoney: state.dirtyMoney,
+        patrol: state.patrol,
+        territory: state.territory,
+        heat: state.heat,
+        heatProgress: state.heatProgress,
+        disagreeableOwners: state.disagreeableOwners,
+        fear: state.fear,
+        businesses: state.businesses,
+        unlockedEnforcer: state.unlockedEnforcer,
+        unlockedGangster: state.unlockedGangster,
+        unlockedBusiness: state.unlockedBusiness,
+        illicitCounts: state.illicitCounts,
+        illicit: state.illicit,
+        illicitProgress: state.illicitProgress,
+        unlockedIllicit: state.unlockedIllicit,
+        boss: { busy: state.boss.busy },
+        gangsters: state.gangsters.map(g => ({ id: g.id, type: g.type, busy: g.busy })),
+        nextGangId: state.nextGangId,
+    };
+    localStorage.setItem('gameState', JSON.stringify(data));
+}
+
+function loadState() {
+    const raw = localStorage.getItem('gameState');
+    if (!raw) {
+        updateUI();
+        return;
+    }
+    try {
+        const data = JSON.parse(raw);
+        Object.assign(state, data);
+        state.boss = { busy: false };
+        state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false }));
+    } catch (e) {
+        console.error('Failed to load saved state', e);
+    }
+    updateUI();
+}
 
 const DISAGREEABLE_CHANCE = 0.2;
 
@@ -218,6 +262,7 @@ function updateUI() {
     if (state.heat > 0) document.getElementById('payCops').classList.remove('hidden');
     renderBoss();
     renderGangsters();
+    saveState();
 }
 
 function runProgress(container, duration, callback) {
@@ -677,6 +722,11 @@ function payCops() {
 }
 
 document.getElementById('payCops').onclick = payCops;
+document.getElementById('resetGame').onclick = () => {
+    localStorage.removeItem('gameState');
+    location.reload();
+};
+loadState();
 setInterval(() => {
     state.time += 1;
     // income from territory protection (dirty)
@@ -700,7 +750,6 @@ setInterval(() => {
     updateUI();
 }, 1000);
 
-updateUI();
 </script>
 </body>
 </html>
