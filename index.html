@@ -103,6 +103,7 @@
 <div class="counter">Enforcers Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">0</span> block(s)</div>
 <div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
+<div class="counter">Disagreeable Owners: <span id="disagreeableOwners">0</span></div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
 <div class="counter">Faces: <span id="faces">0</span></div>
 <div class="counter">Fists: <span id="fists">0</span></div>
@@ -146,6 +147,7 @@ const state = {
     territory: 0,
     heat: 0,
     heatProgress: 0,
+    disagreeableOwners: 0,
     businesses: 0,
     unlockedEnforcer: false,
     unlockedGangster: false,
@@ -158,6 +160,8 @@ const state = {
     gangsters: [],
     nextGangId: 1,
 };
+
+const DISAGREEABLE_CHANCE = 0.2;
 
 const darkToggle = document.getElementById('darkToggle');
 const storedDark = localStorage.getItem('dark') === '1';
@@ -175,6 +179,7 @@ function updateUI() {
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
     document.getElementById('heatProgress').textContent = state.heatProgress;
+    document.getElementById('disagreeableOwners').textContent = state.disagreeableOwners;
     document.getElementById('businesses').textContent = state.businesses;
     const available = state.businesses - state.illicit - state.illicitProgress;
     document.getElementById('availableFronts').textContent = available;
@@ -317,7 +322,12 @@ function renderBoss() {
             hireBtn.disabled = true;
             businessBtn.disabled = true;
             runProgress(extortProg, 3000, () => {
-                state.money += 15 * state.territory;
+                if (Math.random() < DISAGREEABLE_CHANCE) {
+                    state.disagreeableOwners += 1;
+                    state.heat += 1;
+                } else {
+                    state.money += 15 * state.territory;
+                }
                 state.territory += 1;
                 state.unlockedBusiness = true;
                 state.unlockedEnforcer = true;
@@ -483,7 +493,12 @@ function renderGangsters() {
                     btn.disabled = true;
                     auxBtn.disabled = true;
                     runProgress(prog, 4000, () => {
-                        state.money += 15 * state.territory;
+                        if (Math.random() < DISAGREEABLE_CHANCE) {
+                            state.disagreeableOwners += 1;
+                            state.heat += 1;
+                        } else {
+                            state.money += 15 * state.territory;
+                        }
                         state.territory += 1;
                         state.unlockedBusiness = true;
                         g.busy = false;

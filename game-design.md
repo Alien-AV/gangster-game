@@ -22,5 +22,6 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 4. Use Face gangsters to expand territory and earn more money.
 5. Have Brains purchase businesses and then create illicit operations behind them. When building an illicit operation you can select from counterfeiting money, producing drugs, running illegal gambling or fencing stolen goods.
 6. Balance money, territory, patrols and heat while gradually growing your empire.
+7. Occasionally an extorted business owner may be disagreeable. They refuse to pay, increase heat and are tracked by a new "disagreeable owners" counter.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.
