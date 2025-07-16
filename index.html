@@ -99,7 +99,8 @@
 <h1>Mafia Manager Prototype</h1>
 <label class="counter"><input type="checkbox" id="darkToggle"> Dark Mode</label>
 <div class="counter">Time: <span id="time">0</span>s</div>
-<div class="counter">Money: $<span id="money">0</span></div>
+<div class="counter">Clean Money: $<span id="cleanMoney">0</span></div>
+<div class="counter">Dirty Money: $<span id="dirtyMoney">0</span></div>
 <div class="counter">Enforcers Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">0</span> block(s)</div>
 <div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
@@ -143,7 +144,8 @@
 <script>
 const state = {
     time: 0,
-    money: 0,
+    cleanMoney: 0,
+    dirtyMoney: 0,
     patrol: 0,
     territory: 0,
     heat: 0,
@@ -165,6 +167,20 @@ const state = {
 
 const DISAGREEABLE_CHANCE = 0.2;
 
+function totalMoney() {
+    return state.cleanMoney + state.dirtyMoney;
+}
+
+function spendMoney(amount) {
+    if (state.dirtyMoney >= amount) {
+        state.dirtyMoney -= amount;
+    } else {
+        const remaining = amount - state.dirtyMoney;
+        state.dirtyMoney = 0;
+        state.cleanMoney = Math.max(0, state.cleanMoney - remaining);
+    }
+}
+
 const darkToggle = document.getElementById('darkToggle');
 const storedDark = localStorage.getItem('dark') === '1';
 darkToggle.checked = storedDark;
@@ -176,7 +192,8 @@ darkToggle.addEventListener('change', e => {
 
 function updateUI() {
     document.getElementById('time').textContent = state.time;
-    document.getElementById('money').textContent = state.money;
+    document.getElementById('cleanMoney').textContent = state.cleanMoney;
+    document.getElementById('dirtyMoney').textContent = state.dirtyMoney;
     document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
@@ -370,14 +387,14 @@ function renderBoss() {
 
         recruitBtn.onclick = () => {
             if (boss.busy) return;
-            if (state.money < 5) return alert('Not enough money');
+            if (totalMoney() < 5) return alert('Not enough money');
             boss.busy = true;
             extortBtn.disabled = true;
             illicitBtn.disabled = true;
             recruitBtn.disabled = true;
             hireBtn.disabled = true;
             businessBtn.disabled = true;
-            state.money -= 5;
+            spendMoney(5);
             runProgress(recruitProg, 2000, () => {
                 state.patrol += 1;
                 state.unlockedGangster = true;
@@ -393,14 +410,14 @@ function renderBoss() {
         hireBtn.onclick = () => {
             if (boss.busy) return;
             if (!state.unlockedGangster) return alert('Recruit enforcers first');
-            if (state.money < 20) return alert('Not enough money');
+            if (totalMoney() < 20) return alert('Not enough money');
             boss.busy = true;
             extortBtn.disabled = true;
             illicitBtn.disabled = true;
             recruitBtn.disabled = true;
             hireBtn.disabled = true;
             businessBtn.disabled = true;
-            state.money -= 20;
+            spendMoney(20);
             runProgress(hireProg, 3000, () => {
                 showGangsterTypeSelection(choice => {
                     const g = { id: state.nextGangId++, type: choice, busy: false };
@@ -419,14 +436,14 @@ function renderBoss() {
         businessBtn.onclick = () => {
             if (boss.busy) return;
             if (!state.unlockedBusiness) return alert('No territory yet');
-            if (state.money < 100) return alert('Not enough money');
+            if (totalMoney() < 100) return alert('Not enough money');
             boss.busy = true;
             extortBtn.disabled = true;
             illicitBtn.disabled = true;
             recruitBtn.disabled = true;
             hireBtn.disabled = true;
             businessBtn.disabled = true;
-            state.money -= 100;
+            spendMoney(100);
             runProgress(businessProg, 5000, () => {
                 state.businesses += 1;
                 state.unlockedIllicit = true;
@@ -518,11 +535,11 @@ function renderGangsters() {
                 auxBtn.onclick = () => {
                     if (g.busy) return;
                     if (!state.unlockedGangster) return alert('Recruit enforcers first');
-                    if (state.money < 20) return alert('Not enough money');
+                    if (totalMoney() < 20) return alert('Not enough money');
                     g.busy = true;
                     auxBtn.disabled = true;
                     btn.disabled = true;
-                    state.money -= 20;
+                    spendMoney(20);
                     runProgress(auxProg, 3000, () => {
                         showGangsterTypeSelection(choice => {
                             const n = { id: state.nextGangId++, type: choice, busy: false };
@@ -559,11 +576,11 @@ function renderGangsters() {
                 auxBtn.onclick = () => {
                     if (g.busy) return;
                     if (!state.unlockedBusiness) return alert('No territory yet');
-                    if (state.money < 100) return alert('Not enough money');
+                    if (totalMoney() < 100) return alert('Not enough money');
                     g.busy = true;
                     auxBtn.disabled = true;
                     btn.disabled = true;
-                    state.money -= 100;
+                    spendMoney(100);
                     runProgress(auxProg, 5000, () => {
                         state.businesses += 1;
                         state.unlockedIllicit = true;
@@ -575,11 +592,12 @@ function renderGangsters() {
             } else if (g.type === 'fist') {
                 btn.onclick = () => {
                     if (g.busy) return;
-                    if (state.money < 5) return alert('Not enough money');
+                    if (totalMoney() < 5) return alert('Not enough money');
                     g.busy = true;
                     btn.disabled = true;
                     auxBtn.disabled = true;
                     fearBtn.disabled = true;
+                    spendMoney(5);
                     runProgress(prog, 2000, () => {
                         state.patrol += 1;
                         state.unlockedGangster = true;
@@ -597,7 +615,7 @@ function renderGangsters() {
                     auxBtn.disabled = true;
                     fearBtn.disabled = true;
                     runProgress(auxProg, 5000, () => {
-                        state.money += 150;
+                        state.dirtyMoney += 150;
                         state.heat += 1;
                         g.busy = false;
                         btn.disabled = false;
@@ -648,9 +666,9 @@ function renderGangsters() {
 
 
 function payCops() {
-    if (state.money < 50) return alert('Not enough money');
+    if (totalMoney() < 50) return alert('Not enough money');
     document.getElementById('payCops').disabled = true;
-    state.money -= 50;
+    spendMoney(50);
     runProgress(document.getElementById('payCopsProgress'), 3000, () => {
         state.heat = Math.max(0, state.heat - 1);
         document.getElementById('payCops').disabled = false;
@@ -661,11 +679,11 @@ function payCops() {
 document.getElementById('payCops').onclick = payCops;
 setInterval(() => {
     state.time += 1;
-    // income from territory protection
-    state.money += state.territory;
+    // income from territory protection (dirty)
+    state.dirtyMoney += state.territory;
     // income from legitimate and illicit businesses
-    state.money += state.businesses * 2;
-    state.money += state.illicit * 5;
+    state.cleanMoney += state.businesses * 2; // fronts
+    state.dirtyMoney += state.illicit * 5; // illicit operations
     // heat accrues from unpatrolled territory and disagreeable owners
     let heatTick = state.disagreeableOwners;
     const unpatrolled = state.territory - state.patrol;
