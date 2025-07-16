@@ -567,7 +567,6 @@ function renderGangsters() {
 
                 auxBtn.onclick = () => {
                     if (g.busy) return;
-                    if (state.businesses + state.illicit <= 0) return alert('No businesses to raid');
                     g.busy = true;
                     btn.disabled = true;
                     auxBtn.disabled = true;
@@ -596,7 +595,7 @@ function renderGangsters() {
             g.button.textContent = `Fist #${g.id} Recruit Enforcer`;
             g.button.disabled = g.busy || !state.unlockedEnforcer;
             g.auxButton.textContent = `Fist #${g.id} Raid Business`;
-            g.auxButton.disabled = g.busy || (state.businesses + state.illicit <= 0);
+            g.auxButton.disabled = g.busy;
         }
     });
 }
