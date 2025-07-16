@@ -104,6 +104,7 @@
 <div class="counter">Territory: <span id="territory">0</span> block(s)</div>
 <div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
 <div class="counter">Disagreeable Owners: <span id="disagreeableOwners">0</span></div>
+<div class="counter">Fear: <span id="fear">0</span></div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
 <div class="counter">Faces: <span id="faces">0</span></div>
 <div class="counter">Fists: <span id="fists">0</span></div>
@@ -148,6 +149,7 @@ const state = {
     heat: 0,
     heatProgress: 0,
     disagreeableOwners: 0,
+    fear: 0,
     businesses: 0,
     unlockedEnforcer: false,
     unlockedGangster: false,
@@ -180,6 +182,7 @@ function updateUI() {
     document.getElementById('heat').textContent = state.heat;
     document.getElementById('heatProgress').textContent = state.heatProgress;
     document.getElementById('disagreeableOwners').textContent = state.disagreeableOwners;
+    document.getElementById('fear').textContent = state.fear;
     document.getElementById('businesses').textContent = state.businesses;
     const available = state.businesses - state.illicit - state.illicitProgress;
     document.getElementById('availableFronts').textContent = available;
@@ -469,16 +472,25 @@ function renderGangsters() {
             auxProg.className = 'progress hidden';
             auxProg.innerHTML = '<div class="progress-bar"></div>';
 
+            const fearBtn = document.createElement('button');
+            const fearProg = document.createElement('div');
+            fearProg.className = 'progress hidden';
+            fearProg.innerHTML = '<div class="progress-bar"></div>';
+
             row.appendChild(btn);
             row.appendChild(prog);
             row.appendChild(auxBtn);
             row.appendChild(auxProg);
+            row.appendChild(fearBtn);
+            row.appendChild(fearProg);
 
             g.element = row;
             g.button = btn;
             g.progress = prog;
             g.auxButton = auxBtn;
             g.auxProgress = auxProg;
+            g.fearButton = fearBtn;
+            g.fearProgress = fearProg;
 
             if (g.type === 'face') faceDiv.appendChild(row);
             else if (g.type === 'brain') brainDiv.appendChild(row);
@@ -567,12 +579,14 @@ function renderGangsters() {
                     g.busy = true;
                     btn.disabled = true;
                     auxBtn.disabled = true;
+                    fearBtn.disabled = true;
                     runProgress(prog, 2000, () => {
                         state.patrol += 1;
                         state.unlockedGangster = true;
                         g.busy = false;
                         btn.disabled = false;
                         auxBtn.disabled = false;
+                        fearBtn.disabled = false;
                     });
                 };
 
@@ -581,12 +595,31 @@ function renderGangsters() {
                     g.busy = true;
                     btn.disabled = true;
                     auxBtn.disabled = true;
+                    fearBtn.disabled = true;
                     runProgress(auxProg, 5000, () => {
                         state.money += 150;
                         state.heat += 1;
                         g.busy = false;
                         btn.disabled = false;
                         auxBtn.disabled = false;
+                        fearBtn.disabled = false;
+                    });
+                };
+
+                fearBtn.onclick = () => {
+                    if (g.busy) return;
+                    if (state.disagreeableOwners <= 0) return alert('No disagreeable owners');
+                    g.busy = true;
+                    btn.disabled = true;
+                    auxBtn.disabled = true;
+                    fearBtn.disabled = true;
+                    runProgress(fearProg, 3000, () => {
+                        state.disagreeableOwners -= 1;
+                        state.fear += 1;
+                        g.busy = false;
+                        btn.disabled = false;
+                        auxBtn.disabled = false;
+                        fearBtn.disabled = false;
                     });
                 };
             }
@@ -607,6 +640,8 @@ function renderGangsters() {
             g.button.disabled = g.busy || !state.unlockedEnforcer;
             g.auxButton.textContent = `Fist #${g.id} Raid Business`;
             g.auxButton.disabled = g.busy;
+            g.fearButton.textContent = `Fist #${g.id} Intimidate`;
+            g.fearButton.disabled = g.busy || state.disagreeableOwners <= 0;
         }
     });
 }

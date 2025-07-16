@@ -9,10 +9,12 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Heat** – unwanted attention from law enforcement. Can be reduced by paying off cops.
 - **Businesses** – legitimate fronts that can host illicit operations.
 - **Available Fronts** – businesses not yet hosting illicit operations.
--
+- **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
+
 ## Gangsters
 - **Face** – used to extort surrounding blocks, potentially expanding territory if the owner cooperates.
 - **Fist** – recruits enforcers and can raid rival businesses for quick cash at the cost of heat.
+  They can also intimidate disagreeable owners into paying protection, raising fear.
 - **Brain** – sets up illicit businesses behind purchased fronts.
 
 ## Gameplay Loop Example
@@ -23,5 +25,6 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 5. Have Brains purchase businesses and then create illicit operations behind them. When building an illicit operation you can select from counterfeiting money, producing drugs, running illegal gambling or fencing stolen goods.
 6. Balance money, territory, patrols and heat while gradually growing your empire. Heat rises each second based on unpatrolled blocks and any disagreeable owners.
 7. Occasionally an extortion attempt fails, leaving a disagreeable owner who refuses to pay. Failed extortions do not add territory and the owner will steadily raise heat until dealt with. These are tracked by a "disagreeable owners" counter.
+8. Send Fists to intimidate these owners. Successful intimidation removes one disagreeable owner and increases fear.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.
