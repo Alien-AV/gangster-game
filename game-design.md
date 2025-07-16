@@ -17,7 +17,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 
 ## Gameplay Loop Example
 1. Extort with the boss to seize your first block of territory.
-2. Recruit enforcers (they automatically patrol your territory) to keep heat down. Fists specialize in this and can also raid businesses for large cash payouts.
+2. Recruit enforcers (they automatically patrol your territory) to keep heat down. Fists specialize in this and can also raid rival businesses for large cash payouts.
 3. Hire gangsters and choose their specialty. Faces handle the recruiting once unlocked.
 4. Use Face gangsters to expand territory and earn more money.
 5. Have Brains purchase businesses and then create illicit operations behind them. When building an illicit operation you can select from counterfeiting money, producing drugs, running illegal gambling or fencing stolen goods.
