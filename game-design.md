@@ -12,7 +12,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
 
 ## Gangsters
-- **Face** – used to extort surrounding blocks, expanding territory and generating cash.
+- **Face** – used to extort surrounding blocks, potentially expanding territory if the owner cooperates.
 - **Fist** – recruits enforcers and can raid rival businesses for quick cash at the cost of heat.
   They can also intimidate disagreeable owners into paying protection, raising fear.
 - **Brain** – sets up illicit businesses behind purchased fronts.
@@ -21,10 +21,10 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 1. Extort with the boss to seize your first block of territory.
 2. Recruit enforcers (they automatically patrol your territory) to keep heat down. Fists specialize in this and can also raid rival businesses for large cash payouts.
 3. Hire gangsters and choose their specialty. Faces handle the recruiting once unlocked.
-4. Use Face gangsters to expand territory and earn more money.
+4. Use Face gangsters to expand territory which increases your passive income.
 5. Have Brains purchase businesses and then create illicit operations behind them. When building an illicit operation you can select from counterfeiting money, producing drugs, running illegal gambling or fencing stolen goods.
-6. Balance money, territory, patrols and heat while gradually growing your empire.
-7. Occasionally an extorted business owner may be disagreeable. They refuse to pay, increase heat and are tracked by a "disagreeable owners" counter.
+6. Balance money, territory, patrols and heat while gradually growing your empire. Heat rises each second based on unpatrolled blocks and any disagreeable owners.
+7. Occasionally an extortion attempt fails, leaving a disagreeable owner who refuses to pay. Failed extortions do not add territory and the owner will steadily raise heat until dealt with. These are tracked by a "disagreeable owners" counter.
 8. Send Fists to intimidate these owners. Successful intimidation removes one disagreeable owner and increases fear.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.

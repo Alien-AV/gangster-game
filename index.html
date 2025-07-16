@@ -327,11 +327,9 @@ function renderBoss() {
             runProgress(extortProg, 3000, () => {
                 if (Math.random() < DISAGREEABLE_CHANCE) {
                     state.disagreeableOwners += 1;
-                    state.heat += 1;
                 } else {
-                    state.money += 15 * state.territory;
+                    state.territory += 1;
                 }
-                state.territory += 1;
                 state.unlockedBusiness = true;
                 state.unlockedEnforcer = true;
                 boss.busy = false;
@@ -507,11 +505,9 @@ function renderGangsters() {
                     runProgress(prog, 4000, () => {
                         if (Math.random() < DISAGREEABLE_CHANCE) {
                             state.disagreeableOwners += 1;
-                            state.heat += 1;
                         } else {
-                            state.money += 15 * state.territory;
+                            state.territory += 1;
                         }
-                        state.territory += 1;
                         state.unlockedBusiness = true;
                         g.busy = false;
                         btn.disabled = false;
@@ -670,12 +666,15 @@ setInterval(() => {
     // income from legitimate and illicit businesses
     state.money += state.businesses * 2;
     state.money += state.illicit * 5;
-    // heat accrues if territory is not fully patrolled
-    if (state.patrol < state.territory) {
-        state.heatProgress += 1;
-        if (state.heatProgress >= 10) {
+    // heat accrues from unpatrolled territory and disagreeable owners
+    let heatTick = state.disagreeableOwners;
+    const unpatrolled = state.territory - state.patrol;
+    if (unpatrolled > 0) heatTick += unpatrolled;
+    if (heatTick > 0) {
+        state.heatProgress += heatTick;
+        while (state.heatProgress >= 10) {
             state.heat += 1;
-            state.heatProgress = 0;
+            state.heatProgress -= 10;
         }
     } else {
         state.heatProgress = 0;
