@@ -70,6 +70,12 @@
       position: relative;
       background: var(--prog-bg);
     }
+    .heat-bar {
+      width: 100px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
     .progress-bar {
       height: 100%;
       width: 0%;
@@ -103,7 +109,9 @@
 <div class="counter">Dirty Money: $<span id="dirtyMoney">0</span></div>
 <div class="counter">Enforcers Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">0</span> block(s)</div>
-<div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
+<div class="counter">Heat: <span id="heat">0</span>
+    <div id="heatBar" class="progress heat-bar"><div class="progress-bar"></div></div>
+</div>
 <div class="counter">Disagreeable Owners: <span id="disagreeableOwners">0</span></div>
 <div class="counter">Fear: <span id="fear">0</span></div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
@@ -240,7 +248,7 @@ function updateUI() {
     document.getElementById('patrol').textContent = state.patrol;
     document.getElementById('territory').textContent = state.territory;
     document.getElementById('heat').textContent = state.heat;
-    document.getElementById('heatProgress').textContent = state.heatProgress;
+    document.querySelector('#heatBar .progress-bar').style.width = (state.heatProgress * 10) + '%';
     document.getElementById('disagreeableOwners').textContent = state.disagreeableOwners;
     document.getElementById('fear').textContent = state.fear;
     document.getElementById('businesses').textContent = state.businesses;
