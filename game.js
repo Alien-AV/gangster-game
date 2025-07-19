@@ -93,6 +93,26 @@ class Game {
     return this.state.cleanMoney + this.state.dirtyMoney;
   }
 
+  fearLevel() {
+    return Math.floor(this.state.fear / 5);
+  }
+
+  extortDuration(base) {
+    const level = this.fearLevel();
+    const factor = Math.max(0.5, 1 - level * 0.1);
+    return base * factor;
+  }
+
+  enforcerCost() {
+    const level = this.fearLevel();
+    return Math.max(1, 5 - level);
+  }
+
+  gangsterCost() {
+    const level = this.fearLevel();
+    return Math.max(5, 20 - level * 2);
+  }
+
   spendMoney(amount) {
     const s = this.state;
     if (s.dirtyMoney >= amount) {
@@ -115,6 +135,15 @@ class Game {
     document.getElementById('heatProgress').textContent = s.heatProgress;
     document.getElementById('disagreeableOwners').textContent = s.disagreeableOwners;
     document.getElementById('fear').textContent = s.fear;
+    const level = this.fearLevel();
+    let bonusText = 'None';
+    if (level > 0) {
+      const extortBonus = level * 10;
+      const enforcerCost = this.enforcerCost();
+      const gangsterCost = this.gangsterCost();
+      bonusText = `Extort ${extortBonus}% faster, Enforcer $${enforcerCost}, Gangster $${gangsterCost}`;
+    }
+    document.getElementById('fearBonus').textContent = bonusText;
     document.getElementById('businesses').textContent = s.businesses;
     const available = s.businesses - s.illicit - s.illicitProgress;
     document.getElementById('availableFronts').textContent = available;
@@ -257,7 +286,7 @@ class Game {
         recruitBtn.disabled = true;
         hireBtn.disabled = true;
         businessBtn.disabled = true;
-        this.runProgress(extortProg, 3000, () => {
+        this.runProgress(extortProg, this.extortDuration(3000), () => {
           if (Math.random() < this.DISAGREEABLE_CHANCE) {
             state.disagreeableOwners += 1;
           } else {
@@ -303,14 +332,15 @@ class Game {
 
       recruitBtn.onclick = () => {
         if (boss.busy) return;
-        if (this.totalMoney() < 5) return alert('Not enough money');
+        const cost = this.enforcerCost();
+        if (this.totalMoney() < cost) return alert('Not enough money');
         boss.busy = true;
         extortBtn.disabled = true;
         illicitBtn.disabled = true;
         recruitBtn.disabled = true;
         hireBtn.disabled = true;
         businessBtn.disabled = true;
-        this.spendMoney(5);
+        this.spendMoney(cost);
         this.runProgress(recruitProg, 2000, () => {
           state.patrol += 1;
           state.unlockedGangster = true;
@@ -326,14 +356,15 @@ class Game {
       hireBtn.onclick = () => {
         if (boss.busy) return;
         if (!state.unlockedGangster) return alert('Recruit enforcers first');
-        if (this.totalMoney() < 20) return alert('Not enough money');
+        const gCost = this.gangsterCost();
+        if (this.totalMoney() < gCost) return alert('Not enough money');
         boss.busy = true;
         extortBtn.disabled = true;
         illicitBtn.disabled = true;
         recruitBtn.disabled = true;
         hireBtn.disabled = true;
         businessBtn.disabled = true;
-        this.spendMoney(20);
+        this.spendMoney(gCost);
         this.runProgress(hireProg, 3000, () => {
           this.showGangsterTypeSelection(choice => {
             const g = { id: state.nextGangId++, type: choice, busy: false };
@@ -441,7 +472,7 @@ class Game {
             g.busy = true;
             btn.disabled = true;
             auxBtn.disabled = true;
-            this.runProgress(prog, 4000, () => {
+            this.runProgress(prog, this.extortDuration(4000), () => {
               if (Math.random() < this.DISAGREEABLE_CHANCE) {
                 state.disagreeableOwners += 1;
               } else {
@@ -457,11 +488,12 @@ class Game {
           auxBtn.onclick = () => {
             if (g.busy) return;
             if (!state.unlockedGangster) return alert('Recruit enforcers first');
-            if (this.totalMoney() < 20) return alert('Not enough money');
+            const gCost = this.gangsterCost();
+            if (this.totalMoney() < gCost) return alert('Not enough money');
             g.busy = true;
             auxBtn.disabled = true;
             btn.disabled = true;
-            this.spendMoney(20);
+            this.spendMoney(gCost);
             this.runProgress(auxProg, 3000, () => {
               this.showGangsterTypeSelection(choice => {
                 const n = { id: state.nextGangId++, type: choice, busy: false };
@@ -532,12 +564,13 @@ class Game {
         } else if (g.type === 'fist') {
           btn.onclick = () => {
             if (g.busy) return;
-            if (this.totalMoney() < 5) return alert('Not enough money');
+            const cost = this.enforcerCost();
+            if (this.totalMoney() < cost) return alert('Not enough money');
             g.busy = true;
             btn.disabled = true;
             auxBtn.disabled = true;
             fearBtn.disabled = true;
-            this.spendMoney(5);
+            this.spendMoney(cost);
             this.runProgress(prog, 2000, () => {
               state.patrol += 1;
               state.unlockedGangster = true;
