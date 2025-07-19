@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Mafia Manager Prototype</title>
+    <style>
+        :root {
+      --bg: #fff;
+      --text: #000;
+      --btn-bg: #f0f0f0;
+      --btn-color: #222;
+      --btn-border: #ccc;
+      --btn-hover: #e0e0e0;
+      --btn-disabled-bg: #ddd;
+      --btn-disabled-color: #888;
+      --btn-disabled-border: #bbb;
+      --prog-bg: #ccc;
+      --prog-bar: #4caf50;
+    }
+    body.dark-mode {
+      --bg: #121212;
+      --text: #eee;
+      --btn-bg: #333;
+      --btn-color: #eee;
+      --btn-border: #555;
+      --btn-hover: #444;
+      --btn-disabled-bg: #555;
+      --btn-disabled-color: #aaa;
+      --btn-disabled-border: #777;
+      --prog-bg: #555;
+      --prog-bar: #81c784;
+    }
+
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--text);
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .counter { margin: 4px 0; }
+
+    button {
+      margin: 4px 0;
+      padding: 0.5em 1em;
+      background: var(--btn-bg);
+      color: var(--btn-color);
+      border: 1px solid var(--btn-border);
+      border-radius: 4px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    button:hover:not(:disabled) {
+      background: var(--btn-hover);
+    }
+    button:disabled {
+      background: var(--btn-disabled-bg);
+      color: var(--btn-disabled-color);
+      border-color: var(--btn-disabled-border);
+      cursor: not-allowed;
+      opacity: 0.8;
+    }
+
+    .hidden { display: none; }
+
+    .progress {
+      width: 200px;
+      height: 16px;
+      margin: 0;
+      position: relative;
+      background: var(--prog-bg);
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--prog-bar);
+      transition: width 0.1s linear;
+    }
+
+    .action {
+      display: flex;
+      align-items: center;
+      position: relative;
+      padding-right: 208px;
+      margin: 4px 0;
+    }
+    .action button {
+      margin: 0;
+    }
+    .action .progress {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    </style>
+</head>
+<body>
+<h1>Mafia Manager Prototype</h1>
+<label class="counter"><input type="checkbox" id="darkToggle"> Dark Mode</label>
+<div class="counter">Time: <span id="time">0</span>s</div>
+<div class="counter">Clean Money: $<span id="cleanMoney">0</span></div>
+<div class="counter">Dirty Money: $<span id="dirtyMoney">0</span></div>
+<div class="counter">Enforcers Patrolling: <span id="patrol">0</span></div>
+<div class="counter">Territory: <span id="territory">0</span> block(s)</div>
+<div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
+<div class="counter">Disagreeable Owners: <span id="disagreeableOwners">0</span></div>
+<div class="counter">Fear: <span id="fear">0</span></div>
+<div class="counter">Businesses: <span id="businesses">0</span></div>
+<div class="counter">Faces: <span id="faces">0</span></div>
+<div class="counter">Fists: <span id="fists">0</span></div>
+<div class="counter">Brains: <span id="brains">0</span></div>
+<div class="counter">Illicit Businesses: <span id="illicit">0</span></div>
+<div class="counter">Counterfeiting Ops: <span id="counterfeitingCount">0</span></div>
+<div class="counter">Drug Labs: <span id="drugCount">0</span></div>
+<div class="counter">Gambling Dens: <span id="gamblingCount">0</span></div>
+<div class="counter">Fencing Rings: <span id="fencingCount">0</span></div>
+<div class="counter">Available Fronts: <span id="availableFronts">0</span></div>
+<hr>
+<div id="bossContainer"></div>
+<div id="facesContainer"></div>
+<div id="fistsContainer"></div>
+<div id="brainsContainer"></div>
+
+<div id="gangsterChoice" class="hidden">
+    <p>Select gangster type:</p>
+    <button id="chooseFace">Face</button>
+    <button id="chooseFist">Fist</button>
+    <button id="chooseBrain">Brain</button>
+</div>
+
+<div id="illicitChoice" class="hidden">
+    <p>Select illicit business type:</p>
+    <button id="chooseCounterfeiting">Money Counterfeiting</button>
+    <button id="chooseDrugs">Drug Production</button>
+    <button id="chooseGambling">Illegal Gambling</button>
+    <button id="chooseFencing">Fencing</button>
+</div>
+
+<button id="payCops" class="hidden">Pay Off Cops ($50)</button>
+<div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
+<button id="resetGame">Reset Game</button>
+
+<script src="game.js"></script>
+</body>
+</html>
