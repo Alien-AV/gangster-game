@@ -406,25 +406,30 @@ class Game {
         auxProg.className = 'progress hidden';
         auxProg.innerHTML = '<div class="progress-bar"></div>';
 
-        const fearBtn = document.createElement('button');
-        const fearProg = document.createElement('div');
-        fearProg.className = 'progress hidden';
-        fearProg.innerHTML = '<div class="progress-bar"></div>';
+        let fearBtn, fearProg;
 
         row.appendChild(btn);
         row.appendChild(prog);
         row.appendChild(auxBtn);
         row.appendChild(auxProg);
-        row.appendChild(fearBtn);
-        row.appendChild(fearProg);
+        if (g.type === 'fist') {
+          fearBtn = document.createElement('button');
+          fearProg = document.createElement('div');
+          fearProg.className = 'progress hidden';
+          fearProg.innerHTML = '<div class="progress-bar"></div>';
+          row.appendChild(fearBtn);
+          row.appendChild(fearProg);
+        }
 
         g.element = row;
         g.button = btn;
         g.progress = prog;
         g.auxButton = auxBtn;
         g.auxProgress = auxProg;
-        g.fearButton = fearBtn;
-        g.fearProgress = fearProg;
+        if (g.type === 'fist') {
+          g.fearButton = fearBtn;
+          g.fearProgress = fearProg;
+        }
 
         if (g.type === 'face') faceDiv.appendChild(row);
         else if (g.type === 'brain') brainDiv.appendChild(row);
