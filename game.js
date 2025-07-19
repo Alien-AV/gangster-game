@@ -25,6 +25,8 @@ class Game {
       nextGangId: 1,
     };
     this.DISAGREEABLE_CHANCE = 0.2;
+    // Queue of pending gangster recruitment callbacks
+    this.recruitQueue = [];
 
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
@@ -184,6 +186,16 @@ class Game {
   }
 
   showGangsterTypeSelection(callback) {
+    // Add the callback to the recruitment queue and show the popup if this is
+    // the only pending recruiter. Additional recruiters will wait until prior
+    // selections are completed.
+    this.recruitQueue.push(callback);
+    if (this.recruitQueue.length > 1) return;
+    this._showNextRecruitPopup();
+  }
+
+  _showNextRecruitPopup() {
+    if (this.recruitQueue.length === 0) return;
     const container = document.getElementById('gangsterChoice');
     container.classList.remove('hidden');
 
@@ -192,8 +204,12 @@ class Game {
       document.getElementById('chooseFace').onclick = null;
       document.getElementById('chooseFist').onclick = null;
       document.getElementById('chooseBrain').onclick = null;
-      callback(type);
+      const cb = this.recruitQueue.shift();
+      cb(type);
       this.updateUI();
+      if (this.recruitQueue.length > 0) {
+        this._showNextRecruitPopup();
+      }
     };
 
     document.getElementById('chooseFace').onclick = () => choose('face');
