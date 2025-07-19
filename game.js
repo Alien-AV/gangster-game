@@ -26,6 +26,10 @@ class Game {
     };
     this.DISAGREEABLE_CHANCE = 0.2;
 
+    // queue of gangsters awaiting type selection after recruiting
+    this.recruitQueue = [];
+    this.processingRecruit = false;
+
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
     this.darkToggle.checked = storedDark;
@@ -193,12 +197,36 @@ class Game {
       document.getElementById('chooseFist').onclick = null;
       document.getElementById('chooseBrain').onclick = null;
       callback(type);
-      this.updateUI();
     };
 
     document.getElementById('chooseFace').onclick = () => choose('face');
     document.getElementById('chooseFist').onclick = () => choose('fist');
     document.getElementById('chooseBrain').onclick = () => choose('brain');
+  }
+
+  // Add a recruiter to the queue and display popup if none active
+  enqueueGangsterSelection(recruiter, unlockFn, callback) {
+    this.recruitQueue.push({ recruiter, unlockFn, callback });
+    if (!this.processingRecruit) {
+      this.processNextRecruit();
+    }
+  }
+
+  // Process the next recruiter waiting for gangster type selection
+  processNextRecruit() {
+    if (this.recruitQueue.length === 0) {
+      this.processingRecruit = false;
+      return;
+    }
+    this.processingRecruit = true;
+    const current = this.recruitQueue[0];
+    this.showGangsterTypeSelection(type => {
+      current.callback(type);
+      current.unlockFn();
+      this.recruitQueue.shift();
+      this.updateUI();
+      this.processNextRecruit();
+    });
   }
 
   showIllicitBusinessSelection(callback) {
@@ -367,17 +395,21 @@ class Game {
         businessBtn.disabled = true;
         this.spendMoney(gCost);
         this.runProgress(hireProg, 3000, () => {
-          this.showGangsterTypeSelection(choice => {
-            const g = { id: state.nextGangId++, type: choice, busy: false };
-            state.gangsters.push(g);
-            boss.busy = false;
-            extortBtn.disabled = false;
-            illicitBtn.disabled = false;
-            recruitBtn.disabled = false;
-            hireBtn.disabled = false;
-            businessBtn.disabled = false;
-            this.updateUI();
-          });
+          this.enqueueGangsterSelection(
+            boss,
+            () => {
+              boss.busy = false;
+              extortBtn.disabled = false;
+              illicitBtn.disabled = false;
+              recruitBtn.disabled = false;
+              hireBtn.disabled = false;
+              businessBtn.disabled = false;
+            },
+            choice => {
+              const g = { id: state.nextGangId++, type: choice, busy: false };
+              state.gangsters.push(g);
+            }
+          );
         });
       };
 
@@ -496,14 +528,18 @@ class Game {
             btn.disabled = true;
             this.spendMoney(gCost);
             this.runProgress(auxProg, 3000, () => {
-              this.showGangsterTypeSelection(choice => {
-                const n = { id: state.nextGangId++, type: choice, busy: false };
-                state.gangsters.push(n);
-                g.busy = false;
-                auxBtn.disabled = false;
-                btn.disabled = false;
-                this.updateUI();
-              });
+              this.enqueueGangsterSelection(
+                g,
+                () => {
+                  g.busy = false;
+                  auxBtn.disabled = false;
+                  btn.disabled = false;
+                },
+                choice => {
+                  const n = { id: state.nextGangId++, type: choice, busy: false };
+                  state.gangsters.push(n);
+                }
+              );
             });
           };
         } else if (g.type === 'brain') {
