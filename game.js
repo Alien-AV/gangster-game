@@ -511,6 +511,24 @@ class Game {
               btn.disabled = false;
             });
           };
+
+          fearBtn.onclick = () => {
+            if (g.busy) return;
+            if (!(state.unlockedBusiness || state.unlockedIllicit)) return;
+            if (state.dirtyMoney < 100) return alert('Not enough dirty money');
+            g.busy = true;
+            btn.disabled = true;
+            auxBtn.disabled = true;
+            fearBtn.disabled = true;
+            state.dirtyMoney -= 100;
+            this.runProgress(fearProg, 5000, () => {
+              state.cleanMoney += 80;
+              g.busy = false;
+              btn.disabled = false;
+              auxBtn.disabled = false;
+              fearBtn.disabled = false;
+            });
+          };
         } else if (g.type === 'fist') {
           btn.onclick = () => {
             if (g.busy) return;
@@ -575,6 +593,11 @@ class Game {
         g.button.disabled = g.busy || !state.unlockedIllicit || avail <= 0;
         g.auxButton.textContent = `Brain #${g.id} Buy Business`;
         g.auxButton.disabled = g.busy || !state.unlockedBusiness;
+        const showLaunder = state.unlockedBusiness || state.unlockedIllicit;
+        g.fearButton.textContent = `Brain #${g.id} Launder Money`;
+        g.fearButton.classList.toggle('hidden', !showLaunder);
+        if (!showLaunder) g.fearProgress.classList.add('hidden');
+        g.fearButton.disabled = g.busy || state.dirtyMoney < 100;
       } else if (g.type === 'fist') {
         g.button.textContent = `Fist #${g.id} Recruit Enforcer`;
         g.button.disabled = g.busy || !state.unlockedEnforcer;
