@@ -112,7 +112,8 @@ class Game {
     document.getElementById('patrol').textContent = s.patrol;
     document.getElementById('territory').textContent = s.territory;
     document.getElementById('heat').textContent = s.heat;
-    document.getElementById('heatProgress').textContent = s.heatProgress;
+    const heatBar = document.getElementById('heatProgressBar');
+    heatBar.style.width = (s.heatProgress * 10) + '%';
     document.getElementById('disagreeableOwners').textContent = s.disagreeableOwners;
     document.getElementById('fear').textContent = s.fear;
     document.getElementById('businesses').textContent = s.businesses;
