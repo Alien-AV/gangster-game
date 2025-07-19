@@ -25,6 +25,8 @@ class Game {
       nextGangId: 1,
     };
     this.DISAGREEABLE_CHANCE = 0.2;
+    this.pendingGangsterSelections = [];
+    this.showingGangsterSelection = false;
 
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
@@ -184,21 +186,36 @@ class Game {
   }
 
   showGangsterTypeSelection(callback) {
-    const container = document.getElementById('gangsterChoice');
-    container.classList.remove('hidden');
+    this.pendingGangsterSelections.push(callback);
+    if (this.showingGangsterSelection) return;
 
-    const choose = type => {
-      container.classList.add('hidden');
-      document.getElementById('chooseFace').onclick = null;
-      document.getElementById('chooseFist').onclick = null;
-      document.getElementById('chooseBrain').onclick = null;
-      callback(type);
-      this.updateUI();
+    const process = () => {
+      if (this.pendingGangsterSelections.length === 0) {
+        this.showingGangsterSelection = false;
+        return;
+      }
+      this.showingGangsterSelection = true;
+      const cb = this.pendingGangsterSelections[0];
+      const container = document.getElementById('gangsterChoice');
+      container.classList.remove('hidden');
+
+      const choose = type => {
+        container.classList.add('hidden');
+        document.getElementById('chooseFace').onclick = null;
+        document.getElementById('chooseFist').onclick = null;
+        document.getElementById('chooseBrain').onclick = null;
+        this.pendingGangsterSelections.shift();
+        cb(type);
+        this.updateUI();
+        process();
+      };
+
+      document.getElementById('chooseFace').onclick = () => choose('face');
+      document.getElementById('chooseFist').onclick = () => choose('fist');
+      document.getElementById('chooseBrain').onclick = () => choose('brain');
     };
 
-    document.getElementById('chooseFace').onclick = () => choose('face');
-    document.getElementById('chooseFist').onclick = () => choose('fist');
-    document.getElementById('chooseBrain').onclick = () => choose('brain');
+    process();
   }
 
   showIllicitBusinessSelection(callback) {
