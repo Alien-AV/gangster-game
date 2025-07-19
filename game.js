@@ -25,6 +25,8 @@ class Game {
       nextGangId: 1,
     };
     this.DISAGREEABLE_CHANCE = 0.2;
+    this.recruitQueue = [];
+    this.showingRecruit = false;
 
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
@@ -201,6 +203,27 @@ class Game {
     document.getElementById('chooseBrain').onclick = () => choose('brain');
   }
 
+  queueGangsterRecruit(callback) {
+    this.recruitQueue.push(callback);
+    if (!this.showingRecruit) {
+      this.processRecruitQueue();
+    }
+  }
+
+  processRecruitQueue() {
+    if (this.recruitQueue.length === 0) {
+      this.showingRecruit = false;
+      return;
+    }
+    this.showingRecruit = true;
+    const cb = this.recruitQueue[0];
+    this.showGangsterTypeSelection(type => {
+      cb(type);
+      this.recruitQueue.shift();
+      this.processRecruitQueue();
+    });
+  }
+
   showIllicitBusinessSelection(callback) {
     const container = document.getElementById('illicitChoice');
     container.classList.remove('hidden');
@@ -367,7 +390,7 @@ class Game {
         businessBtn.disabled = true;
         this.spendMoney(gCost);
         this.runProgress(hireProg, 3000, () => {
-          this.showGangsterTypeSelection(choice => {
+          this.queueGangsterRecruit(choice => {
             const g = { id: state.nextGangId++, type: choice, busy: false };
             state.gangsters.push(g);
             boss.busy = false;
@@ -496,7 +519,7 @@ class Game {
             btn.disabled = true;
             this.spendMoney(gCost);
             this.runProgress(auxProg, 3000, () => {
-              this.showGangsterTypeSelection(choice => {
+              this.queueGangsterRecruit(choice => {
                 const n = { id: state.nextGangId++, type: choice, busy: false };
                 state.gangsters.push(n);
                 g.busy = false;
