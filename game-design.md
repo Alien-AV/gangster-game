@@ -16,6 +16,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Fist** – recruits enforcers and can raid rival businesses for quick cash at the cost of heat.
   They can also intimidate disagreeable owners into paying protection, raising fear.
 - **Brain** – sets up illicit businesses behind purchased fronts.
+  They can also launder dirty money into clean profits once businesses are available.
 
 ## Gameplay Loop Example
 1. Extort with the boss to seize your first block of territory.
