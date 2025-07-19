@@ -26,6 +26,8 @@ class Game {
     };
     this.DISAGREEABLE_CHANCE = 0.2;
 
+    this.pendingGangsterSelections = [];
+
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
     this.darkToggle.checked = storedDark;
@@ -154,6 +156,14 @@ class Game {
   }
 
   showGangsterTypeSelection(callback) {
+    this.pendingGangsterSelections.push(callback);
+    if (this.pendingGangsterSelections.length === 1) {
+      this._processNextGangsterSelection();
+    }
+  }
+
+  _processNextGangsterSelection() {
+    if (this.pendingGangsterSelections.length === 0) return;
     const container = document.getElementById('gangsterChoice');
     container.classList.remove('hidden');
 
@@ -162,8 +172,12 @@ class Game {
       document.getElementById('chooseFace').onclick = null;
       document.getElementById('chooseFist').onclick = null;
       document.getElementById('chooseBrain').onclick = null;
-      callback(type);
+      const cb = this.pendingGangsterSelections.shift();
+      cb(type);
       this.updateUI();
+      if (this.pendingGangsterSelections.length > 0) {
+        this._processNextGangsterSelection();
+      }
     };
 
     document.getElementById('chooseFace').onclick = () => choose('face');
