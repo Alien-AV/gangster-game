@@ -406,25 +406,27 @@ class Game {
         auxProg.className = 'progress hidden';
         auxProg.innerHTML = '<div class="progress-bar"></div>';
 
-        const fearBtn = document.createElement('button');
-        const fearProg = document.createElement('div');
-        fearProg.className = 'progress hidden';
-        fearProg.innerHTML = '<div class="progress-bar"></div>';
-
         row.appendChild(btn);
         row.appendChild(prog);
         row.appendChild(auxBtn);
         row.appendChild(auxProg);
-        row.appendChild(fearBtn);
-        row.appendChild(fearProg);
 
         g.element = row;
         g.button = btn;
         g.progress = prog;
         g.auxButton = auxBtn;
         g.auxProgress = auxProg;
-        g.fearButton = fearBtn;
-        g.fearProgress = fearProg;
+
+        if (g.type === 'fist') {
+          const fearBtn = document.createElement('button');
+          const fearProg = document.createElement('div');
+          fearProg.className = 'progress hidden';
+          fearProg.innerHTML = '<div class="progress-bar"></div>';
+          row.appendChild(fearBtn);
+          row.appendChild(fearProg);
+          g.fearButton = fearBtn;
+          g.fearProgress = fearProg;
+        }
 
         if (g.type === 'face') faceDiv.appendChild(row);
         else if (g.type === 'brain') brainDiv.appendChild(row);
@@ -513,7 +515,7 @@ class Game {
             g.busy = true;
             btn.disabled = true;
             auxBtn.disabled = true;
-            fearBtn.disabled = true;
+            g.fearButton.disabled = true;
             this.spendMoney(5);
             this.runProgress(prog, 2000, () => {
               state.patrol += 1;
@@ -521,7 +523,7 @@ class Game {
               g.busy = false;
               btn.disabled = false;
               auxBtn.disabled = false;
-              fearBtn.disabled = false;
+              g.fearButton.disabled = false;
             });
           };
 
@@ -530,31 +532,31 @@ class Game {
             g.busy = true;
             btn.disabled = true;
             auxBtn.disabled = true;
-            fearBtn.disabled = true;
+            g.fearButton.disabled = true;
             this.runProgress(auxProg, 5000, () => {
               state.dirtyMoney += 150;
               state.heat += 1;
               g.busy = false;
               btn.disabled = false;
               auxBtn.disabled = false;
-              fearBtn.disabled = false;
+              g.fearButton.disabled = false;
             });
           };
 
-          fearBtn.onclick = () => {
+          g.fearButton.onclick = () => {
             if (g.busy) return;
             if (state.disagreeableOwners <= 0) return alert('No disagreeable owners');
             g.busy = true;
             btn.disabled = true;
             auxBtn.disabled = true;
-            fearBtn.disabled = true;
-            this.runProgress(fearProg, 3000, () => {
+            g.fearButton.disabled = true;
+            this.runProgress(g.fearProgress, 3000, () => {
               state.disagreeableOwners -= 1;
               state.fear += 1;
               g.busy = false;
               btn.disabled = false;
               auxBtn.disabled = false;
-              fearBtn.disabled = false;
+              g.fearButton.disabled = false;
             });
           };
         }
