@@ -103,7 +103,12 @@
 <div class="counter">Dirty Money: $<span id="dirtyMoney">0</span></div>
 <div class="counter">Enforcers Patrolling: <span id="patrol">0</span></div>
 <div class="counter">Territory: <span id="territory">0</span> block(s)</div>
-<div class="counter">Heat: <span id="heat">0</span> (<span id="heatProgress">0</span>/10)</div>
+<div class="counter">
+  Heat: <span id="heat">0</span>
+  <div id="heatProgress" class="progress" style="display:inline-block; vertical-align:middle; margin-left:4px;">
+    <div class="progress-bar" id="heatProgressBar"></div>
+  </div>
+</div>
 <div class="counter">Disagreeable Owners: <span id="disagreeableOwners">0</span></div>
 <div class="counter">Fear: <span id="fear">0</span></div>
 <div class="counter">Fear Bonus: <span id="fearBonus">None</span></div>
