@@ -405,16 +405,16 @@ class Game {
       };
     }
 
-    boss.extortButton.textContent = 'Boss Extort';
+    boss.extortButton.textContent = 'Boss Extort (Cost $0, Risk 0%)';
     boss.extortButton.disabled = boss.busy;
-    boss.illicitButton.textContent = 'Boss Build Illicit';
+    boss.illicitButton.textContent = 'Boss Build Illicit (Cost $0, Risk 0%)';
     const availFronts = state.businesses - state.illicit - state.illicitProgress;
     boss.illicitButton.disabled = boss.busy || !state.unlockedIllicit || availFronts <= 0;
-    boss.recruitButton.textContent = 'Boss Recruit Enforcer';
+    boss.recruitButton.textContent = `Boss Recruit Enforcer (Cost $${this.enforcerCost()}, Risk 0%)`;
     boss.recruitButton.disabled = boss.busy || !state.unlockedEnforcer;
-    boss.hireButton.textContent = 'Boss Recruit Gangster';
+    boss.hireButton.textContent = `Boss Recruit Gangster (Cost $${this.gangsterCost()}, Risk 0%)`;
     boss.hireButton.disabled = boss.busy || !state.unlockedGangster;
-    boss.businessButton.textContent = 'Boss Buy Business';
+    boss.businessButton.textContent = 'Boss Buy Business (Cost $100, Risk 0%)';
     boss.businessButton.disabled = boss.busy || !state.unlockedBusiness;
   }
 
@@ -617,27 +617,27 @@ class Game {
         }
       }
       if (g.type === 'face') {
-        g.button.textContent = `Face #${g.id} Extort`;
+        g.button.textContent = `Face #${g.id} Extort (Cost $0, Risk 0%)`;
         g.button.disabled = g.busy;
-        g.auxButton.textContent = `Face #${g.id} Recruit Gangster`;
+        g.auxButton.textContent = `Face #${g.id} Recruit Gangster (Cost $${this.gangsterCost()}, Risk 0%)`;
         g.auxButton.disabled = g.busy || !state.unlockedGangster;
       } else if (g.type === 'brain') {
-        g.button.textContent = `Brain #${g.id} Build Illicit`;
+        g.button.textContent = `Brain #${g.id} Build Illicit (Cost $0, Risk 0%)`;
         const avail = state.businesses - state.illicit - state.illicitProgress;
         g.button.disabled = g.busy || !state.unlockedIllicit || avail <= 0;
-        g.auxButton.textContent = `Brain #${g.id} Buy Business`;
+        g.auxButton.textContent = `Brain #${g.id} Buy Business (Cost $100, Risk 0%)`;
         g.auxButton.disabled = g.busy || !state.unlockedBusiness;
         const showLaunder = state.unlockedBusiness || state.unlockedIllicit;
-        g.fearButton.textContent = `Brain #${g.id} Launder Money`;
+        g.fearButton.textContent = `Brain #${g.id} Launder Money (Cost $100, Risk 0%)`;
         g.fearButton.classList.toggle('hidden', !showLaunder);
         if (!showLaunder) g.fearProgress.classList.add('hidden');
         g.fearButton.disabled = g.busy || state.dirtyMoney < 100;
       } else if (g.type === 'fist') {
-        g.button.textContent = `Fist #${g.id} Recruit Enforcer`;
+        g.button.textContent = `Fist #${g.id} Recruit Enforcer (Cost $${this.enforcerCost()}, Risk 0%)`;
         g.button.disabled = g.busy || !state.unlockedEnforcer;
-        g.auxButton.textContent = `Fist #${g.id} Raid Business`;
+        g.auxButton.textContent = `Fist #${g.id} Raid Business (Cost $0, Risk 0%)`;
         g.auxButton.disabled = g.busy;
-        g.fearButton.textContent = `Fist #${g.id} Intimidate`;
+        g.fearButton.textContent = `Fist #${g.id} Intimidate (Cost $0, Risk 0%)`;
         g.fearButton.disabled = g.busy || state.disagreeableOwners <= 0;
       }
     });
