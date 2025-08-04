@@ -10,11 +10,12 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Businesses** – legitimate fronts that can host illicit operations.
 - **Available Fronts** – businesses not yet hosting illicit operations.
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
+- **Respect** – goodwill earned by helping the community. Provides small passive income boosts.
 
 ## Gangsters
-- **Face** – used to extort surrounding blocks, potentially expanding territory if the owner cooperates.
+- **Face** – used to extort surrounding blocks, potentially expanding territory if the owner cooperates. Faces can spend clean money on PR to earn respect.
 - **Fist** – recruits enforcers and can raid rival businesses for quick cash at the cost of heat.
-  They can also intimidate disagreeable owners into paying protection, raising fear.
+  They can also intimidate disagreeable owners into paying protection, raising fear, or simply show force anywhere to boost fear while generating heat.
 - **Brain** – sets up illicit businesses behind purchased fronts.
   They can also launder dirty money into clean profits once businesses are available.
 
