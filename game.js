@@ -113,6 +113,10 @@ class Game {
     return Math.max(5, 20 - level * 2);
   }
 
+  formatAction(label, cost) {
+    return `${label} ($${cost}, 0% risk)`;
+  }
+
   spendMoney(amount) {
     const s = this.state;
     if (s.dirtyMoney >= amount) {
@@ -405,16 +409,16 @@ class Game {
       };
     }
 
-    boss.extortButton.textContent = 'Boss Extort';
+    boss.extortButton.textContent = this.formatAction('Boss Extort', 0);
     boss.extortButton.disabled = boss.busy;
-    boss.illicitButton.textContent = 'Boss Build Illicit';
+    boss.illicitButton.textContent = this.formatAction('Boss Build Illicit', 0);
     const availFronts = state.businesses - state.illicit - state.illicitProgress;
     boss.illicitButton.disabled = boss.busy || !state.unlockedIllicit || availFronts <= 0;
-    boss.recruitButton.textContent = 'Boss Recruit Enforcer';
+    boss.recruitButton.textContent = this.formatAction('Boss Recruit Enforcer', this.enforcerCost());
     boss.recruitButton.disabled = boss.busy || !state.unlockedEnforcer;
-    boss.hireButton.textContent = 'Boss Recruit Gangster';
+    boss.hireButton.textContent = this.formatAction('Boss Recruit Gangster', this.gangsterCost());
     boss.hireButton.disabled = boss.busy || !state.unlockedGangster;
-    boss.businessButton.textContent = 'Boss Buy Business';
+    boss.businessButton.textContent = this.formatAction('Boss Buy Business', 100);
     boss.businessButton.disabled = boss.busy || !state.unlockedBusiness;
   }
 
@@ -617,27 +621,27 @@ class Game {
         }
       }
       if (g.type === 'face') {
-        g.button.textContent = `Face #${g.id} Extort`;
+        g.button.textContent = this.formatAction(`Face #${g.id} Extort`, 0);
         g.button.disabled = g.busy;
-        g.auxButton.textContent = `Face #${g.id} Recruit Gangster`;
+        g.auxButton.textContent = this.formatAction(`Face #${g.id} Recruit Gangster`, this.gangsterCost());
         g.auxButton.disabled = g.busy || !state.unlockedGangster;
       } else if (g.type === 'brain') {
-        g.button.textContent = `Brain #${g.id} Build Illicit`;
+        g.button.textContent = this.formatAction(`Brain #${g.id} Build Illicit`, 0);
         const avail = state.businesses - state.illicit - state.illicitProgress;
         g.button.disabled = g.busy || !state.unlockedIllicit || avail <= 0;
-        g.auxButton.textContent = `Brain #${g.id} Buy Business`;
+        g.auxButton.textContent = this.formatAction(`Brain #${g.id} Buy Business`, 100);
         g.auxButton.disabled = g.busy || !state.unlockedBusiness;
         const showLaunder = state.unlockedBusiness || state.unlockedIllicit;
-        g.fearButton.textContent = `Brain #${g.id} Launder Money`;
+        g.fearButton.textContent = this.formatAction(`Brain #${g.id} Launder Money`, 100);
         g.fearButton.classList.toggle('hidden', !showLaunder);
         if (!showLaunder) g.fearProgress.classList.add('hidden');
         g.fearButton.disabled = g.busy || state.dirtyMoney < 100;
       } else if (g.type === 'fist') {
-        g.button.textContent = `Fist #${g.id} Recruit Enforcer`;
+        g.button.textContent = this.formatAction(`Fist #${g.id} Recruit Enforcer`, this.enforcerCost());
         g.button.disabled = g.busy || !state.unlockedEnforcer;
-        g.auxButton.textContent = `Fist #${g.id} Raid Business`;
+        g.auxButton.textContent = this.formatAction(`Fist #${g.id} Raid Business`, 0);
         g.auxButton.disabled = g.busy;
-        g.fearButton.textContent = `Fist #${g.id} Intimidate`;
+        g.fearButton.textContent = this.formatAction(`Fist #${g.id} Intimidate`, 0);
         g.fearButton.disabled = g.busy || state.disagreeableOwners <= 0;
       }
     });
