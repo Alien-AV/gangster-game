@@ -66,7 +66,7 @@ class Game {
       illicitProgress: s.illicitProgress,
       unlockedIllicit: s.unlockedIllicit,
       boss: { busy: s.boss.busy },
-      gangsters: s.gangsters.map(g => ({ id: g.id, type: g.type, busy: g.busy })),
+      gangsters: s.gangsters.map(g => ({ id: g.id, specialty: g.specialty, busy: g.busy })),
       nextGangId: s.nextGangId,
     };
     localStorage.setItem('gameState', JSON.stringify(data));
@@ -82,7 +82,7 @@ class Game {
       const data = JSON.parse(raw);
       Object.assign(this.state, data);
       this.state.boss = { busy: false };
-      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false }));
+      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, specialty: g.specialty, busy: false }));
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
@@ -148,9 +148,9 @@ class Game {
     document.getElementById('businesses').textContent = s.businesses;
     const available = s.businesses - s.illicit - s.illicitProgress;
     document.getElementById('availableFronts').textContent = available;
-    const faces = s.gangsters.filter(g => g.type === 'face').length;
-    const fists = s.gangsters.filter(g => g.type === 'fist').length;
-    const brains = s.gangsters.filter(g => g.type === 'brain').length;
+    const faces = s.gangsters.filter(g => g.specialty === 'face').length;
+    const fists = s.gangsters.filter(g => g.specialty === 'fist').length;
+    const brains = s.gangsters.filter(g => g.specialty === 'brain').length;
     document.getElementById('faces').textContent = faces;
     document.getElementById('fists').textContent = fists;
     document.getElementById('brains').textContent = brains;
@@ -187,12 +187,12 @@ class Game {
     const container = document.getElementById('gangsterChoice');
     container.classList.remove('hidden');
 
-    const choose = type => {
+    const choose = spec => {
       container.classList.add('hidden');
       document.getElementById('chooseFace').onclick = null;
       document.getElementById('chooseFist').onclick = null;
       document.getElementById('chooseBrain').onclick = null;
-      callback(type);
+      callback(spec);
       this.updateUI();
     };
 
@@ -368,7 +368,7 @@ class Game {
         this.spendMoney(gCost);
         this.runProgress(hireProg, 3000, () => {
           this.showGangsterTypeSelection(choice => {
-            const g = { id: state.nextGangId++, type: choice, busy: false };
+            const g = { id: state.nextGangId++, specialty: choice, busy: false };
             state.gangsters.push(g);
             boss.busy = false;
             extortBtn.disabled = false;
@@ -420,227 +420,201 @@ class Game {
 
   renderGangsters() {
     const state = this.state;
-    const faceDiv = document.getElementById('facesContainer');
-    const brainDiv = document.getElementById('brainsContainer');
-    const fistDiv = document.getElementById('fistsContainer');
+    const container = document.getElementById('gangstersContainer');
     state.gangsters.forEach(g => {
       if (!g.element) {
         const row = document.createElement('div');
         row.className = 'action';
+
+        const label = document.createElement('span');
+        label.style.marginRight = '4px';
+
+        const select = document.createElement('select');
+        select.style.marginRight = '4px';
 
         const btn = document.createElement('button');
         const prog = document.createElement('div');
         prog.className = 'progress hidden';
         prog.innerHTML = '<div class="progress-bar"></div>';
 
-        const auxBtn = document.createElement('button');
-        const auxProg = document.createElement('div');
-        auxProg.className = 'progress hidden';
-        auxProg.innerHTML = '<div class="progress-bar"></div>';
-
-        let fearBtn, fearProg;
-
+        row.appendChild(label);
+        row.appendChild(select);
         row.appendChild(btn);
         row.appendChild(prog);
-        row.appendChild(auxBtn);
-        row.appendChild(auxProg);
-        if (g.type === 'fist') {
-          fearBtn = document.createElement('button');
-          fearProg = document.createElement('div');
-          fearProg.className = 'progress hidden';
-          fearProg.innerHTML = '<div class="progress-bar"></div>';
-          row.appendChild(fearBtn);
-          row.appendChild(fearProg);
-        }
 
         g.element = row;
+        g.label = label;
+        g.select = select;
         g.button = btn;
         g.progress = prog;
-        g.auxButton = auxBtn;
-        g.auxProgress = auxProg;
-        if (g.type === 'fist') {
-          g.fearButton = fearBtn;
-          g.fearProgress = fearProg;
-        }
 
-        if (g.type === 'face') faceDiv.appendChild(row);
-        else if (g.type === 'brain') brainDiv.appendChild(row);
-        else if (g.type === 'fist') fistDiv.appendChild(row);
-
-        if (g.type === 'face') {
-          btn.onclick = () => {
-            if (g.busy) return;
-            g.busy = true;
-            btn.disabled = true;
-            auxBtn.disabled = true;
-            this.runProgress(prog, this.extortDuration(4000), () => {
-              if (Math.random() < this.DISAGREEABLE_CHANCE) {
-                state.disagreeableOwners += 1;
-              } else {
-                state.territory += 1;
-              }
-              state.unlockedBusiness = true;
-              g.busy = false;
-              btn.disabled = false;
-              auxBtn.disabled = false;
-            });
-          };
-
-          auxBtn.onclick = () => {
-            if (g.busy) return;
-            if (!state.unlockedGangster) return alert('Recruit enforcers first');
-            const gCost = this.gangsterCost();
-            if (this.totalMoney() < gCost) return alert('Not enough money');
-            g.busy = true;
-            auxBtn.disabled = true;
-            btn.disabled = true;
-            this.spendMoney(gCost);
-            this.runProgress(auxProg, 3000, () => {
-              this.showGangsterTypeSelection(choice => {
-                const n = { id: state.nextGangId++, type: choice, busy: false };
-                state.gangsters.push(n);
-                g.busy = false;
-                auxBtn.disabled = false;
-                btn.disabled = false;
-                this.updateUI();
-              });
-            });
-          };
-        } else if (g.type === 'brain') {
-          btn.onclick = () => {
-            if (g.busy) return;
-            if (state.businesses - state.illicit - state.illicitProgress <= 0) return alert('No available fronts');
-            g.busy = true;
-            btn.disabled = true;
-            auxBtn.disabled = true;
-            state.illicitProgress += 1;
-            this.updateUI();
-            this.runProgress(prog, 4000, () => {
-              state.illicitProgress -= 1;
-              this.showIllicitBusinessSelection(choice => {
-                state.illicitCounts[choice] += 1;
-                state.illicit += 1;
-                g.busy = false;
-                btn.disabled = false;
-                auxBtn.disabled = false;
-                this.updateUI();
-              });
-            });
-          };
-
-          auxBtn.onclick = () => {
-            if (g.busy) return;
-            if (!state.unlockedBusiness) return alert('No territory yet');
-            if (this.totalMoney() < 100) return alert('Not enough money');
-            g.busy = true;
-            auxBtn.disabled = true;
-            btn.disabled = true;
-            this.spendMoney(100);
-            this.runProgress(auxProg, 5000, () => {
-              state.businesses += 1;
-              state.unlockedIllicit = true;
-              g.busy = false;
-              auxBtn.disabled = false;
-              btn.disabled = false;
-            });
-          };
-
-          fearBtn.onclick = () => {
-            if (g.busy) return;
-            if (!(state.unlockedBusiness || state.unlockedIllicit)) return;
-            if (state.dirtyMoney < 100) return alert('Not enough dirty money');
-            g.busy = true;
-            btn.disabled = true;
-            auxBtn.disabled = true;
-            fearBtn.disabled = true;
-            state.dirtyMoney -= 100;
-            this.runProgress(fearProg, 5000, () => {
-              state.cleanMoney += 80;
-              g.busy = false;
-              btn.disabled = false;
-              auxBtn.disabled = false;
-              fearBtn.disabled = false;
-            });
-          };
-        } else if (g.type === 'fist') {
-          btn.onclick = () => {
-            if (g.busy) return;
-            const cost = this.enforcerCost();
-            if (this.totalMoney() < cost) return alert('Not enough money');
-            g.busy = true;
-            btn.disabled = true;
-            auxBtn.disabled = true;
-            fearBtn.disabled = true;
-            this.spendMoney(cost);
-            this.runProgress(prog, 2000, () => {
-              state.patrol += 1;
-              state.unlockedGangster = true;
-              g.busy = false;
-              btn.disabled = false;
-              auxBtn.disabled = false;
-              fearBtn.disabled = false;
-            });
-          };
-
-          auxBtn.onclick = () => {
-            if (g.busy) return;
-            g.busy = true;
-            btn.disabled = true;
-            auxBtn.disabled = true;
-            fearBtn.disabled = true;
-            this.runProgress(auxProg, 5000, () => {
-              state.dirtyMoney += 150;
-              state.heat += 1;
-              g.busy = false;
-              btn.disabled = false;
-              auxBtn.disabled = false;
-              fearBtn.disabled = false;
-            });
-          };
-
-          fearBtn.onclick = () => {
-            if (g.busy) return;
-            if (state.disagreeableOwners <= 0) return alert('No disagreeable owners');
-            g.busy = true;
-            btn.disabled = true;
-            auxBtn.disabled = true;
-            fearBtn.disabled = true;
-            this.runProgress(fearProg, 3000, () => {
-              state.disagreeableOwners -= 1;
-              state.fear += 1;
-              g.busy = false;
-              btn.disabled = false;
-              auxBtn.disabled = false;
-              fearBtn.disabled = false;
-            });
-          };
-        }
+        container.appendChild(row);
       }
-      if (g.type === 'face') {
-        g.button.textContent = `Face #${g.id} Extort`;
-        g.button.disabled = g.busy;
-        g.auxButton.textContent = `Face #${g.id} Recruit Gangster`;
-        g.auxButton.disabled = g.busy || !state.unlockedGangster;
-      } else if (g.type === 'brain') {
-        g.button.textContent = `Brain #${g.id} Build Illicit`;
-        const avail = state.businesses - state.illicit - state.illicitProgress;
-        g.button.disabled = g.busy || !state.unlockedIllicit || avail <= 0;
-        g.auxButton.textContent = `Brain #${g.id} Buy Business`;
-        g.auxButton.disabled = g.busy || !state.unlockedBusiness;
-        const showLaunder = state.unlockedBusiness || state.unlockedIllicit;
-        g.fearButton.textContent = `Brain #${g.id} Launder Money`;
-        g.fearButton.classList.toggle('hidden', !showLaunder);
-        if (!showLaunder) g.fearProgress.classList.add('hidden');
-        g.fearButton.disabled = g.busy || state.dirtyMoney < 100;
-      } else if (g.type === 'fist') {
-        g.button.textContent = `Fist #${g.id} Recruit Enforcer`;
-        g.button.disabled = g.busy || !state.unlockedEnforcer;
-        g.auxButton.textContent = `Fist #${g.id} Raid Business`;
-        g.auxButton.disabled = g.busy;
-        g.fearButton.textContent = `Fist #${g.id} Intimidate`;
-        g.fearButton.disabled = g.busy || state.disagreeableOwners <= 0;
+
+      g.label.textContent = `Gangster #${g.id} (${g.specialty})`;
+
+      const opts = [];
+      opts.push({ value: 'extort', text: 'Extort' });
+      if (state.unlockedGangster) opts.push({ value: 'recruitGangster', text: 'Recruit Gangster' });
+      if (state.unlockedEnforcer) opts.push({ value: 'recruitEnforcer', text: 'Recruit Enforcer' });
+      opts.push({ value: 'raid', text: 'Raid Business' });
+      if (state.disagreeableOwners > 0) opts.push({ value: 'intimidate', text: 'Intimidate' });
+      if (state.unlockedBusiness) opts.push({ value: 'buyBusiness', text: 'Buy Business' });
+      if (state.unlockedIllicit && (state.businesses - state.illicit - state.illicitProgress) > 0) opts.push({ value: 'buildIllicit', text: 'Build Illicit' });
+      if (state.unlockedBusiness || state.unlockedIllicit) opts.push({ value: 'launder', text: 'Launder Money' });
+
+      const current = g.select.value;
+      g.select.innerHTML = '';
+      opts.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        g.select.appendChild(opt);
+      });
+      if (opts.some(o => o.value === current)) g.select.value = current;
+
+      g.button.textContent = g.busy ? 'Working...' : 'Go';
+      g.button.disabled = g.busy || opts.length === 0;
+
+      if (!g.button._handler) {
+        g.button.addEventListener('click', () => {
+          if (g.busy) return;
+          const action = g.select.value;
+          if (!action) return;
+          this.performGangsterAction(g, action);
+        });
+        g.button._handler = true;
       }
     });
+  }
+
+  performGangsterAction(g, action) {
+    const state = this.state;
+    const specialtyMap = {
+      extort: 'face',
+      recruitGangster: 'face',
+      recruitEnforcer: 'fist',
+      raid: 'fist',
+      intimidate: 'fist',
+      buyBusiness: 'brain',
+      buildIllicit: 'brain',
+      launder: 'brain',
+    };
+    const baseDurations = {
+      extort: 4000,
+      recruitGangster: 3000,
+      recruitEnforcer: 2000,
+      raid: 5000,
+      intimidate: 3000,
+      buyBusiness: 5000,
+      buildIllicit: 4000,
+      launder: 5000,
+    };
+
+    let duration = baseDurations[action] || 1000;
+    if (specialtyMap[action] === g.specialty) duration = Math.floor(duration * 0.8);
+
+    const finish = () => {
+      g.busy = false;
+      this.updateUI();
+    };
+
+    switch (action) {
+      case 'extort':
+        g.busy = true;
+        this.runProgress(g.progress, this.extortDuration(duration), () => {
+          if (Math.random() < this.DISAGREEABLE_CHANCE) {
+            state.disagreeableOwners += 1;
+          } else {
+            state.territory += 1;
+          }
+          state.unlockedBusiness = true;
+          finish();
+        });
+        break;
+      case 'recruitGangster': {
+        if (!state.unlockedGangster) return alert('Recruit enforcers first');
+        const gCost = this.gangsterCost();
+        if (this.totalMoney() < gCost) return alert('Not enough money');
+        g.busy = true;
+        this.spendMoney(gCost);
+        this.runProgress(g.progress, duration, () => {
+          this.showGangsterTypeSelection(choice => {
+            const n = { id: state.nextGangId++, specialty: choice, busy: false };
+            state.gangsters.push(n);
+            finish();
+          });
+        });
+        break;
+      }
+      case 'recruitEnforcer': {
+        if (!state.unlockedEnforcer) return alert('Unlock enforcers first');
+        const cost = this.enforcerCost();
+        if (this.totalMoney() < cost) return alert('Not enough money');
+        g.busy = true;
+        this.spendMoney(cost);
+        this.runProgress(g.progress, duration, () => {
+          state.patrol += 1;
+          state.unlockedGangster = true;
+          finish();
+        });
+        break;
+      }
+      case 'raid':
+        g.busy = true;
+        this.runProgress(g.progress, duration, () => {
+          state.dirtyMoney += 150;
+          state.heat += 1;
+          finish();
+        });
+        break;
+      case 'intimidate':
+        if (state.disagreeableOwners <= 0) return alert('No disagreeable owners');
+        g.busy = true;
+        this.runProgress(g.progress, duration, () => {
+          state.disagreeableOwners -= 1;
+          state.fear += 1;
+          finish();
+        });
+        break;
+      case 'buyBusiness':
+        if (!state.unlockedBusiness) return alert('No territory yet');
+        if (this.totalMoney() < 100) return alert('Not enough money');
+        g.busy = true;
+        this.spendMoney(100);
+        this.runProgress(g.progress, duration, () => {
+          state.businesses += 1;
+          state.unlockedIllicit = true;
+          finish();
+        });
+        break;
+      case 'buildIllicit':
+        if (!state.unlockedIllicit || (state.businesses - state.illicit - state.illicitProgress <= 0)) {
+          return alert('No available fronts');
+        }
+        g.busy = true;
+        state.illicitProgress += 1;
+        this.updateUI();
+        this.runProgress(g.progress, duration, () => {
+          state.illicitProgress -= 1;
+          this.showIllicitBusinessSelection(choice => {
+            state.illicitCounts[choice] += 1;
+            state.illicit += 1;
+            finish();
+          });
+        });
+        break;
+      case 'launder':
+        if (!(state.unlockedBusiness || state.unlockedIllicit)) return;
+        if (state.dirtyMoney < 100) return alert('Not enough dirty money');
+        g.busy = true;
+        state.dirtyMoney -= 100;
+        this.runProgress(g.progress, duration, () => {
+          state.cleanMoney += 80;
+          finish();
+        });
+        break;
+    }
   }
 
   payCops() {
