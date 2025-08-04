@@ -1,0 +1,13 @@
+{
+  "name": "gangster-game",
+  "version": "1.0.0",
+  "description": "This repository contains a very small prototype for a mafia management game. The game is a semi-idle experiment inspired by games like **Cultist Simulator**. Gameplay revolves around balancing money, manpower and heat while expanding your criminal empire.",
+  "main": "game.js",
+  "scripts": {
+    "test": "node test/recruitQueue.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
