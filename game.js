@@ -25,6 +25,7 @@ class Game {
       nextGangId: 1,
     };
     this.DISAGREEABLE_CHANCE = 0.2;
+    this.recruitQueue = [];
 
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
@@ -184,6 +185,14 @@ class Game {
   }
 
   showGangsterTypeSelection(callback) {
+    this.recruitQueue.push(callback);
+    if (this.recruitQueue.length === 1) {
+      this.displayGangsterTypeSelection();
+    }
+  }
+
+  displayGangsterTypeSelection() {
+    if (this.recruitQueue.length === 0) return;
     const container = document.getElementById('gangsterChoice');
     container.classList.remove('hidden');
 
@@ -192,8 +201,12 @@ class Game {
       document.getElementById('chooseFace').onclick = null;
       document.getElementById('chooseFist').onclick = null;
       document.getElementById('chooseBrain').onclick = null;
-      callback(type);
+      const cb = this.recruitQueue.shift();
+      cb(type);
       this.updateUI();
+      if (this.recruitQueue.length > 0) {
+        this.displayGangsterTypeSelection();
+      }
     };
 
     document.getElementById('chooseFace').onclick = () => choose('face');
@@ -679,4 +692,8 @@ class Game {
 window.addEventListener('DOMContentLoaded', () => {
   new Game();
 });
+
+if (typeof module !== 'undefined') {
+  module.exports = Game;
+}
 
