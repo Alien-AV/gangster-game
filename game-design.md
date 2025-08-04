@@ -12,11 +12,12 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
 
 ## Gangsters
-- **Face** – used to extort surrounding blocks, potentially expanding territory if the owner cooperates.
-- **Fist** – recruits enforcers and can raid rival businesses for quick cash at the cost of heat.
-  They can also intimidate disagreeable owners into paying protection, raising fear.
-- **Brain** – sets up illicit businesses behind purchased fronts.
-  They can also launder dirty money into clean profits once businesses are available.
+Every gangster can attempt any unlocked action. Each one still has a specialty
+(Face, Fist or Brain) that speeds up related tasks by about 20%.
+- **Face** – excels at extorting territory and recruiting new gangsters.
+- **Fist** – better at recruiting enforcers, raiding and intimidating owners.
+- **Brain** – works faster when buying businesses, building illicit fronts or
+  laundering money.
 
 ## Gameplay Loop Example
 1. Extort with the boss to seize your first block of territory.
