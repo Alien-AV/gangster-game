@@ -7,6 +7,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Enforcers** – basic manpower. They can patrol your territory or be assigned to gangsters.
 - **Territory** – city blocks under your control. More territory means more potential profit but requires more patrols or heat rises.
 - **Heat** – unwanted attention from law enforcement. Can be reduced by paying off cops.
+- **Personal Heat** – each gangster accumulates heat from risky actions. Heat slowly decays but a portion becomes permanent minimal heat.
 - **Businesses** – legitimate fronts that can host illicit operations.
 - **Available Fronts** – businesses not yet hosting illicit operations.
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
@@ -27,5 +28,6 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 6. Balance money, territory, patrols and heat while gradually growing your empire. Heat rises each second based on unpatrolled blocks and any disagreeable owners.
 7. Occasionally an extortion attempt fails, leaving a disagreeable owner who refuses to pay. Failed extortions do not add territory and the owner will steadily raise heat until dealt with. These are tracked by a "disagreeable owners" counter.
 8. Send Fists to intimidate these owners. Successful intimidation removes one disagreeable owner and increases fear.
+9. All operations carry a chance of failure that grows with a gangster's personal heat.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.
