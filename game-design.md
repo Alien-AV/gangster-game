@@ -10,11 +10,14 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Businesses** – legitimate fronts that can host illicit operations.
 - **Available Fronts** – businesses not yet hosting illicit operations.
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
+- **Respect** – earned through community outreach. Each 5 points lowers heat gain by 1.
 
 ## Gangsters
 - **Face** – used to extort surrounding blocks, potentially expanding territory if the owner cooperates.
 - **Fist** – recruits enforcers and can raid rival businesses for quick cash at the cost of heat.
   They can also intimidate disagreeable owners into paying protection, raising fear.
+- **Boss** – can donate to charities to build respect.
+- **Face** – can schmooze with locals to gain respect.
 - **Brain** – sets up illicit businesses behind purchased fronts.
   They can also launder dirty money into clean profits once businesses are available.
 
@@ -27,5 +30,6 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 6. Balance money, territory, patrols and heat while gradually growing your empire. Heat rises each second based on unpatrolled blocks and any disagreeable owners.
 7. Occasionally an extortion attempt fails, leaving a disagreeable owner who refuses to pay. Failed extortions do not add territory and the owner will steadily raise heat until dealt with. These are tracked by a "disagreeable owners" counter.
 8. Send Fists to intimidate these owners. Successful intimidation removes one disagreeable owner and increases fear.
+9. Use Faces or the Boss to perform community outreach and build respect, slowing future heat growth.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.
