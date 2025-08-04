@@ -20,7 +20,7 @@ class Game {
       illicit: 0,
       illicitProgress: 0,
       unlockedIllicit: false,
-      boss: { busy: false },
+      boss: { busy: false, heat: 0, minHeat: 0 },
       gangsters: [],
       nextGangId: 1,
     };
@@ -65,8 +65,8 @@ class Game {
       illicit: s.illicit,
       illicitProgress: s.illicitProgress,
       unlockedIllicit: s.unlockedIllicit,
-      boss: { busy: s.boss.busy },
-      gangsters: s.gangsters.map(g => ({ id: g.id, type: g.type, busy: g.busy })),
+      boss: { busy: s.boss.busy, heat: s.boss.heat, minHeat: s.boss.minHeat },
+      gangsters: s.gangsters.map(g => ({ id: g.id, type: g.type, busy: g.busy, heat: g.heat, minHeat: g.minHeat })),
       nextGangId: s.nextGangId,
     };
     localStorage.setItem('gameState', JSON.stringify(data));
@@ -81,8 +81,8 @@ class Game {
     try {
       const data = JSON.parse(raw);
       Object.assign(this.state, data);
-      this.state.boss = { busy: false };
-      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false }));
+      this.state.boss = { busy: false, heat: data.boss?.heat || 0, minHeat: data.boss?.minHeat || 0 };
+      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, heat: g.heat || 0, minHeat: g.minHeat || 0 }));
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
@@ -122,6 +122,28 @@ class Game {
       s.dirtyMoney = 0;
       s.cleanMoney = Math.max(0, s.cleanMoney - remaining);
     }
+  }
+
+  addHeat(actor, amount) {
+    actor.heat += amount;
+    actor.minHeat += Math.ceil(amount * 0.1);
+  }
+
+  checkRisk(actor, base) {
+    const risk = base + (actor.heat + actor.minHeat) * 0.02;
+    if (Math.random() < risk) {
+      if (actor === this.state.boss) {
+        this.state.heat += 1;
+      } else {
+        const idx = this.state.gangsters.indexOf(actor);
+        if (idx !== -1) {
+          const [removed] = this.state.gangsters.splice(idx, 1);
+          if (removed.element) removed.element.remove();
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   updateUI() {
@@ -254,6 +276,9 @@ class Game {
       businessProg.className = 'progress hidden';
       businessProg.innerHTML = '<div class="progress-bar"></div>';
 
+      const heatSpan = document.createElement('span');
+      heatSpan.style.marginLeft = '4px';
+
       row.appendChild(extortBtn);
       row.appendChild(extortProg);
       row.appendChild(illicitBtn);
@@ -264,6 +289,7 @@ class Game {
       row.appendChild(hireProg);
       row.appendChild(businessBtn);
       row.appendChild(businessProg);
+      row.appendChild(heatSpan);
 
       boss.element = row;
       boss.extortButton = extortBtn;
@@ -276,6 +302,7 @@ class Game {
       boss.hireProgress = hireProg;
       boss.businessButton = businessBtn;
       boss.businessProgress = businessProg;
+      boss.heatDisplay = heatSpan;
 
       container.appendChild(row);
 
@@ -288,11 +315,22 @@ class Game {
         hireBtn.disabled = true;
         businessBtn.disabled = true;
         this.runProgress(extortProg, this.extortDuration(3000), () => {
+          if (this.checkRisk(boss, 0.05)) {
+            boss.busy = false;
+            extortBtn.disabled = false;
+            illicitBtn.disabled = false;
+            recruitBtn.disabled = false;
+            hireBtn.disabled = false;
+            businessBtn.disabled = false;
+            this.updateUI();
+            return;
+          }
           if (Math.random() < this.DISAGREEABLE_CHANCE) {
             state.disagreeableOwners += 1;
           } else {
             state.territory += 1;
           }
+          this.addHeat(boss, 1);
           state.unlockedBusiness = true;
           state.unlockedEnforcer = true;
           boss.busy = false;
@@ -318,8 +356,19 @@ class Game {
         this.runProgress(illicitProg, 4000, () => {
           state.illicitProgress -= 1;
           this.showIllicitBusinessSelection(choice => {
+            if (this.checkRisk(boss, 0.1)) {
+              boss.busy = false;
+              extortBtn.disabled = false;
+              illicitBtn.disabled = false;
+              recruitBtn.disabled = false;
+              hireBtn.disabled = false;
+              businessBtn.disabled = false;
+              this.updateUI();
+              return;
+            }
             state.illicitCounts[choice] += 1;
             state.illicit += 1;
+            this.addHeat(boss, 2);
             boss.busy = false;
             extortBtn.disabled = false;
             illicitBtn.disabled = false;
@@ -343,8 +392,19 @@ class Game {
         businessBtn.disabled = true;
         this.spendMoney(cost);
         this.runProgress(recruitProg, 2000, () => {
+          if (this.checkRisk(boss, 0.02)) {
+            boss.busy = false;
+            extortBtn.disabled = false;
+            illicitBtn.disabled = false;
+            recruitBtn.disabled = false;
+            hireBtn.disabled = false;
+            businessBtn.disabled = false;
+            this.updateUI();
+            return;
+          }
           state.patrol += 1;
           state.unlockedGangster = true;
+          this.addHeat(boss, 1);
           boss.busy = false;
           extortBtn.disabled = false;
           illicitBtn.disabled = false;
@@ -367,9 +427,20 @@ class Game {
         businessBtn.disabled = true;
         this.spendMoney(gCost);
         this.runProgress(hireProg, 3000, () => {
+          if (this.checkRisk(boss, 0.02)) {
+            boss.busy = false;
+            extortBtn.disabled = false;
+            illicitBtn.disabled = false;
+            recruitBtn.disabled = false;
+            hireBtn.disabled = false;
+            businessBtn.disabled = false;
+            this.updateUI();
+            return;
+          }
           this.showGangsterTypeSelection(choice => {
-            const g = { id: state.nextGangId++, type: choice, busy: false };
+            const g = { id: state.nextGangId++, type: choice, busy: false, heat: 0, minHeat: 0 };
             state.gangsters.push(g);
+            this.addHeat(boss, 1);
             boss.busy = false;
             extortBtn.disabled = false;
             illicitBtn.disabled = false;
@@ -393,8 +464,19 @@ class Game {
         businessBtn.disabled = true;
         this.spendMoney(100);
         this.runProgress(businessProg, 5000, () => {
+          if (this.checkRisk(boss, 0.03)) {
+            boss.busy = false;
+            extortBtn.disabled = false;
+            illicitBtn.disabled = false;
+            recruitBtn.disabled = false;
+            hireBtn.disabled = false;
+            businessBtn.disabled = false;
+            this.updateUI();
+            return;
+          }
           state.businesses += 1;
           state.unlockedIllicit = true;
+          this.addHeat(boss, 2);
           boss.busy = false;
           extortBtn.disabled = false;
           illicitBtn.disabled = false;
@@ -416,6 +498,9 @@ class Game {
     boss.hireButton.disabled = boss.busy || !state.unlockedGangster;
     boss.businessButton.textContent = 'Boss Buy Business';
     boss.businessButton.disabled = boss.busy || !state.unlockedBusiness;
+    if (boss.heatDisplay) {
+      boss.heatDisplay.textContent = `Heat ${boss.heat} (min ${boss.minHeat})`;
+    }
   }
 
   renderGangsters() {
@@ -439,6 +524,8 @@ class Game {
         auxProg.innerHTML = '<div class="progress-bar"></div>';
 
         let fearBtn, fearProg;
+        const heatSpan = document.createElement('span');
+        heatSpan.style.marginLeft = '4px';
 
         row.appendChild(btn);
         row.appendChild(prog);
@@ -453,11 +540,14 @@ class Game {
           row.appendChild(fearProg);
         }
 
+        row.appendChild(heatSpan);
+
         g.element = row;
         g.button = btn;
         g.progress = prog;
         g.auxButton = auxBtn;
         g.auxProgress = auxProg;
+        g.heatDisplay = heatSpan;
         if (g.type === 'fist') {
           g.fearButton = fearBtn;
           g.fearProgress = fearProg;
@@ -474,11 +564,19 @@ class Game {
             btn.disabled = true;
             auxBtn.disabled = true;
             this.runProgress(prog, this.extortDuration(4000), () => {
+              if (this.checkRisk(g, 0.05)) {
+                g.busy = false;
+                btn.disabled = false;
+                auxBtn.disabled = false;
+                this.updateUI();
+                return;
+              }
               if (Math.random() < this.DISAGREEABLE_CHANCE) {
                 state.disagreeableOwners += 1;
               } else {
                 state.territory += 1;
               }
+              this.addHeat(g, 1);
               state.unlockedBusiness = true;
               g.busy = false;
               btn.disabled = false;
@@ -496,9 +594,17 @@ class Game {
             btn.disabled = true;
             this.spendMoney(gCost);
             this.runProgress(auxProg, 3000, () => {
+              if (this.checkRisk(g, 0.03)) {
+                g.busy = false;
+                auxBtn.disabled = false;
+                btn.disabled = false;
+                this.updateUI();
+                return;
+              }
               this.showGangsterTypeSelection(choice => {
-                const n = { id: state.nextGangId++, type: choice, busy: false };
+                const n = { id: state.nextGangId++, type: choice, busy: false, heat: 0, minHeat: 0 };
                 state.gangsters.push(n);
+                this.addHeat(g, 1);
                 g.busy = false;
                 auxBtn.disabled = false;
                 btn.disabled = false;
@@ -518,8 +624,16 @@ class Game {
             this.runProgress(prog, 4000, () => {
               state.illicitProgress -= 1;
               this.showIllicitBusinessSelection(choice => {
+                if (this.checkRisk(g, 0.1)) {
+                  g.busy = false;
+                  btn.disabled = false;
+                  auxBtn.disabled = false;
+                  this.updateUI();
+                  return;
+                }
                 state.illicitCounts[choice] += 1;
                 state.illicit += 1;
+                this.addHeat(g, 2);
                 g.busy = false;
                 btn.disabled = false;
                 auxBtn.disabled = false;
@@ -537,8 +651,16 @@ class Game {
             btn.disabled = true;
             this.spendMoney(100);
             this.runProgress(auxProg, 5000, () => {
+              if (this.checkRisk(g, 0.03)) {
+                g.busy = false;
+                auxBtn.disabled = false;
+                btn.disabled = false;
+                this.updateUI();
+                return;
+              }
               state.businesses += 1;
               state.unlockedIllicit = true;
+              this.addHeat(g, 2);
               g.busy = false;
               auxBtn.disabled = false;
               btn.disabled = false;
@@ -555,7 +677,16 @@ class Game {
             fearBtn.disabled = true;
             state.dirtyMoney -= 100;
             this.runProgress(fearProg, 5000, () => {
+              if (this.checkRisk(g, 0.08)) {
+                g.busy = false;
+                btn.disabled = false;
+                auxBtn.disabled = false;
+                fearBtn.disabled = false;
+                this.updateUI();
+                return;
+              }
               state.cleanMoney += 80;
+              this.addHeat(g, 2);
               g.busy = false;
               btn.disabled = false;
               auxBtn.disabled = false;
@@ -573,8 +704,17 @@ class Game {
             fearBtn.disabled = true;
             this.spendMoney(cost);
             this.runProgress(prog, 2000, () => {
+              if (this.checkRisk(g, 0.02)) {
+                g.busy = false;
+                btn.disabled = false;
+                auxBtn.disabled = false;
+                fearBtn.disabled = false;
+                this.updateUI();
+                return;
+              }
               state.patrol += 1;
               state.unlockedGangster = true;
+              this.addHeat(g, 1);
               g.busy = false;
               btn.disabled = false;
               auxBtn.disabled = false;
@@ -589,8 +729,17 @@ class Game {
             auxBtn.disabled = true;
             fearBtn.disabled = true;
             this.runProgress(auxProg, 5000, () => {
+              if (this.checkRisk(g, 0.15)) {
+                g.busy = false;
+                btn.disabled = false;
+                auxBtn.disabled = false;
+                fearBtn.disabled = false;
+                this.updateUI();
+                return;
+              }
               state.dirtyMoney += 150;
               state.heat += 1;
+              this.addHeat(g, 3);
               g.busy = false;
               btn.disabled = false;
               auxBtn.disabled = false;
@@ -606,8 +755,17 @@ class Game {
             auxBtn.disabled = true;
             fearBtn.disabled = true;
             this.runProgress(fearProg, 3000, () => {
+              if (this.checkRisk(g, 0.05)) {
+                g.busy = false;
+                btn.disabled = false;
+                auxBtn.disabled = false;
+                fearBtn.disabled = false;
+                this.updateUI();
+                return;
+              }
               state.disagreeableOwners -= 1;
               state.fear += 1;
+              this.addHeat(g, 1);
               g.busy = false;
               btn.disabled = false;
               auxBtn.disabled = false;
@@ -639,6 +797,9 @@ class Game {
         g.auxButton.disabled = g.busy;
         g.fearButton.textContent = `Fist #${g.id} Intimidate`;
         g.fearButton.disabled = g.busy || state.disagreeableOwners <= 0;
+      }
+      if (g.heatDisplay) {
+        g.heatDisplay.textContent = `Heat ${g.heat} (min ${g.minHeat})`;
       }
     });
   }
@@ -672,6 +833,11 @@ class Game {
     } else {
       s.heatProgress = 0;
     }
+    const boss = s.boss;
+    if (boss.heat > boss.minHeat) boss.heat -= 1;
+    s.gangsters.forEach(g => {
+      if (g.heat > g.minHeat) g.heat -= 1;
+    });
     this.updateUI();
   }
 }
