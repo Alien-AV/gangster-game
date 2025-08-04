@@ -6,7 +6,9 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Money** – needed to recruit enforcers, hire gangsters and pay off the police.
 - **Enforcers** – basic manpower. They can patrol your territory or be assigned to gangsters.
 - **Territory** – city blocks under your control. More territory means more potential profit but requires more patrols or heat rises.
-- **Heat** – unwanted attention from law enforcement. Can be reduced by paying off cops.
+- **Heat** – now tracked per gangster. Each operation adds temporary heat which slowly decays.
+  A fraction of that heat becomes permanent "minimal heat" that never decays and
+  increases the risk of future operations.
 - **Businesses** – legitimate fronts that can host illicit operations.
 - **Available Fronts** – businesses not yet hosting illicit operations.
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
@@ -25,7 +27,8 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 4. Use Face gangsters to expand territory which increases your passive income.
 5. Have Brains purchase businesses and then create illicit operations behind them. When building an illicit operation you can select from counterfeiting money, producing drugs, running illegal gambling or fencing stolen goods.
 6. Balance money, territory, patrols and heat while gradually growing your empire. Heat rises each second based on unpatrolled blocks and any disagreeable owners.
-7. Occasionally an extortion attempt fails, leaving a disagreeable owner who refuses to pay. Failed extortions do not add territory and the owner will steadily raise heat until dealt with. These are tracked by a "disagreeable owners" counter.
-8. Send Fists to intimidate these owners. Successful intimidation removes one disagreeable owner and increases fear.
+7. Every gangster action has a chance of failure. The odds depend on the job and the gangster's total heat.
+8. Occasionally an extortion attempt fails, leaving a disagreeable owner who refuses to pay. Failed extortions do not add territory and the owner will steadily raise heat until dealt with. These are tracked by a "disagreeable owners" counter.
+9. Send Fists to intimidate these owners. Successful intimidation removes one disagreeable owner and increases fear.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.
