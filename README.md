@@ -2,6 +2,8 @@
 
 This repository contains a very small prototype for a mafia management game. The game is a semi-idle experiment inspired by games like **Cultist Simulator**. Gameplay revolves around balancing money, manpower and heat while expanding your criminal empire.
 
+Each gangster carries personal **heat**. Actions raise this value and a tenth of the increase becomes permanent minimal heat that never decays. Regular heat slowly drops each second down to this minimum. Every operation has a risk of failure that grows with the gangster's heat level. When the boss fails it simply raises global heat, but when a regular gangster fails they are removed from the crew.
+
 For a high level overview of the gameplay ideas, see [game-design.md](game-design.md).
 
 ## How to run
