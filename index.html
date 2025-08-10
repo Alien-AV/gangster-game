@@ -111,6 +111,8 @@
 </div>
 <div class="counter">Disagreeable Owners: <span id="disagreeableOwners">0</span></div>
 <div class="counter">Fear: <span id="fear">0</span></div>
+<div class="counter">Respect: <span id="respect">0</span></div>
+<div class="counter">Respect Bonus: <span id="respectBonus">None</span></div>
 <div class="counter">Fear Bonus: <span id="fearBonus">None</span></div>
 <div class="counter">Businesses: <span id="businesses">0</span></div>
 <div class="counter">Faces: <span id="faces">0</span></div>
@@ -144,8 +146,23 @@
 </div>
 
 <button id="payCops" class="hidden">Pay Off Cops ($50)</button>
-<div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
-<button id="resetGame">Reset Game</button>
+  <div id="payCopsProgress" class="progress hidden"><div class="progress-bar"></div></div>
+  <div style="margin: 12px 0;">
+    <h3 style="margin: 8px 0;">Save / Load</h3>
+    <div class="action" style="padding-right:0;">
+      <button id="saveSlot1">Save Slot 1</button>
+      <button id="loadSlot1" style="margin-left:8px;">Load Slot 1</button>
+    </div>
+    <div class="action" style="padding-right:0;">
+      <button id="saveSlot2">Save Slot 2</button>
+      <button id="loadSlot2" style="margin-left:8px;">Load Slot 2</button>
+    </div>
+    <div class="action" style="padding-right:0;">
+      <button id="saveSlot3">Save Slot 3</button>
+      <button id="loadSlot3" style="margin-left:8px;">Load Slot 3</button>
+    </div>
+  </div>
+  <button id="resetGame">Reset Game</button>
 
 <script src="game.js"></script>
 </body>
