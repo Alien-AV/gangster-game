@@ -60,6 +60,12 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 - Spatial mechanics on the canvas (placement bonuses, adjacency effects).
 - Multi-slot actions (drop 2+ cards to cooperate on a difficult task).
 
+### Progression System (Planned)
+- Replace simple unlock flags with a tiered progression model.
+- Early actions (e.g., extort in local neighborhood) have 0% risk and can yield small beneficial effects.
+- As the player expands into larger city regions, actions impose higher risk and/or requirements (minimum stats/resources, prep tasks) to operate effectively.
+- Preparation loops (gather gear, improve stats, reduce heat) mitigate risks and time costs before attempting higher-tier actions.
+
 ### Open Questions
 
 - Balance between click UI and card UI (timeline to fully replace old UI).
