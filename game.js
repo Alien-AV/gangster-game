@@ -94,8 +94,8 @@ class Game {
       illicit: s.illicit,
       illicitProgress: s.illicitProgress,
       unlockedIllicit: s.unlockedIllicit,
-      boss: { busy: false },
-      gangsters: s.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats })),
+      boss: s.boss ? { busy: false, personalHeat: s.boss.personalHeat || 0, stats: s.boss.stats || { face: 2, fist: 2, brain: 2 } } : { busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } },
+      gangsters: (s.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) })),
       nextGangId: s.nextGangId,
       salaryTick: s.salaryTick,
     };
@@ -124,54 +124,18 @@ class Game {
       const data = JSON.parse(raw);
       console.debug('[LoadSlot] parsed data', data);
       Object.assign(this.state, data);
-      // Ensure transient fields are reset
-      this.state.boss = { busy: false };
-      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
-      // Reset UI and modal queues so we don't duplicate rows or keep stale listeners
-      this._resetUI();
+      this.state.boss = data.boss ? { busy: false, personalHeat: data.boss.personalHeat || 0, stats: data.boss.stats || { face: 2, fist: 2, brain: 2 } } : { busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
+      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
+      // Reset modal queues and refresh UI
       this._gangsterSelect = { queue: [], active: false };
       this._illicitSelect = { queue: [], active: false };
-      console.debug('[LoadSlot] after resetUI, state:', this.state);
+      this.renderCards();
+      console.debug('[LoadSlot] after renderCards, state:', this.state);
       this.updateUI();
       alert(`Loaded slot ${n}`);
     } catch (e) {
       console.error('Load failed', e);
       alert('Load failed');
-    }
-  }
-
-  _resetUI() {
-    // Clear containers to avoid duplicate rows after load
-    const clear = (id) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      console.debug('[ResetUI] clearing', id, 'children:', el.childNodes.length);
-      while (el.firstChild) el.removeChild(el.firstChild);
-    };
-    clear('bossContainer');
-    clear('facesContainer');
-    clear('fistsContainer');
-    clear('brainsContainer');
-
-    // Drop cached boss UI refs so renderBoss() recreates them
-    const boss = this.state.boss;
-    if (boss) {
-      boss.element = null;
-      boss.extortButton = null;
-      boss.extortProgress = null;
-      boss.illicitButton = null;
-      boss.illicitProgress = null;
-      boss.recruitButton = null;
-      boss.recruitProgress = null;
-      boss.hireButton = null;
-      boss.hireProgress = null;
-      boss.businessButton = null;
-      boss.businessProgress = null;
-      boss.busy = false;
-    }
-    // Gangster UI objects will be recreated by renderGangsters(); ensure no stale refs
-    if (Array.isArray(this.state.gangsters)) {
-      this.state.gangsters.forEach(g => { if (g && g.ui) delete g.ui; });
     }
   }
 
@@ -184,8 +148,8 @@ class Game {
     try {
       const data = JSON.parse(raw);
       Object.assign(this.state, data);
-      this.state.boss = { busy: false };
-      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
+      this.state.boss = data.boss ? { busy: false, personalHeat: data.boss.personalHeat || 0, stats: data.boss.stats || { face: 2, fist: 2, brain: 2 } } : { busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
+      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
@@ -278,15 +242,8 @@ class Game {
     document.getElementById('gamblingCount').textContent = s.illicitCounts.gambling;
     document.getElementById('fencingCount').textContent = s.illicitCounts.fencing;
     if (s.heat > 0) document.getElementById('payCops').classList.remove('hidden');
-    this.renderBoss();
-    this.renderGangsters();
-    // Refresh hire/business button labels with dynamic costs
-    if (s.boss) {
-      const hb = s.boss.hireButton;
-      if (hb) hb.textContent = `Hire Gangster ($${this.gangsterCost()} + salary Face/Fist $${this.SALARY_PER_10S.face}, Brain $${this.SALARY_PER_10S.brain} /10s)`;
-      const bb = s.boss.businessButton;
-      if (bb) bb.textContent = `Buy Business ($${this.businessCost()})`;
-    }
+    // Card UI only; avoid rendering legacy button UI
+    this.renderCards();
     this.saveState();
   }
 
@@ -297,15 +254,25 @@ class Game {
       this.updateUI();
       return;
     }
-    const bar = container.querySelector('.progress-bar');
-    if (!bar) {
-      console.warn('[runProgress] missing .progress-bar');
-      if (typeof callback === 'function') callback();
-      this.updateUI();
-      return;
+    const stacked = container.classList.contains('progress-stack');
+    let bar = null;
+    if (stacked) {
+      bar = document.createElement('div');
+      bar.className = 'progress-bar';
+      bar.style.height = '6px';
+      bar.style.background = '#4caf50';
+      bar.style.width = '0%';
+      container.appendChild(bar);
+    } else {
+      bar = container.querySelector('.progress-bar');
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.className = 'progress-bar';
+        container.appendChild(bar);
+      }
+      bar.style.width = '0%';
     }
     container.classList.remove('hidden');
-    bar.style.width = '0%';
     const start = Date.now();
     const interval = setInterval(() => {
       const elapsed = Date.now() - start;
@@ -313,11 +280,17 @@ class Game {
       bar.style.width = percent + '%';
       if (elapsed >= duration) {
         clearInterval(interval);
-        container.classList.add('hidden');
+        if (stacked) {
+          // remove only this bar; keep container visible for other bars
+          bar.remove();
+        } else {
+          container.classList.add('hidden');
+          bar.style.width = '100%';
+        }
         callback();
         this.updateUI();
       }
-    }, 100);
+    }, 50);
   }
 
   showGangsterTypeSelection(callback) {
@@ -1038,7 +1011,7 @@ if (!area) return;
 const s = this.state;
 area.innerHTML = '';
 // Boss card (2/2/2)
-const boss = this.state.boss || (this.state.boss = { busy: false });
+const boss = this.state.boss || (this.state.boss = { busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } });
 if (!boss.stats) boss.stats = { face: 2, fist: 2, brain: 2 };
 const bossEl = document.createElement('div');
 bossEl.className = 'card' + (boss.busy ? ' busy' : '');
@@ -1094,11 +1067,22 @@ const blocks = [
 blocks.forEach(b => {
   const el = document.createElement('div');
   el.className = 'action-block';
-  el.id = b.id;
-  el.innerHTML = `<div><strong>${b.label}</strong></div><div class="small">Drop gangster here</div>`;
+  el.style.overflow = 'hidden';
+  el.style.position = 'relative';
+  const title = document.createElement('div');
+  title.className = 'name';
+  title.textContent = b.label;
+  title.style.textAlign = 'center';
+  title.style.fontWeight = '600';
+  title.style.marginBottom = '6px';
   const prog = document.createElement('div');
-  prog.className = 'progress hidden';
-  prog.innerHTML = '<div class="progress-bar"></div>';
+  prog.className = 'progress progress-stack';
+  prog.style.width = '100%';
+  prog.style.position = 'relative';
+  prog.style.display = 'flex';
+  prog.style.flexDirection = 'column';
+  prog.style.gap = '4px';
+  el.appendChild(title);
   el.appendChild(prog);
   el.addEventListener('dragover', ev => { ev.preventDefault(); el.classList.add('highlight'); });
   el.addEventListener('dragleave', () => el.classList.remove('highlight'));
