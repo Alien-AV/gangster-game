@@ -1,4 +1,23 @@
 # Gangster Game Design Notes
+## Multi-Choice Drops: Problem & Solutions
+
+When a gangster is dropped onto a discovered world card, there can be multiple valid outcomes. Example: dropping on a business could either Extort or Raid; dropping on a “people” card like a Priest could Donate, or later, ask for a Favor. We need a clear, quick UI pattern to resolve these choices.
+
+• __Problem__
+  - Same pairing (e.g., `gangster + business`) maps to multiple actions.
+  - We need to let the player choose without heavy UI or breaking flow.
+
+• __Solution Options__
+  - __Context Choice Popup__: After drop, show a small inline popup anchored to the target card with the available actions (e.g., Extort, Raid). Player clicks the choice; action starts immediately. Pros: explicit, scalable. Cons: one extra click.
+  - __Action Tokens (Crafting)__: Actions exist as separate “verb” cards (Extort, Raid, Donate). Player stacks a verb on a location first, then adds a gangster. The resulting stack defines the action. Pros: highly systemic; discoverable combos. Cons: adds inventory complexity.
+  - __Stat-Based Default + Modifier__: Auto-pick by the gangster’s dominant relevant stat (Face → Extort, Fist → Raid), with a held modifier (e.g., Shift) or right-click to open the choice instead. Pros: fast for experts. Cons: hidden mechanic; needs affordance.
+  - __Drop-Preview Wheel__: On hover hold before drop, show a small radial menu of possible actions; releasing over a slice chooses it. Pros: single gesture. Cons: more complex to implement; mobile-unfriendly.
+  - __End-of-Stack Modal__: Complete the stack visually, then present a minimal modal to choose result. Pros: clear. Cons: modal churn if used often.
+
+• __MVP Decision__
+  - Implement a __Stat-Based Default__ heuristic now: if Fist ≥ Face and Raid is unlocked, prefer Raid; otherwise Extort. For single-purpose cards (e.g., Priest), the choice is implicit (Donate).
+  - Document and instrument a simple inline popup to add later for explicit choice. This keeps the loop fast today while providing a path to richer interactions.
+
 
 This prototype explores a lightweight mafia management loop. Actions unlock progressively and the entire UI is kept intentionally minimal so we can focus on whether the core balancing act is fun.
 
@@ -105,3 +124,55 @@ These notes are kept short on purpose – the goal is simply to track the protot
 5. Other businesses can be purchased for money, and then used to host illicit operations.
 6. After establishing a foothold, Boss can find a way to expand into other neighborhoods, which he personally couldn't tackle, and needs to equip and prepare his gangsters to handle the new territory.
 
+
+## Discovery-Gated Actions Plan (Initial Deck)
+
+Goal: Early-game actions are unlocked by discovering world cards via exploring the Neighborhood. Actions remain unavailable until their corresponding discovery is drawn.
+
+- __Decks__
+  - `neighborhood` deck with random draws and a guaranteed tail sequence. Example pool:
+    - Random pool (weighted): `corrupt_cop` (bribe cops), `priest` (donate soup), `small_crooks` (vigilantism), `hot_dog_stand` (raidable front)
+    - Guarantees (order-preserving): `recruit_face`, `recruit_fist`, `recruit_brain`, `city_entrance` (final)
+  - The last card is always `city_entrance`, which unlocks the next region/deck.
+
+- __Action Gating__
+  - Donate → unlocked by `priest`
+  - Vigilante Patrol → unlocked by `small_crooks`
+  - Raid → unlocked by `hot_dog_stand`
+  - Pay Cops (bribe) → unlocked by `corrupt_cop`
+  - Hire each gangster type → enabled by drawing specific `recruit_*` cards (one-shot or persistent hire source)
+
+- __Explore Neighborhood__
+  - New action/block and a world card "Neighborhood" that accepts gangster drop to explore. Each completion draws from `neighborhood` and spawns a discovered card in the World area.
+  - Exploring adds a small amount of personal heat.
+
+- __World/Discovery UI__
+  - New `World` area to render discovered cards (reusable or one-shot). Cards show their title, flavor, and a button or drop target to trigger the unlocked effect.
+
+- __Persistence__
+  - Save/load `discovery` (current deck progress, discovered cards) and `unlockedActions` flags.
+
+- __Progression Hook__
+  - `city_entrance` unlocks the next deck/region and can show an "Explore City" entry in World for future tiers.
+
+- __MVP Slice__
+  - Implement deck state, Explore Neighborhood, card rendering, gating flags, and recruit unlocks. Reuse existing actions where possible; only gate via prereqs.
+
+## Multi-Choice Drop Problem and Proposed Solutions
+
+When a gangster is dropped onto a discovered world card, there can be multiple valid outcomes. Example: dropping on a business could either Extort or Raid; dropping on a “people” card like a Priest could Donate, or later, ask for a Favor. We need a clear, quick UI pattern to resolve these choices.
+
+• __Problem__
+  - Same pairing (e.g., `gangster + business`) maps to multiple actions.
+  - We need to let the player choose without heavy UI or breaking flow.
+
+• __Solution Options__
+  - __Context Choice Popup__: After drop, show a small inline popup anchored to the target card with the available actions (e.g., Extort, Raid). Player clicks the choice; action starts immediately. Pros: explicit, scalable. Cons: one extra click.
+  - __Action Tokens (Crafting)__: Actions exist as separate “verb” cards (Extort, Raid, Donate). Player stacks a verb on a location first, then adds a gangster. The resulting stack defines the action. Pros: highly systemic; discoverable combos. Cons: adds inventory complexity.
+  - __Stat-Based Default + Modifier__: Auto-pick by the gangster’s dominant relevant stat (Face → Extort, Fist → Raid), with a held modifier (e.g., Shift) or right-click to open the choice instead. Pros: fast for experts. Cons: hidden mechanic; needs affordance.
+  - __Drop-Preview Wheel__: On hover hold before drop, show a small radial menu of possible actions; releasing over a slice chooses it. Pros: single gesture. Cons: more complex to implement; mobile-unfriendly.
+  - __End-of-Stack Modal__: Complete the stack visually, then present a minimal modal to choose result. Pros: clear. Cons: modal churn if used often.
+
+• __MVP Decision__
+  - Implement a __Stat-Based Default__ heuristic now: if Fist ≥ Face and Raid is unlocked, prefer Raid; otherwise Extort. For single-purpose cards (e.g., Priest), the choice is implicit (Donate).
+  - Document and instrument a simple inline popup to add later for explicit choice. This keeps the loop fast today while providing a path to richer interactions.

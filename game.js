@@ -27,6 +27,8 @@ export class Game {
       nextGangId: 1,
       nextEquipId: 1,
       salaryTick: 0,
+      unlockedActions: { },
+      discovery: null,
     };
     // Chance that an extortion attempt results in a disagreeable owner (used by actions.js)
     this.DISAGREEABLE_CHANCE = 0.25;
@@ -41,7 +43,7 @@ export class Game {
       localStorage.setItem('dark', e.target.checked ? '1' : '0');
     });
 
-    document.getElementById('payCops').onclick = () => this.payCops();
+    // Removed Pay Cops legacy button wiring
     document.getElementById('resetGame').onclick = () => {
       localStorage.removeItem('gameState');
       location.reload();
@@ -77,6 +79,9 @@ export class Game {
     this._gangsterSelect = { queue: [], active: false };
     this._illicitSelect = { queue: [], active: false };
     this._equipSelect = { queue: [], active: false };
+
+    // Initialize discovery/deck system
+    this.initDiscovery();
   }
 
   // Equipment selection (Procure Equipment)
@@ -148,6 +153,8 @@ export class Game {
       inventory: s.inventory || [],
       nextEquipId: s.nextEquipId || 1,
       salaryTick: s.salaryTick,
+      unlockedActions: s.unlockedActions || {},
+      discovery: s.discovery || null,
     };
   }
 
@@ -219,6 +226,8 @@ export class Game {
       const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2, meat: 0 } };
       this.state.gangsters.unshift(bossGang);
     }
+    // Ensure discovery exists
+    this.initDiscovery();
   }
 
   totalMoney() {
@@ -307,9 +316,11 @@ export class Game {
     document.getElementById('drugCount').textContent = s.illicitCounts.drugs;
     document.getElementById('gamblingCount').textContent = s.illicitCounts.gambling;
     document.getElementById('fencingCount').textContent = s.illicitCounts.fencing;
-    if (s.heat > 0) document.getElementById('payCops').classList.remove('hidden');
     // Card UI only; avoid rendering legacy button UI
     this.renderCards();
+    if (!this._suspendWorldRender) {
+      this.renderWorld();
+    }
     this.saveState();
   }
 
@@ -447,6 +458,216 @@ export class Game {
     if (!this.cardEls.cardsArea || !this.cardEls.actionsArea) return;
     this.renderActionBlocks();
     this.renderCards();
+  }
+
+  // ----- Discovery / Deck System -----
+  initDiscovery() {
+    if (!this.state.unlockedActions) this.state.unlockedActions = {};
+    if (this.state.discovery) return;
+    // Define the initial neighborhood deck
+    this.state.discovery = {
+      decks: {
+        neighborhood: {
+          id: 'neighborhood',
+          drawn: 0,
+          max: 8,
+          pool: [
+            { id: 'corrupt_cop', weight: 2, reusable: false },
+            { id: 'priest', weight: 2, reusable: false },
+            { id: 'small_crooks', weight: 2, reusable: false },
+            { id: 'hot_dog_stand', weight: 1, reusable: false },
+          ],
+          guarantees: ['recruit_face', 'recruit_fist', 'recruit_brain', 'city_entrance'],
+        },
+      },
+      currentDeckId: 'neighborhood',
+      discovered: [],
+    };
+  }
+
+  drawFromDeck(deckId) {
+    const d = this.state.discovery;
+    if (!d) return;
+    const deck = d.decks[deckId];
+    if (!deck) return;
+    // Decide next card (avoid duplicates for non-reusable discoveries)
+    let cardId = null;
+    const isFinal = deck.drawn >= (deck.max - 1);
+    if (isFinal && deck.guarantees.length) {
+      cardId = deck.guarantees[deck.guarantees.length - 1];
+    } else if (deck.guarantees.length && deck.drawn < deck.max - deck.guarantees.length) {
+      // draw from pool
+      const discoveredIds = new Set((d.discovered || []).map(it => it.id));
+      let pool = deck.pool.filter(it => it.reusable || !discoveredIds.has(it.id));
+      if (pool.length === 0) pool = deck.pool; // fallback if all consumed
+      const totalW = pool.reduce((s, it) => s + (it.weight || 1), 0);
+      let r = Math.random() * totalW;
+      for (const it of pool) {
+        r -= (it.weight || 1);
+        if (r <= 0) { cardId = it.id; break; }
+      }
+      if (!cardId && pool[0]) cardId = pool[0].id;
+    } else {
+      // take next guarantee (not final)
+      const idx = deck.max - deck.drawn - 1; // distance from end
+      const gIdx = Math.max(0, deck.guarantees.length - idx);
+      cardId = deck.guarantees[Math.min(deck.guarantees.length - 1, gIdx)];
+    }
+    deck.drawn += 1;
+    // Materialize discovery and unlock if applicable
+    const meta = this.discoveryMeta(cardId);
+    d.discovered.push({ id: cardId, title: meta.title, desc: meta.desc, reusable: meta.reusable, used: false, data: meta.data || {} });
+    this.applyDiscoveryUnlock(cardId);
+    this.renderWorld();
+    this.updateUI();
+  }
+
+  discoveryMeta(id) {
+    const map = {
+      corrupt_cop: { title: 'Local Corrupt Cop', desc: 'A familiar face on the beat. Can arrange favors for a price.', reusable: true },
+      priest: { title: 'Priest at the Church', desc: 'Donations improve your reputation in the neighborhood.', reusable: true },
+      small_crooks: { title: 'Small-time Crooks', desc: 'Neighborhood watch? More like vigilantism.', reusable: true },
+      hot_dog_stand: { title: 'Hot-dog Stand', desc: 'A flimsy front ripe for a shake-down.', reusable: true },
+      recruit_face: { title: 'Potential Recruit: Face', desc: 'A smooth talker looking for work. Hire when you have cash.', reusable: false, data: { type: 'face' } },
+      recruit_fist: { title: 'Potential Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, data: { type: 'fist' } },
+      recruit_brain: { title: 'Potential Recruit: Brain', desc: 'A planner who knows the angles.', reusable: false, data: { type: 'brain' } },
+      city_entrance: { title: 'City Entrance', desc: 'A path into the wider city opens. New opportunities await.', reusable: true },
+    };
+    return map[id] || { title: id, desc: '', reusable: true };
+  }
+
+  applyDiscoveryUnlock(id) {
+    const ua = this.state.unlockedActions;
+    if (id === 'corrupt_cop') ua.payCops = true;
+    if (id === 'priest') ua.donate = true;
+    if (id === 'small_crooks') ua.vigilante = true;
+    if (id === 'hot_dog_stand') ua.raid = true;
+    if (id === 'city_entrance') {
+      this.state.regionTier = Math.max(1, this.state.regionTier || 0);
+    }
+  }
+
+  // Render world area with Neighborhood card and discovered cards
+  renderWorld() {
+    const el = document.getElementById('worldArea');
+    if (!el) return;
+    el.innerHTML = '';
+    // Neighborhood explore card (drop gangster to explore)
+    const exploreCard = document.createElement('div');
+    exploreCard.className = 'card world-card';
+    exploreCard.innerHTML = '<div><strong>Neighborhood</strong></div><div>Drop a gangster to explore</div>';
+    const exploreProg = document.createElement('div');
+    exploreProg.className = 'progress';
+    exploreCard.appendChild(exploreProg);
+    exploreCard.addEventListener('dragover', ev => { ev.preventDefault(); exploreCard.classList.add('highlight'); });
+    exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
+    exploreCard.addEventListener('drop', ev => {
+      ev.preventDefault();
+      exploreCard.classList.remove('highlight');
+      const idStr = ev.dataTransfer.getData('text/plain');
+      const gid = parseInt(idStr, 10);
+      const g = this.state.gangsters.find(x => x.id === gid);
+      if (!g || g.busy) return;
+      const act = (ACTIONS || []).find(a => a.id === 'actExploreNeighborhood');
+      if (!act) return;
+      const dur = this.durationWithStat(act.base, act.stat, g);
+      const ok = this.executeAction(act, g, exploreProg, dur);
+      if (!ok) this._cardMsg('Cannot explore.');
+    });
+    el.appendChild(exploreCard);
+
+    // Discovered cards list
+    const disc = (this.state.discovery && this.state.discovery.discovered) || [];
+    disc.forEach(item => {
+      if (item.used && !item.reusable) return;
+      const c = document.createElement('div');
+      c.className = 'card world-card';
+      let body = `<div><strong>${item.title}</strong></div><div>${item.desc}</div>`;
+      // Recruit: drop to hire
+      if (item.id && item.id.startsWith('recruit_') && !item.used) {
+        const price = this.gangsterCost();
+        body += `<div style="margin-top:6px;color:#888">Drop any gangster here to hire for $${price}</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const src = this.state.gangsters.find(x => x.id === gid);
+          if (!src || src.busy) return;
+          const costFn = (game) => {
+            const cst = game.gangsterCost ? game.gangsterCost() : 0;
+            if (game.totalMoney() < cst) return false;
+            game.spendMoney(cst);
+            return true;
+          };
+          const act = { id: 'actHireFromDiscovery', label: 'Hire Gangster', stat: 'face', base: 3000,
+            cost: costFn,
+            effect: (game) => {
+              const newG = { id: game.state.nextGangId++, type: item.data.type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(item.data.type) };
+              game.state.gangsters.push(newG);
+              item.used = true;
+            }
+          };
+          const dur = this.durationWithStat(act.base, act.stat, src);
+          const ok = this.executeAction(act, src, prog, dur);
+          if (!ok) this._cardMsg('Cannot hire.');
+        });
+      }
+      // Priest: drop to donate
+      if (item.id === 'priest') {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster here to Donate</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const baseAct = (ACTIONS || []).find(a => a.id === 'actDonate');
+          if (!baseAct) return;
+          const act = { ...baseAct, effect: (game, gg) => { baseAct.effect(game, gg); item.used = true; } };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot donate.');
+        });
+      }
+      // Simple business example: allow drop to extort or raid
+      if (item.id === 'hot_dog_stand') {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const face = this.effectiveStat(g, 'face');
+          const brain = this.effectiveStat(g, 'brain');
+          const fist = this.effectiveStat(g, 'fist');
+          const canRaid = !!(this.state.unlockedActions && this.state.unlockedActions.raid);
+          const preferRaid = canRaid && (fist >= Math.max(face, brain));
+          const actId = preferRaid ? 'actRaid' : 'actExtort';
+          const baseAct = (ACTIONS || []).find(a => a.id === actId);
+          if (!baseAct) return;
+          const act = { ...baseAct, effect: (game, gg) => { baseAct.effect(game, gg); item.used = true; } };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot act on business.');
+        });
+      }
+      c.innerHTML = body;
+      // Per-card progress bar
+      const prog = document.createElement('div');
+      prog.className = 'progress';
+      c.appendChild(prog);
+      el.appendChild(c);
+    });
   }
 
   renderCards() {
@@ -605,9 +826,20 @@ export class Game {
 
   _startCardWork(g, progEl, durMs, onDone) {
     g.busy = true;
+    // Suspend world re-render so progress elements persist during work
+    this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
     this.renderCards();
     this.runProgress(progEl, durMs, () => {
-      try { onDone && onDone(); } finally { g.busy = false; this.renderCards(); this.updateUI(); }
+      try {
+        onDone && onDone();
+      } finally {
+        g.busy = false;
+        // Resume world render if this is the last active work
+        this._suspendWorldRender = Math.max(0, (this._suspendWorldRender || 1) - 1);
+        this.renderCards();
+        if (!this._suspendWorldRender) this.renderWorld();
+        this.updateUI();
+      }
     });
     return true;
   }
