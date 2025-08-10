@@ -11,10 +11,63 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Available Fronts** – businesses not yet hosting illicit operations.
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
 
+## Card-Based Overhaul (Prototype Plan)
+
+We are transitioning the interaction model to a card-driven UI inspired by Cultist Simulator/Stacklands.
+
+### Core Concepts
+
+- **Gangster Cards**
+  - Each gangster is represented as a draggable card.
+  - Cards show name/id, type, heat, and a stat line, e.g. `Fist:1 Face:2 Brain:1`.
+  - Stats represent individual skill variance and modify action speeds/effectiveness.
+    - Face stat => faster/better extortion/promotions.
+    - Brain stat => faster/better illicit building/laundering/donations.
+    - Fist stat => faster/better raids/intimidation/vigilante patrol.
+  - Future: merge/equip other cards (e.g., guns, enforcers) to buff stats and form squads.
+
+- **Action Blocks (Workstations)**
+  - Actions are fixed blocks on a canvas/board (e.g., Extort, Build Illicit, Launder, Buy Business, Raid, Intimidate, Promotional Campaign, Donate to Soup Kitchen, Vigilante Patrol).
+  - Drag a gangster card onto an action block to start that action.
+  - When action completes, results (money, respect, fear, etc.) are applied and the card returns to the card area.
+
+### Drag-and-Drop Rules
+
+- Dragging disabled while the gangster is busy.
+- Dropping onto an incompatible action shows feedback and returns the card.
+- Duration = baseDuration / (1 + relevantStat * scaling).
+  - Initial scaling: 10% speed-up per stat point (tunable).
+
+### MVP Scope (this iteration)
+
+- Keep the existing UI working, and layer a prototype board:
+  - Render a Cards area with gangster cards.
+  - Render an Actions area with blocks for: Extort, Recruit Enforcer, Buy Business, Build Illicit, Launder, Raid, Intimidate, Promotional Campaign, Donate Soup, Vigilante Patrol.
+  - Implement drag-and-drop triggers to call the same underlying effects already present in game logic with stat-modified durations.
+  - Show progress bars on action blocks while a gangster is working; lock the gangster until completion.
+
+### Persistence
+
+- Save/Load must preserve gangster stats. For legacy saves without stats, default by type:
+  - Face: { face: 2, fist: 1, brain: 1 }
+  - Brain: { face: 1, fist: 1, brain: 2 }
+  - Fist: { face: 1, fist: 2, brain: 1 }
+
+### Future Extensions
+
+- Card merging/equipment (weapons, lieutenants) to increase stats and convert a gangster to a squad card.
+- Action outputs as result cards (e.g., goods, favors) that can be combined or sold.
+- Spatial mechanics on the canvas (placement bonuses, adjacency effects).
+- Multi-slot actions (drop 2+ cards to cooperate on a difficult task).
+
+### Open Questions
+
+- Balance between click UI and card UI (timeline to fully replace old UI).
+- Visual theming and animations.
+
 ## Gangsters
 - **Face** – used to extort surrounding blocks, potentially expanding territory if the owner cooperates.
 - **Fist** – recruits enforcers and can raid rival businesses for quick cash at the cost of heat.
-  They can also intimidate disagreeable owners into paying protection, raising fear.
 - **Brain** – sets up illicit businesses behind purchased fronts.
   They can also launder dirty money into clean profits once businesses are available.
 

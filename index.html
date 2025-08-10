@@ -164,6 +164,19 @@
   </div>
   <button id="resetGame">Reset Game</button>
 
+<!-- Card UI Prototype (layered) -->
+<div id="cardBoard" style="margin:16px 0; border-top:1px solid #444; padding-top:12px;">
+  <h3>Cards Prototype</h3>
+  <div id="cardsArea" style="display:flex; flex-wrap:wrap; gap:8px; min-height:72px; padding:8px; border:1px dashed #666;"></div>
+  <div id="actionsArea" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;"></div>
+  <div id="cardMessages" style="margin-top:8px; color:#bbb; min-height:20px;"></div>
+  <style>
+    .card { background:#222; border:1px solid #555; border-radius:6px; padding:8px; width:140px; cursor:grab; }
+    .card.busy { opacity:0.6; cursor:not-allowed; }
+    .action-block { background:#1a1a1a; border:1px solid #444; border-radius:6px; padding:8px; width:180px; min-height:64px; }
+    .action-block.highlight { outline:2px dashed #888; }
+  </style>
+</div>
 <script src="game.js"></script>
 </body>
 </html>

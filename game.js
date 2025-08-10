@@ -57,6 +57,10 @@ class Game {
     hookSlot(1); hookSlot(2); hookSlot(3);
 
     this.loadState();
+    // Ensure legacy saves have stats on gangsters
+    (this.state.gangsters || []).forEach(g => this._ensureGangsterStats(g));
+    // Initialize card UI prototype
+    this.initCardUI();
     this.interval = setInterval(() => this.tick(), 1000);
 
     // Queued selection managers to avoid overlapping popups
@@ -91,7 +95,7 @@ class Game {
       illicitProgress: s.illicitProgress,
       unlockedIllicit: s.unlockedIllicit,
       boss: { busy: false },
-      gangsters: s.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0 })),
+      gangsters: s.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats })),
       nextGangId: s.nextGangId,
       salaryTick: s.salaryTick,
     };
@@ -122,7 +126,7 @@ class Game {
       Object.assign(this.state, data);
       // Ensure transient fields are reset
       this.state.boss = { busy: false };
-      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0 }));
+      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
       // Reset UI and modal queues so we don't duplicate rows or keep stale listeners
       this._resetUI();
       this._gangsterSelect = { queue: [], active: false };
@@ -181,11 +185,13 @@ class Game {
       const data = JSON.parse(raw);
       Object.assign(this.state, data);
       this.state.boss = { busy: false };
-      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0 }));
+      this.state.gangsters = data.gangsters.map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
     this.updateUI();
+    // Keep card UI in sync
+    this.renderCards();
   }
 
   totalMoney() {
@@ -285,7 +291,19 @@ class Game {
   }
 
   runProgress(container, duration, callback) {
+    if (!container) {
+      console.warn('[runProgress] missing container');
+      if (typeof callback === 'function') callback();
+      this.updateUI();
+      return;
+    }
     const bar = container.querySelector('.progress-bar');
+    if (!bar) {
+      console.warn('[runProgress] missing .progress-bar');
+      if (typeof callback === 'function') callback();
+      this.updateUI();
+      return;
+    }
     container.classList.remove('hidden');
     bar.style.width = '0%';
     const start = Date.now();
@@ -528,7 +546,7 @@ class Game {
         this.spendMoney(gCost);
         this.runProgress(hireProg, 3000, () => {
           this.showGangsterTypeSelection(choice => {
-            const g = { id: state.nextGangId++, type: choice, busy: false, personalHeat: 0 };
+            const g = { id: state.nextGangId++, type: choice, busy: false, personalHeat: 0, stats: this.defaultStatsForType(choice) };
             state.gangsters.push(g);
             boss.busy = false;
             extortBtn.disabled = false;
@@ -537,6 +555,7 @@ class Game {
             hireBtn.disabled = false;
             businessBtn.disabled = false;
             this.updateUI();
+            this.renderCards();
           });
         });
       };
@@ -684,12 +703,13 @@ class Game {
       this.spendMoney(gCost);
       this.runProgress(auxProg, 3000, () => {
         this.showGangsterTypeSelection(choice => {
-          const n = { id: state.nextGangId++, type: choice, busy: false, personalHeat: 0 };
+          const n = { id: state.nextGangId++, type: choice, busy: false, personalHeat: 0, stats: this.defaultStatsForType(choice) };
           state.gangsters.push(n);
           g.busy = false;
           auxBtn.disabled = false;
           btn.disabled = false;
           this.updateUI();
+          this.renderCards();
         });
       });
     };
@@ -981,6 +1001,150 @@ class Game {
     }
     this.updateUI();
   }
+
+// ---- Card UI Prototype Methods ----
+defaultStatsForType(type) {
+if (type === 'face') return { face: 2, fist: 1, brain: 1 };
+if (type === 'brain') return { face: 1, fist: 1, brain: 2 };
+if (type === 'fist') return { face: 1, fist: 2, brain: 1 };
+return { face: 1, fist: 1, brain: 1 };
+}
+
+_ensureGangsterStats(g) {
+if (!g.stats) g.stats = this.defaultStatsForType(g.type);
+['face','fist','brain'].forEach(k => { if (typeof g.stats[k] !== 'number') g.stats[k] = 1; });
+}
+
+durationWithStat(baseMs, statKey, g) {
+const s = (g.stats && g.stats[statKey]) || 0;
+const scale = 1 + 0.1 * s; // 10% faster per point
+return Math.max(500, Math.floor(baseMs / scale));
+}
+
+initCardUI() {
+this.cardEls = {
+  cardsArea: document.getElementById('cardsArea'),
+  actionsArea: document.getElementById('actionsArea'),
+  msg: document.getElementById('cardMessages'),
+};
+if (!this.cardEls.cardsArea || !this.cardEls.actionsArea) return;
+this.renderActionBlocks();
+this.renderCards();
+}
+
+renderCards() {
+const area = this.cardEls && this.cardEls.cardsArea;
+if (!area) return;
+const s = this.state;
+area.innerHTML = '';
+s.gangsters.forEach(g => {
+  this._ensureGangsterStats(g);
+  const el = document.createElement('div');
+  el.className = 'card' + (g.busy ? ' busy' : '');
+  el.setAttribute('draggable', g.busy ? 'false' : 'true');
+  el.dataset.gid = String(g.id);
+  const stats = g.stats || { face: 1, fist: 1, brain: 1 };
+  el.innerHTML = `<div><strong>${g.type.toUpperCase()} #${g.id}</strong></div>
+    <div>Heat: ${g.personalHeat || 0}</div>
+    <div>F:${stats.fist} Fa:${stats.face} Br:${stats.brain}</div>`;
+  el.addEventListener('dragstart', ev => {
+    if (g.busy) { ev.preventDefault(); return; }
+    ev.dataTransfer.setData('text/plain', String(g.id));
+    ev.dataTransfer.effectAllowed = 'move';
+  });
+  area.appendChild(el);
+});
+}
+
+renderActionBlocks() {
+const area = this.cardEls && this.cardEls.actionsArea;
+if (!area) return;
+area.innerHTML = '';
+const blocks = [
+  { id: 'actRecruitEnforcer', label: 'Recruit Enforcer (Fist)', stat: 'fist', base: 2000, handler: (g, progEl, dur) => this._actRecruitEnforcer(g, progEl, dur) },
+  { id: 'actBuyBusiness', label: 'Buy Business (Brain)', stat: 'brain', base: 5000, handler: (g, progEl, dur) => this._actBuyBusiness(g, progEl, dur) },
+  { id: 'actLaunder', label: 'Launder $100 (Brain)', stat: 'brain', base: 4000, handler: (g, progEl, dur) => this._actLaunder(g, progEl, dur) },
+  { id: 'actPromo', label: 'Promotional Campaign (Face)', stat: 'face', base: 3000, handler: (g, progEl, dur) => this._actPromo(g, progEl, dur) },
+  { id: 'actVigilante', label: 'Vigilante Patrol (Fist)', stat: 'fist', base: 3000, handler: (g, progEl, dur) => this._actVigilante(g, progEl, dur) },
+];
+blocks.forEach(b => {
+  const el = document.createElement('div');
+  el.className = 'action-block';
+  el.id = b.id;
+  el.innerHTML = `<div><strong>${b.label}</strong></div><div class="small">Drop gangster here</div>`;
+  const prog = document.createElement('div');
+  prog.className = 'progress hidden';
+  prog.innerHTML = '<div class="progress-bar"></div>';
+  el.appendChild(prog);
+  el.addEventListener('dragover', ev => { ev.preventDefault(); el.classList.add('highlight'); });
+  el.addEventListener('dragleave', () => el.classList.remove('highlight'));
+  el.addEventListener('drop', ev => {
+    ev.preventDefault();
+    el.classList.remove('highlight');
+    const idStr = ev.dataTransfer.getData('text/plain');
+    const gid = parseInt(idStr, 10);
+    const g = this.state.gangsters.find(x => x.id === gid);
+    if (!g || g.busy) return;
+    const dur = this.durationWithStat(b.base, b.stat, g);
+    const ok = b.handler(g, prog, dur);
+    if (!ok) this._cardMsg('Cannot start action.');
+  });
+  area.appendChild(el);
+});
+}
+
+_cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
+
+_startCardWork(g, progEl, durMs, onDone) {
+g.busy = true;
+this.renderCards();
+this.runProgress(progEl, durMs, () => {
+  try { onDone && onDone(); } finally { g.busy = false; this.renderCards(); this.updateUI(); }
+});
+return true;
+}
+
+_actRecruitEnforcer(g, progEl, dur) {
+if (!this.state.unlockedEnforcer) { this._cardMsg('Enforcers not unlocked'); return false; }
+const cost = this.enforcerCost ? this.enforcerCost() : 20;
+if (this.totalMoney() < cost) { this._cardMsg('Not enough money'); return false; }
+this.spendMoney(cost);
+return this._startCardWork(g, progEl, dur, () => { this.state.patrol += 1; this.state.unlockedGangster = true; });
+}
+
+_actBuyBusiness(g, progEl, dur) {
+if (!this.state.unlockedBusiness) { this._cardMsg('No territory yet'); return false; }
+const cost = this.businessCost ? this.businessCost() : 100;
+if (this.totalMoney() < cost) { this._cardMsg('Not enough money'); return false; }
+this.spendMoney(cost);
+return this._startCardWork(g, progEl, dur, () => { this.state.businesses += 1; this.state.unlockedIllicit = true; });
+}
+
+_actLaunder(g, progEl, dur) {
+if (!(this.state.unlockedBusiness || this.state.unlockedIllicit)) { this._cardMsg('Need a business or illicit'); return false; }
+if (this.state.dirtyMoney < 100) { this._cardMsg('Need $100 dirty'); return false; }
+this.state.dirtyMoney -= 100;
+return this._startCardWork(g, progEl, dur, () => {
+  const base = 80;
+  const bonus = Math.floor(base * 0.1 * this.respectLevel());
+  this.state.cleanMoney += base + bonus;
+  g.personalHeat = (g.personalHeat || 0) + 1;
+});
+}
+
+_actPromo(g, progEl, dur) {
+if (this.state.cleanMoney < 50) { this._cardMsg('Need $50 clean'); return false; }
+this.state.cleanMoney -= 50;
+return this._startCardWork(g, progEl, dur, () => { this.state.respect += 1; });
+}
+
+_actVigilante(g, progEl, dur) {
+return this._startCardWork(g, progEl, dur, () => {
+  this.state.respect += 1;
+  this.state.heat += 1;
+  g.personalHeat = (g.personalHeat || 0) + 1;
+});
+}
 
 }
 
