@@ -28,7 +28,8 @@ export class Game {
       nextEquipId: 1,
       salaryTick: 0,
     };
-    this.DISAGREEABLE_CHANCE = 0.2;
+    // Chance that an extortion attempt results in a disagreeable owner (used by actions.js)
+    this.DISAGREEABLE_CHANCE = 0.25;
     this.SALARY_PER_10S = { face: 5, fist: 5, brain: 7 };
 
     this.darkToggle = document.getElementById('darkToggle');
@@ -292,6 +293,9 @@ export class Game {
     const respectBonusEl = document.getElementById('respectBonus');
     if (respectBonusEl) respectBonusEl.textContent = rL > 0 ? `Fronts +$${rL} clean/s each; Laundering +${rL * 10}% yield` : 'None';
     document.getElementById('businesses').textContent = s.businesses;
+    const availFronts = Math.max(0, (s.businesses || 0) - (s.illicit || 0));
+    const afEl = document.getElementById('availableFronts');
+    if (afEl) afEl.textContent = availFronts;
     const faces = s.gangsters.filter(g => g.type === 'face').length;
     const fists = s.gangsters.filter(g => g.type === 'fist').length;
     const brains = s.gangsters.filter(g => g.type === 'brain').length;
