@@ -877,7 +877,7 @@ renderActionBlocks() {
       const g = this.state.gangsters.find(x => x.id === gid);
       if (!g || g.busy) return;
       const dur = this.durationWithStat(b.base, b.stat, g);
-      const ok = b.handler(this, g, prog, dur);
+      const ok = this.executeAction(b, g, prog, dur);
       if (!ok) this._cardMsg('Cannot start action.');
     });
     area.appendChild(el);
@@ -886,6 +886,47 @@ renderActionBlocks() {
 
 _cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
 
+executeAction(action, g, progEl, durMs) {
+  // Pass-through for legacy handlers while we refactor
+  if (action && typeof action.handler === 'function') {
+    return action.handler(this, g, progEl, durMs);
+  }
+
+  // Prerequisites
+  if (action && typeof action.prereq === 'function') {
+    const ok = action.prereq(this, g);
+    if (!ok) return false;
+  }
+
+  // Costs
+  if (action && action.cost) {
+    if (typeof action.cost === 'function') {
+      const ok = action.cost(this, g);
+      if (!ok) return false;
+    } else if (typeof action.cost === 'object') {
+      if (action.cost.money) {
+        if (this.totalMoney() < action.cost.money) return false;
+        this.spendMoney(action.cost.money);
+      }
+      if (action.cost.respect) {
+        if ((this.state.respect || 0) < action.cost.respect) return false;
+        this.state.respect -= action.cost.respect;
+      }
+      if (action.cost.heat) {
+        if ((this.state.heat || 0) < action.cost.heat) return false;
+        this.state.heat -= action.cost.heat;
+      }
+    }
+  }
+
+  // Start timed work and apply effect
+  return this._startCardWork(g, progEl, durMs, () => {
+    if (action && typeof action.effect === 'function') {
+      action.effect(this, g);
+    }
+  });
+}
+
 _startCardWork(g, progEl, durMs, onDone) {
   g.busy = true;
   this.renderCards();
@@ -893,133 +934,6 @@ _startCardWork(g, progEl, durMs, onDone) {
     try { onDone && onDone(); } finally { g.busy = false; this.renderCards(); this.updateUI(); }
   });
   return true;
-}
-
-_actRecruitEnforcer(g, progEl, dur) {
-const cost = this.enforcerCost ? this.enforcerCost() : 20;
-if (this.totalMoney() < cost) { this._cardMsg('Not enough money'); return false; }
-this.spendMoney(cost);
-return this._startCardWork(g, progEl, dur, () => { this.state.patrol += 1; });
-}
-
-_actBuyBusiness(g, progEl, dur) {
-const cost = this.businessCost ? this.businessCost() : 100;
-if (this.totalMoney() < cost) { this._cardMsg('Not enough money'); return false; }
-this.spendMoney(cost);
-return this._startCardWork(g, progEl, dur, () => { this.state.businesses += 1; });
-}
-
-_actLaunder(g, progEl, dur) {
-if (this.state.dirtyMoney < 100) { this._cardMsg('Need $100 dirty'); return false; }
-this.state.dirtyMoney -= 100;
-return this._startCardWork(g, progEl, dur, () => {
-  const base = 80;
-  const bonus = Math.floor(base * 0.1 * this.respectLevel());
-  this.state.cleanMoney += base + bonus;
-  g.personalHeat = (g.personalHeat || 0) + 1;
-});
-}
-
-_actPromo(g, progEl, dur) {
-if (this.state.cleanMoney < 50) { this._cardMsg('Need $50 clean'); return false; }
-this.state.cleanMoney -= 50;
-return this._startCardWork(g, progEl, dur, () => { this.state.respect += 1; });
-}
-
-_actVigilante(g, progEl, dur) {
-return this._startCardWork(g, progEl, dur, () => {
-  this.state.respect += 1;
-  this.state.heat += 1;
-  g.personalHeat = (g.personalHeat || 0) + 1;
-});
-}
-
-_actExtort(g, progEl, dur) {
-  // Face-like extort: gain territory or disagreeable owner
-  return this._startCardWork(g, progEl, dur, () => {
-    if (Math.random() < this.DISAGREEABLE_CHANCE) {
-      this.state.disagreeableOwners += 1;
-    } else {
-      this.state.territory += 1;
-    }
-    g.personalHeat = (g.personalHeat || 0) + 1;
-  });
-}
-
-_actBuildIllicit(g, progEl, dur) {
-  const s = this.state;
-  const avail = s.businesses - s.illicit;
-  if (avail <= 0) { this._cardMsg('No available fronts'); return false; }
-  return this._startCardWork(g, progEl, dur, () => {
-    // Reuse existing selection modal if available; otherwise default to 'counterfeiting'
-    if (typeof this.showIllicitBusinessSelection === 'function') {
-      this.showIllicitBusinessSelection(choice => {
-        s.illicitCounts[choice] += 1;
-        s.illicit += 1;
-        g.personalHeat = (g.personalHeat || 0) + 1;
-        this.updateUI();
-      });
-    } else {
-      s.illicitCounts.counterfeiting += 1;
-      s.illicit += 1;
-      g.personalHeat = (g.personalHeat || 0) + 1;
-    }
-  });
-}
-
-_actHireGangster(g, progEl, dur) {
-  const s = this.state;
-  const cost = this.gangsterCost ? this.gangsterCost() : 0;
-  if (this.totalMoney() < cost) { this._cardMsg('Not enough money'); return false; }
-  this.spendMoney(cost);
-  return this._startCardWork(g, progEl, dur, () => {
-    if (typeof this.showGangsterTypeSelection === 'function') {
-      this.showGangsterTypeSelection(choice => {
-        const n = { id: s.nextGangId++, type: choice, busy: false, personalHeat: 0, stats: this.defaultStatsForType(choice) };
-        s.gangsters.push(n);
-        this.renderCards();
-      });
-    } else {
-      const choice = 'fist';
-      const n = { id: s.nextGangId++, type: choice, busy: false, personalHeat: 0, stats: this.defaultStatsForType(choice) };
-      s.gangsters.push(n);
-      this.renderCards();
-    }
-  });
-}
-
-_actPayCops(g, progEl, dur) {
-  if (this.totalMoney() < 50) { this._cardMsg('Not enough money'); return false; }
-  this.spendMoney(50);
-  return this._startCardWork(g, progEl, dur, () => {
-    this.state.heat = Math.max(0, this.state.heat - 1);
-  });
-}
-
-_actDonate(g, progEl, dur) {
-  if (this.state.cleanMoney < 40) { this._cardMsg('Need $40 clean'); return false; }
-  this.state.cleanMoney -= 40;
-  return this._startCardWork(g, progEl, dur, () => {
-    this.state.respect += 1;
-    if (this.state.heat > 0) this.state.heat -= 1;
-  });
-}
-
-_actIntimidate(g, progEl, dur) {
-  return this._startCardWork(g, progEl, dur, () => {
-    if (this.state.disagreeableOwners > 0) this.state.disagreeableOwners -= 1;
-    this.state.fear = (this.state.fear || 0) + 1;
-    g.personalHeat = (g.personalHeat || 0) + 1;
-  });
-}
-
-_actRaid(g, progEl, dur) {
-  return this._startCardWork(g, progEl, dur, () => {
-    const haul = 150; // base dirty cash from raid
-    this.state.dirtyMoney += haul;
-    this.state.heat += 2;
-    g.personalHeat = (g.personalHeat || 0) + 2;
-  });
 }
 
 }

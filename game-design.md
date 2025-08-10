@@ -88,3 +88,20 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 8. Send Fists to intimidate these owners. Successful intimidation removes one disagreeable owner and increases fear.
 
 These notes are kept short on purpose – the goal is simply to track the prototype design as it evolves.
+
+
+
+
+
+
+
+
+## Game Start Scenario
+
+1. Boss begins in a local neighborhood block, with ability to explore "the neighborhood".
+2. During the exploration, Boss can locate "events", "places" or "people" to interact with.
+3. Some of the places are businesses that can be extorted for money - they will have minimal requirements that boss handily satisfies, and thus don't have risk of failure or raise heat.
+4. Other cards are potential recruits, say, one of each type of gangster, and several enforcers.
+5. Other businesses can be purchased for money, and then used to host illicit operations.
+6. After establishing a foothold, Boss can find a way to expand into other neighborhoods, which he personally couldn't tackle, and needs to equip and prepare his gangsters to handle the new territory.
+
