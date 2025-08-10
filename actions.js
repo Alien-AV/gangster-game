@@ -95,6 +95,25 @@ export const ACTIONS = [
         game.renderCards();
       });
     } },
+  // Procure Equipment: lets player choose an equipment card to add to inventory
+  { id: 'actProcureEquipment', label: 'Procure Equipment (Brain)', stat: 'brain', base: 3000,
+    cost: { money: 20 },
+    effect: (game) => {
+      if (typeof game.showEquipmentSelection === 'function') {
+        game.showEquipmentSelection(type => {
+          const item = { id: game.state.nextEquipId++, type };
+          if (!Array.isArray(game.state.inventory)) game.state.inventory = [];
+          game.state.inventory.push(item);
+          game.updateUI();
+          game.renderCards();
+        });
+      } else {
+        // Fallback: add a pistol if modal not available
+        const item = { id: game.state.nextEquipId++, type: 'pistol' };
+        if (!Array.isArray(game.state.inventory)) game.state.inventory = [];
+        game.state.inventory.push(item);
+      }
+    } },
   { id: 'actPayCops', label: 'Pay Cops -$50', stat: 'brain', base: 3000,
     cost: { money: 50 },
     effect: (game) => {
