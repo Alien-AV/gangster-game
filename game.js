@@ -82,6 +82,17 @@ export class Game {
 
     // Initialize discovery/deck system
     this.initDiscovery();
+
+    // Global drag state to prevent world re-render flicker while hovering over droppables
+    const self = this;
+    document.addEventListener('dragstart', function onAnyDragStart() {
+      self._dragCount = (self._dragCount || 0) + 1;
+      self._isDragging = true;
+    });
+    document.addEventListener('dragend', function onAnyDragEnd() {
+      self._dragCount = Math.max(0, (self._dragCount || 1) - 1);
+      if (!self._dragCount) self._isDragging = false;
+    });
   }
 
   // Equipment selection (Procure Equipment)
@@ -470,14 +481,22 @@ export class Game {
         neighborhood: {
           id: 'neighborhood',
           drawn: 0,
-          max: 8,
+          max: 12,
           pool: [
-            { id: 'corrupt_cop', weight: 2, reusable: false },
-            { id: 'priest', weight: 2, reusable: false },
-            { id: 'small_crooks', weight: 2, reusable: false },
-            { id: 'hot_dog_stand', weight: 1, reusable: false },
+            { id: 'corrupt_cop', weight: 2, reusable: true },
+            { id: 'priest', weight: 2, reusable: true },
+            { id: 'small_crooks', weight: 2, reusable: true },
+            { id: 'hot_dog_stand', weight: 1, reusable: true },
+            { id: 'bakery', weight: 1, reusable: true },
+            { id: 'diner', weight: 1, reusable: true },
+            { id: 'laundromat', weight: 1, reusable: true },
+            { id: 'pawn_shop', weight: 1, reusable: true },
+            { id: 'newspaper', weight: 1, reusable: true },
+            { id: 'bookmaker', weight: 1, reusable: true },
           ],
           guarantees: ['recruit_face', 'recruit_fist', 'recruit_brain', 'city_entrance'],
+          _order: [],
+          disabled: false,
         },
       },
       currentDeckId: 'neighborhood',
@@ -492,21 +511,37 @@ export class Game {
     if (!deck) return;
     // Decide next card (avoid duplicates for non-reusable discoveries)
     let cardId = null;
+    if (deck.disabled) return;
     const isFinal = deck.drawn >= (deck.max - 1);
     if (isFinal && deck.guarantees.length) {
       cardId = deck.guarantees[deck.guarantees.length - 1];
     } else if (deck.guarantees.length && deck.drawn < deck.max - deck.guarantees.length) {
-      // draw from pool
+      // draw from a pre-shuffled pool order (excluding already discovered non-reusables)
       const discoveredIds = new Set((d.discovered || []).map(it => it.id));
-      let pool = deck.pool.filter(it => it.reusable || !discoveredIds.has(it.id));
-      if (pool.length === 0) pool = deck.pool; // fallback if all consumed
-      const totalW = pool.reduce((s, it) => s + (it.weight || 1), 0);
-      let r = Math.random() * totalW;
-      for (const it of pool) {
-        r -= (it.weight || 1);
-        if (r <= 0) { cardId = it.id; break; }
+      if (!Array.isArray(deck._order) || deck._order.length === 0) {
+        // expand by weight and shuffle
+        const expanded = [];
+        deck.pool.forEach(it => { for (let i=0;i<(it.weight||1);i++) expanded.push(it.id); });
+        for (let i = expanded.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [expanded[i], expanded[j]] = [expanded[j], expanded[i]];
+        }
+        deck._order = expanded;
       }
-      if (!cardId && pool[0]) cardId = pool[0].id;
+      // find next suitable id
+      while (deck._order.length && !cardId) {
+        const cand = deck._order.shift();
+        const meta = this.discoveryMeta(cand);
+        if (meta.reusable || !discoveredIds.has(cand)) cardId = cand;
+      }
+      // fallback
+      if (!cardId) {
+        const pool = deck.pool;
+        const totalW = pool.reduce((s, it) => s + (it.weight || 1), 0);
+        let r = Math.random() * totalW;
+        for (const it of pool) { r -= (it.weight || 1); if (r <= 0) { cardId = it.id; break; } }
+        if (!cardId && pool[0]) cardId = pool[0].id;
+      }
     } else {
       // take next guarantee (not final)
       const idx = deck.max - deck.drawn - 1; // distance from end
@@ -518,6 +553,10 @@ export class Game {
     const meta = this.discoveryMeta(cardId);
     d.discovered.push({ id: cardId, title: meta.title, desc: meta.desc, reusable: meta.reusable, used: false, data: meta.data || {} });
     this.applyDiscoveryUnlock(cardId);
+    // If city entrance drawn: disable neighborhood deck afterwards
+    if (cardId === 'city_entrance') {
+      deck.disabled = true;
+    }
     this.renderWorld();
     this.updateUI();
   }
@@ -526,12 +565,18 @@ export class Game {
     const map = {
       corrupt_cop: { title: 'Local Corrupt Cop', desc: 'A familiar face on the beat. Can arrange favors for a price.', reusable: true },
       priest: { title: 'Priest at the Church', desc: 'Donations improve your reputation in the neighborhood.', reusable: true },
-      small_crooks: { title: 'Small-time Crooks', desc: 'Neighborhood watch? More like vigilantism.', reusable: true },
+      small_crooks: { title: 'Small-time Crooks', desc: 'Can be swayed to patrol for you.', reusable: true },
       hot_dog_stand: { title: 'Hot-dog Stand', desc: 'A flimsy front ripe for a shake-down.', reusable: true },
+      bakery: { title: 'Corner Bakery', desc: 'Busy mornings. Might pay for protection.', reusable: false },
+      diner: { title: 'Mom-and-Pop Diner', desc: 'Cash business with regulars.', reusable: false },
+      laundromat: { title: 'Neighborhood Laundromat', desc: 'Steady quarters, soft targets.', reusable: false },
+      pawn_shop: { title: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false },
+      newspaper: { title: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false },
+      bookmaker: { title: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true },
       recruit_face: { title: 'Potential Recruit: Face', desc: 'A smooth talker looking for work. Hire when you have cash.', reusable: false, data: { type: 'face' } },
       recruit_fist: { title: 'Potential Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, data: { type: 'fist' } },
       recruit_brain: { title: 'Potential Recruit: Brain', desc: 'A planner who knows the angles.', reusable: false, data: { type: 'brain' } },
-      city_entrance: { title: 'City Entrance', desc: 'A path into the wider city opens. New opportunities await.', reusable: true },
+      city_entrance: { title: 'City Entrance', desc: 'A path into the wider city opens. New opportunities await.', reusable: false },
     };
     return map[id] || { title: id, desc: '', reusable: true };
   }
@@ -549,6 +594,8 @@ export class Game {
 
   // Render world area with Neighborhood card and discovered cards
   renderWorld() {
+    // Avoid rebuilding droppable cards while dragging; this causes highlight flicker
+    if (this._isDragging) return;
     const el = document.getElementById('worldArea');
     if (!el) return;
     el.innerHTML = '';
@@ -615,7 +662,7 @@ export class Game {
           if (!ok) this._cardMsg('Cannot hire.');
         });
       }
-      // Priest: drop to donate
+      // Priest: drop to donate (repeatable)
       if (item.id === 'priest') {
         body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster here to Donate</div>`;
         c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
@@ -629,13 +676,53 @@ export class Game {
           if (!g || g.busy) return;
           const baseAct = (ACTIONS || []).find(a => a.id === 'actDonate');
           if (!baseAct) return;
-          const act = { ...baseAct, effect: (game, gg) => { baseAct.effect(game, gg); item.used = true; } };
+          const act = { ...baseAct };
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
           if (!ok) this._cardMsg('Cannot donate.');
         });
       }
-      // Simple business example: allow drop to extort or raid
+      // Small-time Crooks: recruit into enforcers (Face-based, repeatable)
+      if (item.id === 'small_crooks') {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const baseAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
+          if (!baseAct) return;
+          const act = { ...baseAct, id:'actRecruitCrooks', label:'Recruit Local Crooks', stat:'face' };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot recruit.');
+        });
+      }
+      // Corrupt Cop: pay cops (repeatable)
+      if (item.id === 'corrupt_cop') {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Pay Off Cops</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const baseAct = (ACTIONS || []).find(a => a.id === 'actPayCops');
+          if (!baseAct) return;
+          const act = { ...baseAct };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot pay cops.');
+        });
+      }
+      // Businesses: Extort or Raid. After Extort: disable permanently. After Raid: long cooldown.
       if (item.id === 'hot_dog_stand') {
         body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`;
         c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
@@ -647,6 +734,9 @@ export class Game {
           const gid = parseInt(idStr, 10);
           const g = this.state.gangsters.find(x => x.id === gid);
           if (!g || g.busy) return;
+          const now = this.state.time || 0;
+          if (item.extorted) { this._cardMsg('This business has already been extorted.'); return; }
+          if (item.cooldownUntil && now < item.cooldownUntil) { this._cardMsg('Business is recovering after a raid.'); return; }
           const face = this.effectiveStat(g, 'face');
           const brain = this.effectiveStat(g, 'brain');
           const fist = this.effectiveStat(g, 'fist');
@@ -655,10 +745,107 @@ export class Game {
           const actId = preferRaid ? 'actRaid' : 'actExtort';
           const baseAct = (ACTIONS || []).find(a => a.id === actId);
           if (!baseAct) return;
-          const act = { ...baseAct, effect: (game, gg) => { baseAct.effect(game, gg); item.used = true; } };
+          const act = { ...baseAct, effect: (game, gg) => {
+            baseAct.effect(game, gg);
+            if (actId === 'actExtort') { item.extorted = true; }
+            if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; }
+          } };
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
           if (!ok) this._cardMsg('Cannot act on business.');
+        });
+      }
+      // Additional local businesses: extort/raid same heuristic
+      if (['bakery','diner','laundromat'].includes(item.id)) {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const now = this.state.time || 0;
+          if (item.extorted) { this._cardMsg('This business has already been extorted.'); return; }
+          if (item.cooldownUntil && now < item.cooldownUntil) { this._cardMsg('Business is recovering after a raid.'); return; }
+          const face = this.effectiveStat(g, 'face');
+          const brain = this.effectiveStat(g, 'brain');
+          const fist = this.effectiveStat(g, 'fist');
+          const canRaid = !!(this.state.unlockedActions && this.state.unlockedActions.raid);
+          const preferRaid = canRaid && (fist >= Math.max(face, brain));
+          const actId = preferRaid ? 'actRaid' : 'actExtort';
+          const baseAct = (ACTIONS || []).find(a => a.id === actId);
+          if (!baseAct) return;
+          const act = { ...baseAct, effect: (game, gg) => {
+            baseAct.effect(game, gg);
+            if (actId === 'actExtort') { item.extorted = true; }
+            if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; }
+          } };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot act on business.');
+        });
+      }
+      // Newspaper: promotional campaign (repeatable)
+      if (item.id === 'newspaper') {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to run a Promo Campaign</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const baseAct = (ACTIONS || []).find(a => a.id === 'actPromo');
+          if (!baseAct) return;
+          const act = { ...baseAct };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot run promo.');
+        });
+      }
+      // Pawn Shop: procure equipment (repeatable)
+      if (item.id === 'pawn_shop') {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Procure Equipment</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const baseAct = (ACTIONS || []).find(a => a.id === 'actProcureEquipment');
+          if (!baseAct) return;
+          const act = { ...baseAct };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot procure equipment.');
+        });
+      }
+      // Bookmaker: launder money (repeatable)
+      if (item.id === 'bookmaker') {
+        body += `<div style=\"margin-top:6px;color:#888\">Drop a Brain to Launder $100</div>`;
+        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
+        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
+        c.addEventListener('drop', ev => {
+          ev.preventDefault();
+          c.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const baseAct = (ACTIONS || []).find(a => a.id === 'actLaunder');
+          if (!baseAct) return;
+          const act = { ...baseAct };
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot launder.');
         });
       }
       c.innerHTML = body;
@@ -666,6 +853,16 @@ export class Game {
       const prog = document.createElement('div');
       prog.className = 'progress';
       c.appendChild(prog);
+      // Show disabled/cooldown state
+      if (['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) {
+        const now = this.state.time || 0;
+        if (item.extorted) {
+          const badge = document.createElement('div'); badge.style.color = '#f88'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
+        } else if (item.cooldownUntil && now < item.cooldownUntil) {
+          const remain = item.cooldownUntil - now;
+          const badge = document.createElement('div'); badge.style.color = '#ff8'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
+        }
+      }
       el.appendChild(c);
     });
   }
