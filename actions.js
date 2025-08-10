@@ -2,6 +2,15 @@
 // Each action: { id, label, stat, base, handler(game, gangster, progressEl, durationMs) }
 
 export const ACTIONS = [
+  // Explore Neighborhood: reveals discovery cards from the initial deck
+  { id: 'actExploreNeighborhood', label: 'Explore Neighborhood (Brain)', stat: 'brain', base: 3500,
+    effect: (game, g) => {
+      game.drawFromDeck('neighborhood');
+      // small personal heat for poking around
+      if (g) g.personalHeat = (g.personalHeat || 0) + 1;
+      game.updateUI();
+    }
+  },
   { id: 'actRecruitEnforcer', label: 'Recruit Enforcer (Fist)', stat: 'fist', base: 2000,
     cost: (game) => {
       const cost = game.enforcerCost ? game.enforcerCost() : 20;
@@ -43,12 +52,14 @@ export const ACTIONS = [
     },
     effect: (game) => { game.state.respect += 1; } },
   { id: 'actVigilante', label: 'Vigilante Patrol (Fist)', stat: 'fist', base: 3000,
+    prereq: (game) => !!(game.state.unlockedActions && game.state.unlockedActions.vigilante),
     effect: (game, g) => {
       game.state.respect += 1;
       game.state.heat += 1;
       g.personalHeat = (g.personalHeat || 0) + 1;
     } },
   { id: 'actRaid', label: 'Raid Business (Fist)', stat: 'fist', base: 3500,
+    prereq: (game) => !!(game.state.unlockedActions && game.state.unlockedActions.raid),
     effect: (game, g) => {
       game.state.dirtyMoney += 150;
       game.state.heat += 2;
@@ -116,6 +127,7 @@ export const ACTIONS = [
     } },
   { id: 'actPayCops', label: 'Pay Cops -$50', stat: 'brain', base: 3000,
     cost: { money: 50 },
+    prereq: (game) => !!(game.state.unlockedActions && game.state.unlockedActions.payCops),
     effect: (game) => {
       game.state.heat = Math.max(0, (game.state.heat || 0) - 1);
       game.updateUI();
@@ -126,6 +138,7 @@ export const ACTIONS = [
       game.state.cleanMoney -= 40;
       return true;
     },
+    prereq: (game) => !!(game.state.unlockedActions && game.state.unlockedActions.donate),
     effect: (game) => {
       game.state.respect += 1;
       if (game.state.heat > 0) game.state.heat -= 1;
