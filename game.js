@@ -29,7 +29,7 @@ export class Game {
       nextGangId: 1,
       nextEquipId: 1,
       salaryTick: 0,
-      discovery: null,
+      table: null,
     };
     // Chance that an extortion attempt results in a disagreeable owner (used by actions.js)
     this.DISAGREEABLE_CHANCE = 0.25;
@@ -44,7 +44,7 @@ export class Game {
       localStorage.setItem('dark', e.target.checked ? '1' : '0');
     });
 
-    // Removed Pay Cops legacy button wiring
+    // Removed Pay Cops button wiring
     document.getElementById('resetGame').onclick = () => {
       localStorage.removeItem('gameState');
       location.reload();
@@ -63,7 +63,7 @@ export class Game {
     hookSlot(1); hookSlot(2); hookSlot(3);
 
     this.loadState();
-    // Ensure legacy saves have stats on gangsters
+    // Ensure gangster objects are normalized
     (this.state.gangsters || []).forEach(g => { this._ensureGangsterStats(g); if (!Array.isArray(g.equipped)) g.equipped = []; });
     if (!Array.isArray(this.state.inventory)) this.state.inventory = [];
     // Ensure Boss exists as a normal gangster with special stats/name
@@ -81,8 +81,8 @@ export class Game {
     this._illicitSelect = { queue: [], active: false };
     this._equipSelect = { queue: [], active: false };
 
-    // Initialize discovery/deck system
-    this.initDiscovery();
+    // Initialize world table / deck system
+    this.initTable();
     // Initial world paint
     this.renderWorld();
 
@@ -172,7 +172,7 @@ export class Game {
       inventory: s.inventory || [],
       nextEquipId: s.nextEquipId || 1,
       salaryTick: s.salaryTick,
-      discovery: s.discovery || null,
+      table: s.table || null,
     };
   }
 
@@ -243,8 +243,8 @@ export class Game {
       const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
       this.state.gangsters.unshift(bossGang);
     }
-    // Ensure discovery exists
-    this.initDiscovery();
+    // Ensure table exists
+    this.initTable();
   }
 
   totalMoney() {
@@ -472,10 +472,10 @@ export class Game {
     this.renderCards();
   }
 
-  // ----- Discovery / Deck System -----
-  initDiscovery() {
-    if (!this.state.discovery) {
-      this.state.discovery = { discovered: [] };
+  // ----- World Table / Deck System -----
+  initTable() {
+    if (!this.state.table || !Array.isArray(this.state.table.cards)) {
+      this.state.table = { cards: [] };
     }
     // Build runtime deck objects (not saved directly)
     this._decks = this._decks || {};
@@ -495,8 +495,8 @@ export class Game {
   }
 
   drawFromDeck(deckId) {
-    const disc = this.state.discovery;
-    if (!disc) return;
+    const table = this.state.table;
+    if (!table) return;
     const deck = (this._decks || {})[deckId];
     if (!deck) return;
     if (!deck.hasMore()) return;
@@ -504,14 +504,14 @@ export class Game {
     if (!batch || !batch.length) return;
     batch.forEach(id => {
       const card = makeCard(id);
-      disc.discovered.push(card);
+      table.cards.push(card);
     });
     // Reflect immediately
     this.renderWorld();
     this.updateUI();
   }
 
-  // discoveryMeta replaced by Card registry (makeCard)
+  
 
   renderWorld() {
     const el = document.getElementById('worldArea');
@@ -538,14 +538,14 @@ export class Game {
     // Neighborhood explore card (drop gangster to explore)
     const exploreCard = document.createElement('div');
     exploreCard.className = 'card world-card';
-    const d = this.state.discovery;
     const ndeck = (this._decks || {}).neighborhood;
     const disabled = !ndeck || !ndeck.hasMore();
     exploreCard.style.opacity = disabled ? '0.5' : '1.0';
     exploreCard.innerHTML = '<div><strong>Neighborhood</strong></div>' +
       (disabled ? '<div>Deck exhausted</div>' : '<div>Drop a gangster to explore</div>');
     const exploreProg = document.createElement('div');
-    exploreProg.className = 'progress';
+    exploreProg.className = 'progress hidden';
+    exploreProg.innerHTML = '<div class="progress-bar"></div>';
     exploreCard.appendChild(exploreProg);
     exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
     exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
@@ -565,8 +565,8 @@ export class Game {
     });
     el.appendChild(exploreCard);
 
-    // Discovered cards list
-    const disc = (this.state.discovery && this.state.discovery.discovered) || [];
+    // World cards list (table)
+    const disc = (this.state.table && this.state.table.cards) || [];
 
     // Helper to attach standard DnD listeners
     const attachDrop = (cardEl, onDrop, prog) => {
@@ -609,7 +609,7 @@ export class Game {
           const act = { ...baseAct, id: 'actRecruitCrooks', label: 'Recruit Local Crooks', stat: 'face',
             effect: (game, gg) => {
               baseAct.effect(game, gg);
-              const discArr = (game.state.discovery && game.state.discovery.discovered) || [];
+              const discArr = (game.state.table && game.state.table.cards) || [];
               let ef = discArr.find(x => x.id === 'enforcers');
               if (!ef) { ef = makeCard('enforcers'); discArr.push(ef); }
               ef.data = ef.data || {}; ef.data.count = (ef.data.count || 0) + 1;
@@ -629,8 +629,7 @@ export class Game {
           const face = this.effectiveStat(g, 'face');
           const brain = this.effectiveStat(g, 'brain');
           const fist = this.effectiveStat(g, 'fist');
-          const canRaid = !!(this.state.unlockedActions && this.state.unlockedActions.raid);
-          const preferRaid = canRaid && (fist >= Math.max(face, brain));
+          const preferRaid = (fist >= Math.max(face, brain));
           const actId = preferRaid ? 'actRaid' : 'actExtort';
           const baseAct = (ACTIONS || []).find(a => a.id === actId);
           if (!baseAct) return;
@@ -638,7 +637,7 @@ export class Game {
             baseAct.effect(game, gg);
             if (actId === 'actExtort') {
               // Replace business with counter card in-place
-              const discArr = (game.state.discovery && game.state.discovery.discovered) || [];
+              const discArr = (game.state.table && game.state.table.cards) || [];
               const idx = discArr.indexOf(item);
               let xb = discArr.find(x => x.id === 'extorted_business');
               if (!xb) {
@@ -691,9 +690,8 @@ export class Game {
       c.innerHTML = body;
       // Per-card progress bar
       const prog = document.createElement('div');
-      prog.className = 'progress';
-      prog.style.display = 'none';
-      prog.innerHTML = '<div class="bar"></div>';
+      prog.className = 'progress hidden';
+      prog.innerHTML = '<div class="progress-bar"></div>';
       c.appendChild(prog);
       // Attach declarative behavior listeners now that prog exists
       if (behavior) {
@@ -740,16 +738,9 @@ export class Game {
     });
   }
 
-  // Actions panel removed
-
   _cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
 
   executeAction(action, g, progEl, durMs) {
-    // Pass-through for legacy handlers while we refactor
-    if (action && typeof action.handler === 'function') {
-      return action.handler(this, g, progEl, durMs);
-    }
-
     // Prerequisites
     if (action && typeof action.prereq === 'function') {
       const ok = action.prereq(this, g);
@@ -870,7 +861,7 @@ export class Game {
       this.paySalaries();
     }
     // Update cooldown badges in-place to avoid full world re-render flicker
-    const disc = (this.state.discovery && this.state.discovery.discovered) || [];
+    const disc = (this.state.table && this.state.table.cards) || [];
     const now = s.time || 0;
     disc.forEach(item => {
       if (!['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) return;
