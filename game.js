@@ -639,7 +639,15 @@ export class Game {
           if (!g || g.busy) return;
           const baseAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
           if (!baseAct) return;
-          const act = { ...baseAct, id:'actRecruitCrooks', label:'Recruit Local Crooks', stat:'face' };
+          const act = { ...baseAct, id:'actRecruitCrooks', label:'Recruit Local Crooks', stat:'face',
+            effect: (game, gg) => {
+              baseAct.effect(game, gg);
+              const discArr = (game.state.discovery && game.state.discovery.discovered) || [];
+              let ef = discArr.find(x => x.id === 'enforcers');
+              if (!ef) { ef = makeCard('enforcers'); discArr.push(ef); }
+              ef.data = ef.data || {}; ef.data.count = (ef.data.count || 0) + 1;
+            }
+          };
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
           if (!ok) this._cardMsg('Cannot recruit.');
@@ -690,13 +698,45 @@ export class Game {
           if (!baseAct) return;
           const act = { ...baseAct, effect: (game, gg) => {
             baseAct.effect(game, gg);
-            if (actId === 'actExtort') { item.extorted = true; }
+            if (actId === 'actExtort') {
+              // Replace this business with the Extorted Businesses counter card in-place
+              const discArr = (game.state.discovery && game.state.discovery.discovered) || [];
+              const idx = discArr.indexOf(item);
+              let xb = discArr.find(x => x.id === 'extorted_business');
+              if (!xb) {
+                xb = makeCard('extorted_business');
+                xb.data = xb.data || {}; xb.data.count = 1;
+                if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
+              } else {
+                // Increment and move the existing counter card to this position
+                xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                if (idx >= 0) {
+                  // Remove the business at idx
+                  discArr.splice(idx, 1);
+                  const oldIdx = discArr.indexOf(xb);
+                  if (oldIdx >= 0) {
+                    // Remove xb and insert at the original business index
+                    discArr.splice(oldIdx, 1);
+                    discArr.splice(idx, 0, xb);
+                  }
+                }
+              }
+            }
             if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; }
           } };
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
           if (!ok) this._cardMsg('Cannot act on business.');
         });
+      }
+      // Counter cards: Enforcers and Extorted Businesses (display counts)
+      if (item.id === 'enforcers') {
+        const count = (item.data && item.data.count) || 0;
+        body = `<div><strong>${item.name}</strong></div><div>Count: ${count}</div>`;
+      }
+      if (item.id === 'extorted_business') {
+        const count = (item.data && item.data.count) || 0;
+        body = `<div><strong>${item.name}</strong></div><div>Protection owed: ${count}</div>`;
       }
       // Newspaper: promotional campaign (repeatable)
       if (item.id === 'newspaper') {
