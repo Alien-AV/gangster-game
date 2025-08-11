@@ -15,7 +15,7 @@ When a gangster is dropped onto a discovered world card, there can be multiple v
   - __End-of-Stack Modal__: Complete the stack visually, then present a minimal modal to choose result. Pros: clear. Cons: modal churn if used often.
 
 • __MVP Decision__
-  - Implement a __Stat-Based Default__ heuristic now: if Fist ≥ Face and Raid is unlocked, prefer Raid; otherwise Extort. For single-purpose cards (e.g., Priest), the choice is implicit (Donate).
+  - Implement a __Stat-Based Default__ heuristic now: if Fist ≥ Face prefer Raid; otherwise Extort. For single-purpose cards (e.g., Priest), the choice is implicit (Donate).
   - Document and instrument a simple inline popup to add later for explicit choice. This keeps the loop fast today while providing a path to richer interactions.
 
 
@@ -125,38 +125,29 @@ These notes are kept short on purpose – the goal is simply to track the protot
 6. After establishing a foothold, Boss can find a way to expand into other neighborhoods, which he personally couldn't tackle, and needs to equip and prepare his gangsters to handle the new territory.
 
 
-## Discovery-Gated Actions Plan (Initial Deck)
+## World Tableau System (Initial Deck)
 
-Goal: Early-game actions are unlocked by discovering world cards via exploring the Neighborhood. Actions remain unavailable until their corresponding discovery is drawn.
+Goal: The world is represented by a unified tableau `state.table.cards`. Exploring draws cards and adds them to this tableau. Actions are available based on the card you interact with and game state, not global unlock flags.
 
 - __Decks__
-  - `neighborhood` deck with random draws and a guaranteed tail sequence. Example pool:
-    - Random pool (weighted): `corrupt_cop` (bribe cops), `priest` (donate soup), `small_crooks` (vigilantism), `hot_dog_stand` (raidable front)
-    - Guarantees (order-preserving): `recruit_face`, `recruit_fist`, `recruit_brain`, `city_entrance` (final)
-  - The last card is always `city_entrance`, which unlocks the next region/deck.
+  - `neighborhood` deck draws feed directly into `state.table.cards`.
+  - Example pool may include: `corrupt_cop` (Pay Cops), `priest` (Donate), `crooks` (Recruit Enforcers), and small businesses like `hot_dog_stand` (Extort/Raid).
 
-- __Action Gating__
-  - Donate → unlocked by `priest`
-  - Vigilante Patrol → unlocked by `small_crooks`
-  - Raid → unlocked by `hot_dog_stand`
-  - Pay Cops (bribe) → unlocked by `corrupt_cop`
-  - Hire each gangster type → enabled by drawing specific `recruit_*` cards (one-shot or persistent hire source)
+- __Action Availability__
+  - Determined contextually by the target card and stats (e.g., business → Extort or Raid by stat; priest → Donate; crooks → Recruit).
+  - No `unlockedActions` flags. Simple prereqs may still check resources/state (e.g., Build Illicit requires an available business slot).
 
 - __Explore Neighborhood__
-  - New action/block and a world card "Neighborhood" that accepts gangster drop to explore. Each completion draws from `neighborhood` and spawns a discovered card in the World area.
-  - Exploring adds a small amount of personal heat.
+  - A world card that accepts gangster drops to draw from `neighborhood` and add new cards to the tableau. Adds small personal heat.
 
-- __World/Discovery UI__
-  - New `World` area to render discovered cards (reusable or one-shot). Cards show their title, flavor, and a button or drop target to trigger the unlocked effect.
+- __World UI__
+  - The `World Area` renders `state.table.cards`. Cards display title/flavor, hints, and accept gangster drops. Some cards aggregate counts (e.g., `extorted_business`, `enforcers`).
 
 - __Persistence__
-  - Save/load `discovery` (current deck progress, discovered cards) and `unlockedActions` flags.
+  - Save/load `state.table.cards` and omit legacy discovery/unlock data.
 
 - __Progression Hook__
-  - `city_entrance` unlocks the next deck/region and can show an "Explore City" entry in World for future tiers.
-
-- __MVP Slice__
-  - Implement deck state, Explore Neighborhood, card rendering, gating flags, and recruit unlocks. Reuse existing actions where possible; only gate via prereqs.
+  - Future regions/decks can be introduced by adding new deck sources/cards without changing the gating model.
 
 ## Multi-Choice Drop Problem and Proposed Solutions
 

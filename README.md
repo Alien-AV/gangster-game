@@ -8,8 +8,13 @@ For a high level overview of the gameplay ideas, see [game-design.md](game-desig
 
 Open `index.html` in any modern web browser. No build step or server is required.
 
-You start with only the ability to extort with the boss. A successful extortion claims a block of territory without granting immediate cash. Sometimes the attempt fails, leaving you with a disagreeable owner instead of new turf. As you perform actions new options will unlock. Faces can recruit additional gangsters, brains buy new businesses and fists bring in more enforcers or raid rival businesses for fast money at the cost of heat. Fists can also intimidate disagreeable owners into paying protection, raising a new **fear** meter. The boss can perform any of these tasks. Recruited enforcers automatically patrol your territory. Progress bars show how long each action takes. Disagreeable owners steadily push heat up until you address them.
-When establishing an illicit business you are prompted to choose between money counterfeiting, drug production, illegal gambling or fencing operations.
+You interact with a world tableau of cards stored in `state.table.cards`. Drag gangsters onto world cards to act:
+
+- Boss can perform any action. Faces handle social tasks (extort, recruit), Brains handle economic tasks (buy, build, launder), Fists handle force (recruit enforcers, raid, intimidate).
+- Dropping a gangster on a business triggers either Extort or Raid, chosen by the gangster’s dominant stat (Face → Extort, Fist → Raid). Actions run with progress bars; duration scales with the relevant stat.
+- Successful Extort adds territory; failed attempts create a disagreeable owner that increases heat until handled (e.g., Intimidate). Raids yield fast dirty money and heat, and place the business on cooldown.
+- Enforcers patrol territory automatically. Heat rises from unpatrolled territory and disagreeable owners.
+- Building an illicit operation lets you choose a type (counterfeiting, drugs, gambling, fencing).
 
 This prototype intentionally uses a very minimal user interface to focus purely on testing the core gameplay loop.
 
