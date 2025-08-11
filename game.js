@@ -1,13 +1,13 @@
 // JavaScript for Gangster Game moved from index.html
 import { ACTIONS } from './actions.js';
-import { makeCard } from './card.js';
+import { makeCard, makeGangsterCard } from './card.js';
 import { Deck } from './deck.js';
 
 export class Game {
   constructor() {
     this.state = {
       time: 0,
-      cleanMoney: 0,
+      cleanMoney: 10,
       dirtyMoney: 0,
       patrol: 0,
       territory: 0,
@@ -481,11 +481,11 @@ export class Game {
     this._decks = this._decks || {};
     if (!this._decks.neighborhood) {
       this._decks.neighborhood = new Deck({
-        // Guaranteed group at the start: all three recruits drop together
-        start: [ ['recruit_face', 'recruit_fist', 'recruit_brain'] ],
-        // Shuffled middle content
+        // Guaranteed groups at the start: first the three recruits together, second the local crooks
+        start: [ ['recruit_face', 'recruit_fist', 'recruit_brain'], 'small_crooks' ],
+        // Shuffled middle content (exclude small_crooks to avoid duplicate instances)
         pool: [
-          'corrupt_cop', 'priest', 'small_crooks',
+          'corrupt_cop', 'priest',
           'hot_dog_stand', 'bakery', 'diner', 'laundromat', 'pawn_shop', 'newspaper', 'bookmaker',
         ],
         // Guaranteed end
@@ -524,11 +524,9 @@ export class Game {
       gc.className = 'card world-card' + (g.busy ? ' busy' : '');
       gc.setAttribute('draggable', g.busy ? 'false' : 'true');
       gc.dataset.gid = String(g.id);
-      const f = this.effectiveStat(g, 'face');
-      const fi = this.effectiveStat(g, 'fist');
-      const b = this.effectiveStat(g, 'brain');
-      gc.innerHTML = `<div><strong>${g.name || g.type.toUpperCase()}</strong></div>`+
-        `<div>F:${fi} Fa:${f} Br:${b}</div>`+
+      const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
+      gc.innerHTML = `<div><strong>${gCard.name}</strong></div>`+
+        `<div>${gCard.desc}</div>`+
         `<div>${g.busy ? 'Busy' : 'Drag onto world cards'}</div>`;
       gc.addEventListener('dragstart', ev => {
         if (g.busy) { ev.preventDefault(); return; }

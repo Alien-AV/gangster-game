@@ -33,3 +33,11 @@ export function makeCard(id) {
   const f = CARD_REGISTRY[id];
   return f ? f() : new Card({ id, name: id, desc: '', reusable: true, type: 'generic' });
 }
+
+// Create a Card facade for a gangster entity
+export function makeGangsterCard(g) {
+  const { id, type, name, stats = {} } = g || {};
+  const title = name || (type ? type.toUpperCase() : 'GANGSTER');
+  const desc = `F:${stats.fist ?? 0} Fa:${stats.face ?? 0} Br:${stats.brain ?? 0}`;
+  return new Card({ id: `gangster_${id}`, name: title, desc, reusable: true, type: 'gangster', data: { gid: id, type } });
+}
