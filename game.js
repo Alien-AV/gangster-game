@@ -1,5 +1,7 @@
 // JavaScript for Gangster Game moved from index.html
 import { ACTIONS } from './actions.js';
+import { makeCard } from './card.js';
+import { Deck } from './deck.js';
 
 export class Game {
   constructor() {
@@ -472,116 +474,44 @@ export class Game {
 
   // ----- Discovery / Deck System -----
   initDiscovery() {
-    if (this.state.discovery) return;
-    // Define the initial neighborhood deck
-    this.state.discovery = {
-      decks: {
-        neighborhood: {
-          id: 'neighborhood',
-          drawn: 0,
-          max: 12,
-          pool: [
-            { id: 'corrupt_cop', weight: 2, reusable: true },
-            { id: 'priest', weight: 2, reusable: true },
-            { id: 'small_crooks', weight: 2, reusable: true },
-            { id: 'hot_dog_stand', weight: 1, reusable: true },
-            { id: 'bakery', weight: 1, reusable: true },
-            { id: 'diner', weight: 1, reusable: true },
-            { id: 'laundromat', weight: 1, reusable: true },
-            { id: 'pawn_shop', weight: 1, reusable: true },
-            { id: 'newspaper', weight: 1, reusable: true },
-            { id: 'bookmaker', weight: 1, reusable: true },
-          ],
-          guarantees: ['recruit_face', 'recruit_fist', 'recruit_brain', 'city_entrance'],
-          _order: [],
-          _coverage: [], // track which pool ids have appeared this cycle
-          disabled: false,
-        },
-      },
-      currentDeckId: 'neighborhood',
-      discovered: [],
-    };
+    if (!this.state.discovery) {
+      this.state.discovery = { discovered: [] };
+    }
+    // Build runtime deck objects (not saved directly)
+    this._decks = this._decks || {};
+    if (!this._decks.neighborhood) {
+      this._decks.neighborhood = new Deck({
+        // Guaranteed group at the start: all three recruits drop together
+        start: [ ['recruit_face', 'recruit_fist', 'recruit_brain'] ],
+        // Shuffled middle content
+        pool: [
+          'corrupt_cop', 'priest', 'small_crooks',
+          'hot_dog_stand', 'bakery', 'diner', 'laundromat', 'pawn_shop', 'newspaper', 'bookmaker',
+        ],
+        // Guaranteed end
+        end: ['city_entrance'],
+      });
+    }
   }
 
   drawFromDeck(deckId) {
-    const d = this.state.discovery;
-    if (!d) return;
-    const deck = d.decks[deckId];
+    const disc = this.state.discovery;
+    if (!disc) return;
+    const deck = (this._decks || {})[deckId];
     if (!deck) return;
-    // Choose next card: ensure recruits before city_entrance
-    if (deck.disabled) return;
-    if (deck.drawn >= deck.max) return;
-    const discoveredIds = new Set((d.discovered || []).map(x => x.id));
-    let cardId = null;
-
-    // 1) Non-entrance guarantee first
-    if (Array.isArray(deck.guarantees) && deck.guarantees.length) {
-      const gi = deck.guarantees.findIndex(id => id !== 'city_entrance' && !discoveredIds.has(id));
-      if (gi !== -1) cardId = deck.guarantees.splice(gi, 1)[0];
-    }
-    // 2) Last draw -> entrance
-    if (!cardId && Array.isArray(deck.guarantees) && deck.guarantees.includes('city_entrance') && deck.drawn === deck.max - 1) {
-      const ei = deck.guarantees.indexOf('city_entrance');
-      if (ei !== -1) deck.guarantees.splice(ei, 1);
-      cardId = 'city_entrance';
-    }
-    // 3) Weighted pool with coverage: ensure each unique id appears once before repeats
-    if (!cardId) {
-      const cov = Array.isArray(deck._coverage) ? deck._coverage : (deck._coverage = []);
-      const covered = new Set(cov);
-      // candidates are those not yet covered in this cycle
-      let candidates = deck.pool.filter(it => !covered.has(it.id));
-      if (candidates.length === 0) {
-        // reset cycle
-        deck._coverage = [];
-        candidates = deck.pool.slice();
-      }
-      // avoid duplicate non-reusable across whole discovery set
-      candidates = candidates.filter(it => it.reusable || !discoveredIds.has(it.id));
-      if (candidates.length === 0) candidates = deck.pool.slice();
-      const totalW = candidates.reduce((s, it) => s + (it.weight || 1), 0);
-      let r = Math.random() * Math.max(1, totalW);
-      for (const it of candidates) {
-        r -= (it.weight || 1);
-        if (r <= 0) { cardId = it.id; break; }
-      }
-      if (!cardId && candidates[0]) cardId = candidates[0].id;
-      // mark covered
-      if (cardId && !covered.has(cardId)) deck._coverage.push(cardId);
-    }
-
-    deck.drawn += 1;
-    // Materialize discovery and unlock if applicable
-    const meta = this.discoveryMeta(cardId);
-    d.discovered.push({ id: cardId, title: meta.title, desc: meta.desc, reusable: meta.reusable, used: false, data: meta.data || {} });
-    // Discovery unlocks removed; world cards themselves represent actions
-    // If city entrance drawn: disable neighborhood deck afterwards
-    if (cardId === 'city_entrance') { deck.disabled = true; }
-    if (deck.drawn >= deck.max) { deck.disabled = true; }
-    // Immediately reflect the new discovery on screen
+    if (!deck.hasMore()) return;
+    const batch = deck.draw(); // array of ids (grouped multi-pull) or null
+    if (!batch || !batch.length) return;
+    batch.forEach(id => {
+      const card = makeCard(id);
+      disc.discovered.push(card);
+    });
+    // Reflect immediately
     this.renderWorld();
     this.updateUI();
   }
 
-  discoveryMeta(id) {
-    const map = {
-      corrupt_cop: { title: 'Local Corrupt Cop', desc: 'A familiar face on the beat. Can arrange favors for a price.', reusable: true },
-      priest: { title: 'Priest at the Church', desc: 'Donations improve your reputation in the neighborhood.', reusable: true },
-      small_crooks: { title: 'Small-time Crooks', desc: 'Can be swayed to patrol for you.', reusable: true },
-      hot_dog_stand: { title: 'Hot-dog Stand', desc: 'A flimsy front ripe for a shake-down.', reusable: true },
-      bakery: { title: 'Corner Bakery', desc: 'Busy mornings. Might pay for protection.', reusable: false },
-      diner: { title: 'Mom-and-Pop Diner', desc: 'Cash business with regulars.', reusable: false },
-      laundromat: { title: 'Neighborhood Laundromat', desc: 'Steady quarters, soft targets.', reusable: false },
-      pawn_shop: { title: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false },
-      newspaper: { title: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false },
-      bookmaker: { title: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true },
-      recruit_face: { title: 'Potential Recruit: Face', desc: 'A smooth talker looking for work. Hire when you have cash.', reusable: false, data: { type: 'face' } },
-      recruit_fist: { title: 'Potential Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, data: { type: 'fist' } },
-      recruit_brain: { title: 'Potential Recruit: Brain', desc: 'A planner who knows the angles.', reusable: false, data: { type: 'brain' } },
-      city_entrance: { title: 'City Entrance', desc: 'A path into the wider city opens. New opportunities await.', reusable: false },
-    };
-    return map[id] || { title: id, desc: '', reusable: true };
-  }
+  // discoveryMeta replaced by Card registry (makeCard)
 
   renderWorld() {
     const el = document.getElementById('worldArea');
@@ -611,8 +541,8 @@ export class Game {
     const exploreCard = document.createElement('div');
     exploreCard.className = 'card world-card';
     const d = this.state.discovery;
-    const deck = d && d.decks && d.decks.neighborhood;
-    const disabled = !deck || deck.disabled || (deck.drawn >= deck.max);
+    const ndeck = (this._decks || {}).neighborhood;
+    const disabled = !ndeck || !ndeck.hasMore();
     exploreCard.style.opacity = disabled ? '0.5' : '1.0';
     exploreCard.innerHTML = '<div><strong>Neighborhood</strong></div>' +
       (disabled ? '<div>Deck exhausted</div>' : '<div>Drop a gangster to explore</div>');
@@ -643,9 +573,9 @@ export class Game {
       if (item.used && !item.reusable) return;
       const c = document.createElement('div');
       c.className = 'card world-card';
-      let body = `<div><strong>${item.title}</strong></div><div>${item.desc}</div>`;
-      // Recruit: drop to hire
-      if (item.id && item.id.startsWith('recruit_') && !item.used) {
+      let body = `<div><strong>${item.name || item.title || item.id}</strong></div><div>${item.desc || ''}</div>`;
+      // Type-based behaviors to remove per-id duplication
+      if (item.type === 'recruit' && !item.used) {
         const price = this.gangsterCost();
         body += `<div style="margin-top:6px;color:#888">Drop any gangster here to hire for $${price}</div>`;
         c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
@@ -666,7 +596,8 @@ export class Game {
           const act = { id: 'actHireFromDiscovery', label: 'Hire Gangster', stat: 'face', base: 3000,
             cost: costFn,
             effect: (game) => {
-              const newG = { id: game.state.nextGangId++, type: item.data.type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(item.data.type) };
+              const t = item.data && item.data.type ? item.data.type : 'face';
+              const newG = { id: game.state.nextGangId++, type: t, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(t) };
               game.state.gangsters.push(newG);
               item.used = true;
             }
@@ -677,7 +608,7 @@ export class Game {
         });
       }
       // Priest: drop to donate (repeatable)
-      if (item.id === 'priest') {
+      if (item.type === 'priest') {
         body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster here to Donate</div>`;
         c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
         c.addEventListener('dragleave', () => c.classList.remove('highlight'));
@@ -696,8 +627,8 @@ export class Game {
           if (!ok) this._cardMsg('Cannot donate.');
         });
       }
-      // Small-time Crooks: recruit into enforcers (Face-based, repeatable)
-      if (item.id === 'small_crooks') {
+      // Crooks: recruit into enforcers (Face-based, repeatable)
+      if (item.type === 'crooks') {
         body += `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers</div>`;
         c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
         c.addEventListener('dragleave', () => c.classList.remove('highlight'));
@@ -716,8 +647,8 @@ export class Game {
           if (!ok) this._cardMsg('Cannot recruit.');
         });
       }
-      // Corrupt Cop: pay cops (repeatable)
-      if (item.id === 'corrupt_cop') {
+      // Cop: pay cops (repeatable)
+      if (item.type === 'cop') {
         body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Pay Off Cops</div>`;
         c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
         c.addEventListener('dragleave', () => c.classList.remove('highlight'));
@@ -737,41 +668,8 @@ export class Game {
         });
       }
       // Businesses: Extort or Raid. After Extort: disable permanently. After Raid: long cooldown.
-      if (item.id === 'hot_dog_stand') {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const now = this.state.time || 0;
-          if (item.extorted) { this._cardMsg('This business has already been extorted.'); return; }
-          if (item.cooldownUntil && now < item.cooldownUntil) { this._cardMsg('Business is recovering after a raid.'); return; }
-          const face = this.effectiveStat(g, 'face');
-          const brain = this.effectiveStat(g, 'brain');
-          const fist = this.effectiveStat(g, 'fist');
-          const canRaid = !!(this.state.unlockedActions && this.state.unlockedActions.raid);
-          const preferRaid = canRaid && (fist >= Math.max(face, brain));
-          const actId = preferRaid ? 'actRaid' : 'actExtort';
-          const baseAct = (ACTIONS || []).find(a => a.id === actId);
-          if (!baseAct) return;
-          const act = { ...baseAct, effect: (game, gg) => {
-            baseAct.effect(game, gg);
-            if (actId === 'actExtort') { item.extorted = true; }
-            if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; }
-          } };
-          const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot act on business.');
-        });
-      }
-      // Additional local businesses: extort/raid same heuristic
-      if (['bakery','diner','laundromat'].includes(item.id)) {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`;
+      if (['hot_dog_stand', 'bakery', 'diner', 'laundromat'].includes(item.id)) {
+        body += `<div style="margin-top:6px;color:#888">Drop a gangster to Extort or Raid</div>`;
         c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
         c.addEventListener('dragleave', () => c.classList.remove('highlight'));
         c.addEventListener('drop', ev => {
