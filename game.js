@@ -567,79 +567,46 @@ export class Game {
 
     // Discovered cards list
     const disc = (this.state.discovery && this.state.discovery.discovered) || [];
-    disc.forEach(item => {
-      if (item.used && !item.reusable) return;
-      const c = document.createElement('div');
-      c.className = 'card world-card';
-      let body = `<div><strong>${item.name || item.title || item.id}</strong></div><div>${item.desc || ''}</div>`;
-      // Type-based behaviors to remove per-id duplication
-      if (item.type === 'recruit' && !item.used) {
-        const price = this.gangsterCost();
-        body += `<div style="margin-top:6px;color:#888">Drop any gangster here to hire for $${price}</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const src = this.state.gangsters.find(x => x.id === gid);
-          if (!src || src.busy) return;
-          const costFn = (game) => {
-            const cst = game.gangsterCost ? game.gangsterCost() : 0;
-            if (game.totalMoney() < cst) return false;
-            game.spendMoney(cst);
-            return true;
-          };
-          const act = { id: 'actHireFromDiscovery', label: 'Hire Gangster', stat: 'face', base: 3000,
-            cost: costFn,
-            effect: (game) => {
-              const t = item.data && item.data.type ? item.data.type : 'face';
-              const newG = { id: game.state.nextGangId++, type: t, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(t) };
-              game.state.gangsters.push(newG);
-              item.used = true;
-            }
-          };
-          const dur = this.durationWithStat(act.base, act.stat, src);
-          const ok = this.executeAction(act, src, prog, dur);
-          if (!ok) this._cardMsg('Cannot hire.');
-        });
-      }
-      // Priest: drop to donate (repeatable)
-      if (item.type === 'priest') {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster here to Donate</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const baseAct = (ACTIONS || []).find(a => a.id === 'actDonate');
+
+    // Helper to attach standard DnD listeners
+    const attachDrop = (cardEl, onDrop, prog) => {
+      cardEl.addEventListener('dragover', ev => { ev.preventDefault(); cardEl.classList.add('highlight'); });
+      cardEl.addEventListener('dragleave', () => cardEl.classList.remove('highlight'));
+      cardEl.addEventListener('drop', ev => {
+        ev.preventDefault();
+        cardEl.classList.remove('highlight');
+        const idStr = ev.dataTransfer.getData('text/plain');
+        const gid = parseInt(idStr, 10);
+        const g = this.state.gangsters.find(x => x.id === gid);
+        if (!g || g.busy) return;
+        onDrop(g, prog);
+      });
+    };
+
+    // Declarative behaviors for discovered cards
+    const getDropBehavior = (item) => {
+      // Simple action by id helper
+      const simple = (opts) => ({
+        hint: opts.hint,
+        handler: (g, prog) => {
+          const baseAct = (ACTIONS || []).find(a => a.id === opts.actId);
           if (!baseAct) return;
-          const act = { ...baseAct };
+          const act = { ...baseAct, ...(opts.patch || {}) };
+          if (prog) prog.style.display = 'block';
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot donate.');
-        });
-      }
-      // Crooks: recruit into enforcers (Face-based, repeatable)
-      if (item.type === 'crooks') {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
+          if (!ok) this._cardMsg(opts.failMsg || 'Cannot act.');
+        }
+      });
+      // Map by item.type or id
+      if (item.type === 'priest') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster here to Donate</div>`, actId: 'actDonate', failMsg: 'Cannot donate.' });
+      if (item.type === 'cop') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Pay Off Cops</div>`, actId: 'actPayCops', failMsg: 'Cannot pay cops.' });
+      if (item.type === 'crooks') return {
+        hint: `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers</div>`,
+        handler: (g, prog) => {
           const baseAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
           if (!baseAct) return;
-          const act = { ...baseAct, id:'actRecruitCrooks', label:'Recruit Local Crooks', stat:'face',
+          const act = { ...baseAct, id: 'actRecruitCrooks', label: 'Recruit Local Crooks', stat: 'face',
             effect: (game, gg) => {
               baseAct.effect(game, gg);
               const discArr = (game.state.discovery && game.state.discovery.discovered) || [];
@@ -648,45 +615,16 @@ export class Game {
               ef.data = ef.data || {}; ef.data.count = (ef.data.count || 0) + 1;
             }
           };
+          if (prog) prog.style.display = 'block';
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
           if (!ok) this._cardMsg('Cannot recruit.');
-        });
-      }
-      // Cop: pay cops (repeatable)
-      if (item.type === 'cop') {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Pay Off Cops</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const baseAct = (ACTIONS || []).find(a => a.id === 'actPayCops');
-          if (!baseAct) return;
-          const act = { ...baseAct };
-          const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot pay cops.');
-        });
-      }
-      // Businesses: Extort or Raid. After Extort: disable permanently. After Raid: long cooldown.
-      if (['hot_dog_stand', 'bakery', 'diner', 'laundromat'].includes(item.id)) {
-        body += `<div style="margin-top:6px;color:#888">Drop a gangster to Extort or Raid</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
+        }
+      };
+      if (['hot_dog_stand', 'bakery', 'diner', 'laundromat'].includes(item.id)) return {
+        hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`,
+        handler: (g, prog) => {
           const now = this.state.time || 0;
-          if (item.extorted) { this._cardMsg('This business has already been extorted.'); return; }
           if (item.cooldownUntil && now < item.cooldownUntil) { this._cardMsg('Business is recovering after a raid.'); return; }
           const face = this.effectiveStat(g, 'face');
           const brain = this.effectiveStat(g, 'brain');
@@ -699,7 +637,7 @@ export class Game {
           const act = { ...baseAct, effect: (game, gg) => {
             baseAct.effect(game, gg);
             if (actId === 'actExtort') {
-              // Replace this business with the Extorted Businesses counter card in-place
+              // Replace business with counter card in-place
               const discArr = (game.state.discovery && game.state.discovery.discovered) || [];
               const idx = discArr.indexOf(item);
               let xb = discArr.find(x => x.id === 'extorted_business');
@@ -708,26 +646,38 @@ export class Game {
                 xb.data = xb.data || {}; xb.data.count = 1;
                 if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
               } else {
-                // Increment and move the existing counter card to this position
                 xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
                 if (idx >= 0) {
-                  // Remove the business at idx
                   discArr.splice(idx, 1);
                   const oldIdx = discArr.indexOf(xb);
-                  if (oldIdx >= 0) {
-                    // Remove xb and insert at the original business index
-                    discArr.splice(oldIdx, 1);
-                    discArr.splice(idx, 0, xb);
-                  }
+                  if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
                 }
               }
             }
             if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; }
           } };
+          if (prog) prog.style.display = 'block';
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
           if (!ok) this._cardMsg('Cannot act on business.');
-        });
+        }
+      };
+      if (item.id === 'newspaper') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to run a Promo Campaign</div>`, actId: 'actPromo', failMsg: 'Cannot run promo.' });
+      if (item.id === 'pawn_shop') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Procure Equipment</div>`, actId: 'actProcureEquipment', failMsg: 'Cannot procure equipment.' });
+      if (item.id === 'bookmaker') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a Brain to Launder $100</div>`, actId: 'actLaunder', failMsg: 'Cannot launder.' });
+      return null;
+    };
+
+    disc.forEach(item => {
+      if (item.used && !item.reusable) return;
+      const c = document.createElement('div');
+      c.className = 'card world-card';
+      let body = `<div><strong>${item.name || item.title || item.id}</strong></div><div>${item.desc || ''}</div>`;
+      // Type-based behaviors to remove per-id duplication
+      // Attach declarative drop behavior, if any
+      const behavior = getDropBehavior(item);
+      if (behavior) {
+        if (behavior.hint) body += behavior.hint;
       }
       // Counter cards: Enforcers and Extorted Businesses (display counts)
       if (item.id === 'enforcers') {
@@ -738,71 +688,17 @@ export class Game {
         const count = (item.data && item.data.count) || 0;
         body = `<div><strong>${item.name}</strong></div><div>Protection owed: ${count}</div>`;
       }
-      // Newspaper: promotional campaign (repeatable)
-      if (item.id === 'newspaper') {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to run a Promo Campaign</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const baseAct = (ACTIONS || []).find(a => a.id === 'actPromo');
-          if (!baseAct) return;
-          const act = { ...baseAct };
-          const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot run promo.');
-        });
-      }
-      // Pawn Shop: procure equipment (repeatable)
-      if (item.id === 'pawn_shop') {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Procure Equipment</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const baseAct = (ACTIONS || []).find(a => a.id === 'actProcureEquipment');
-          if (!baseAct) return;
-          const act = { ...baseAct };
-          const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot procure equipment.');
-        });
-      }
-      // Bookmaker: launder money (repeatable)
-      if (item.id === 'bookmaker') {
-        body += `<div style=\"margin-top:6px;color:#888\">Drop a Brain to Launder $100</div>`;
-        c.addEventListener('dragover', ev => { ev.preventDefault(); c.classList.add('highlight'); });
-        c.addEventListener('dragleave', () => c.classList.remove('highlight'));
-        c.addEventListener('drop', ev => {
-          ev.preventDefault();
-          c.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const baseAct = (ACTIONS || []).find(a => a.id === 'actLaunder');
-          if (!baseAct) return;
-          const act = { ...baseAct };
-          const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot launder.');
-        });
-      }
       c.innerHTML = body;
       // Per-card progress bar
       const prog = document.createElement('div');
       prog.className = 'progress';
+      prog.style.display = 'none';
+      prog.innerHTML = '<div class="bar"></div>';
       c.appendChild(prog);
+      // Attach declarative behavior listeners now that prog exists
+      if (behavior) {
+        attachDrop(c, behavior.handler, prog);
+      }
       // Show disabled/cooldown state
       if (['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) {
         const now = this.state.time || 0;
