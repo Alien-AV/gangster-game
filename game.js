@@ -27,7 +27,6 @@ export class Game {
       nextGangId: 1,
       nextEquipId: 1,
       salaryTick: 0,
-      unlockedActions: { },
       discovery: null,
     };
     // Chance that an extortion attempt results in a disagreeable owner (used by actions.js)
@@ -82,6 +81,8 @@ export class Game {
 
     // Initialize discovery/deck system
     this.initDiscovery();
+    // Initial world paint
+    this.renderWorld();
 
     // Global drag state to prevent world re-render flicker while hovering over droppables
     const self = this;
@@ -91,9 +92,14 @@ export class Game {
     });
     document.addEventListener('dragend', function onAnyDragEnd() {
       self._dragCount = Math.max(0, (self._dragCount || 1) - 1);
-      if (!self._dragCount) self._isDragging = false;
+      if (!self._dragCount) {
+        self._isDragging = false;
+        // No special scheduling; renders are immediate elsewhere
+      }
     });
   }
+
+  // Actions panel removed; world is the single panel
 
   // Equipment selection (Procure Equipment)
   showEquipmentSelection(callback) {
@@ -164,7 +170,6 @@ export class Game {
       inventory: s.inventory || [],
       nextEquipId: s.nextEquipId || 1,
       salaryTick: s.salaryTick,
-      unlockedActions: s.unlockedActions || {},
       discovery: s.discovery || null,
     };
   }
@@ -197,7 +202,7 @@ export class Game {
       if (typeof this.state.nextEquipId !== 'number') this.state.nextEquipId = data.nextEquipId || 1;
       // Ensure Boss exists
       if (!this.state.gangsters.some(x => x.type === 'boss')) {
-        const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2, meat: 0 } };
+        const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
         this.state.gangsters.unshift(bossGang);
       }
       // Reset modal queues and refresh UI
@@ -205,7 +210,6 @@ export class Game {
       this._illicitSelect = { queue: [], active: false };
       this._equipSelect = { queue: [], active: false };
       this.renderCards();
-      this.renderActionBlocks();
       console.debug('[LoadSlot] after renderCards, state:', this.state);
       this.updateUI();
       alert(`Loaded slot ${n}`);
@@ -231,10 +235,10 @@ export class Game {
     this.updateUI();
     // Keep card UI in sync
     this.renderCards();
-    this.renderActionBlocks();
+    // Removed actions panel
     // Ensure Boss exists as a normal gangster with special stats/name
     if (!this.state.gangsters.some(g => g.type === 'boss')) {
-      const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2, meat: 0 } };
+      const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
       this.state.gangsters.unshift(bossGang);
     }
     // Ensure discovery exists
@@ -327,11 +331,8 @@ export class Game {
     document.getElementById('drugCount').textContent = s.illicitCounts.drugs;
     document.getElementById('gamblingCount').textContent = s.illicitCounts.gambling;
     document.getElementById('fencingCount').textContent = s.illicitCounts.fencing;
-    // Card UI only; avoid rendering legacy button UI
+    // Card UI only for inventory; gangsters now live in world
     this.renderCards();
-    if (!this._suspendWorldRender) {
-      this.renderWorld();
-    }
     this.saveState();
   }
 
@@ -463,17 +464,14 @@ export class Game {
   initCardUI() {
     this.cardEls = {
       cardsArea: document.getElementById('cardsArea'),
-      actionsArea: document.getElementById('actionsArea'),
       msg: document.getElementById('cardMessages'),
     };
-    if (!this.cardEls.cardsArea || !this.cardEls.actionsArea) return;
-    this.renderActionBlocks();
+    if (!this.cardEls.cardsArea) return;
     this.renderCards();
   }
 
   // ----- Discovery / Deck System -----
   initDiscovery() {
-    if (!this.state.unlockedActions) this.state.unlockedActions = {};
     if (this.state.discovery) return;
     // Define the initial neighborhood deck
     this.state.discovery = {
@@ -496,6 +494,7 @@ export class Game {
           ],
           guarantees: ['recruit_face', 'recruit_fist', 'recruit_brain', 'city_entrance'],
           _order: [],
+          _coverage: [], // track which pool ids have appeared this cycle
           disabled: false,
         },
       },
@@ -509,54 +508,57 @@ export class Game {
     if (!d) return;
     const deck = d.decks[deckId];
     if (!deck) return;
-    // Decide next card (avoid duplicates for non-reusable discoveries)
-    let cardId = null;
+    // Choose next card: ensure recruits before city_entrance
     if (deck.disabled) return;
-    const isFinal = deck.drawn >= (deck.max - 1);
-    if (isFinal && deck.guarantees.length) {
-      cardId = deck.guarantees[deck.guarantees.length - 1];
-    } else if (deck.guarantees.length && deck.drawn < deck.max - deck.guarantees.length) {
-      // draw from a pre-shuffled pool order (excluding already discovered non-reusables)
-      const discoveredIds = new Set((d.discovered || []).map(it => it.id));
-      if (!Array.isArray(deck._order) || deck._order.length === 0) {
-        // expand by weight and shuffle
-        const expanded = [];
-        deck.pool.forEach(it => { for (let i=0;i<(it.weight||1);i++) expanded.push(it.id); });
-        for (let i = expanded.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [expanded[i], expanded[j]] = [expanded[j], expanded[i]];
-        }
-        deck._order = expanded;
-      }
-      // find next suitable id
-      while (deck._order.length && !cardId) {
-        const cand = deck._order.shift();
-        const meta = this.discoveryMeta(cand);
-        if (meta.reusable || !discoveredIds.has(cand)) cardId = cand;
-      }
-      // fallback
-      if (!cardId) {
-        const pool = deck.pool;
-        const totalW = pool.reduce((s, it) => s + (it.weight || 1), 0);
-        let r = Math.random() * totalW;
-        for (const it of pool) { r -= (it.weight || 1); if (r <= 0) { cardId = it.id; break; } }
-        if (!cardId && pool[0]) cardId = pool[0].id;
-      }
-    } else {
-      // take next guarantee (not final)
-      const idx = deck.max - deck.drawn - 1; // distance from end
-      const gIdx = Math.max(0, deck.guarantees.length - idx);
-      cardId = deck.guarantees[Math.min(deck.guarantees.length - 1, gIdx)];
+    if (deck.drawn >= deck.max) return;
+    const discoveredIds = new Set((d.discovered || []).map(x => x.id));
+    let cardId = null;
+
+    // 1) Non-entrance guarantee first
+    if (Array.isArray(deck.guarantees) && deck.guarantees.length) {
+      const gi = deck.guarantees.findIndex(id => id !== 'city_entrance' && !discoveredIds.has(id));
+      if (gi !== -1) cardId = deck.guarantees.splice(gi, 1)[0];
     }
+    // 2) Last draw -> entrance
+    if (!cardId && Array.isArray(deck.guarantees) && deck.guarantees.includes('city_entrance') && deck.drawn === deck.max - 1) {
+      const ei = deck.guarantees.indexOf('city_entrance');
+      if (ei !== -1) deck.guarantees.splice(ei, 1);
+      cardId = 'city_entrance';
+    }
+    // 3) Weighted pool with coverage: ensure each unique id appears once before repeats
+    if (!cardId) {
+      const cov = Array.isArray(deck._coverage) ? deck._coverage : (deck._coverage = []);
+      const covered = new Set(cov);
+      // candidates are those not yet covered in this cycle
+      let candidates = deck.pool.filter(it => !covered.has(it.id));
+      if (candidates.length === 0) {
+        // reset cycle
+        deck._coverage = [];
+        candidates = deck.pool.slice();
+      }
+      // avoid duplicate non-reusable across whole discovery set
+      candidates = candidates.filter(it => it.reusable || !discoveredIds.has(it.id));
+      if (candidates.length === 0) candidates = deck.pool.slice();
+      const totalW = candidates.reduce((s, it) => s + (it.weight || 1), 0);
+      let r = Math.random() * Math.max(1, totalW);
+      for (const it of candidates) {
+        r -= (it.weight || 1);
+        if (r <= 0) { cardId = it.id; break; }
+      }
+      if (!cardId && candidates[0]) cardId = candidates[0].id;
+      // mark covered
+      if (cardId && !covered.has(cardId)) deck._coverage.push(cardId);
+    }
+
     deck.drawn += 1;
     // Materialize discovery and unlock if applicable
     const meta = this.discoveryMeta(cardId);
     d.discovered.push({ id: cardId, title: meta.title, desc: meta.desc, reusable: meta.reusable, used: false, data: meta.data || {} });
-    this.applyDiscoveryUnlock(cardId);
+    // Discovery unlocks removed; world cards themselves represent actions
     // If city entrance drawn: disable neighborhood deck afterwards
-    if (cardId === 'city_entrance') {
-      deck.disabled = true;
-    }
+    if (cardId === 'city_entrance') { deck.disabled = true; }
+    if (deck.drawn >= deck.max) { deck.disabled = true; }
+    // Immediately reflect the new discovery on screen
     this.renderWorld();
     this.updateUI();
   }
@@ -581,34 +583,46 @@ export class Game {
     return map[id] || { title: id, desc: '', reusable: true };
   }
 
-  applyDiscoveryUnlock(id) {
-    const ua = this.state.unlockedActions;
-    if (id === 'corrupt_cop') ua.payCops = true;
-    if (id === 'priest') ua.donate = true;
-    if (id === 'small_crooks') ua.vigilante = true;
-    if (id === 'hot_dog_stand') ua.raid = true;
-    if (id === 'city_entrance') {
-      this.state.regionTier = Math.max(1, this.state.regionTier || 0);
-    }
-  }
-
-  // Render world area with Neighborhood card and discovered cards
   renderWorld() {
-    // Avoid rebuilding droppable cards while dragging; this causes highlight flicker
-    if (this._isDragging) return;
     const el = document.getElementById('worldArea');
     if (!el) return;
     el.innerHTML = '';
+    // Render all gangsters as normal world cards (no separate zone)
+    (this.state.gangsters || []).forEach(g => {
+      this._ensureGangsterStats(g);
+      const gc = document.createElement('div');
+      gc.className = 'card world-card' + (g.busy ? ' busy' : '');
+      gc.setAttribute('draggable', g.busy ? 'false' : 'true');
+      gc.dataset.gid = String(g.id);
+      const f = this.effectiveStat(g, 'face');
+      const fi = this.effectiveStat(g, 'fist');
+      const b = this.effectiveStat(g, 'brain');
+      gc.innerHTML = `<div><strong>${g.name || g.type.toUpperCase()}</strong></div>`+
+        `<div>F:${fi} Fa:${f} Br:${b}</div>`+
+        `<div>${g.busy ? 'Busy' : 'Drag onto world cards'}</div>`;
+      gc.addEventListener('dragstart', ev => {
+        if (g.busy) { ev.preventDefault(); return; }
+        ev.dataTransfer.setData('text/plain', String(g.id));
+        ev.dataTransfer.effectAllowed = 'move';
+      });
+      el.appendChild(gc);
+    });
     // Neighborhood explore card (drop gangster to explore)
     const exploreCard = document.createElement('div');
     exploreCard.className = 'card world-card';
-    exploreCard.innerHTML = '<div><strong>Neighborhood</strong></div><div>Drop a gangster to explore</div>';
+    const d = this.state.discovery;
+    const deck = d && d.decks && d.decks.neighborhood;
+    const disabled = !deck || deck.disabled || (deck.drawn >= deck.max);
+    exploreCard.style.opacity = disabled ? '0.5' : '1.0';
+    exploreCard.innerHTML = '<div><strong>Neighborhood</strong></div>' +
+      (disabled ? '<div>Deck exhausted</div>' : '<div>Drop a gangster to explore</div>');
     const exploreProg = document.createElement('div');
     exploreProg.className = 'progress';
     exploreCard.appendChild(exploreProg);
-    exploreCard.addEventListener('dragover', ev => { ev.preventDefault(); exploreCard.classList.add('highlight'); });
+    exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
     exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
     exploreCard.addEventListener('drop', ev => {
+      if (disabled) return;
       ev.preventDefault();
       exploreCard.classList.remove('highlight');
       const idStr = ev.dataTransfer.getData('text/plain');
@@ -858,9 +872,11 @@ export class Game {
         const now = this.state.time || 0;
         if (item.extorted) {
           const badge = document.createElement('div'); badge.style.color = '#f88'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
+          item._badgeEl = badge;
         } else if (item.cooldownUntil && now < item.cooldownUntil) {
           const remain = item.cooldownUntil - now;
           const badge = document.createElement('div'); badge.style.color = '#ff8'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
+          item._badgeEl = badge;
         }
       }
       el.appendChild(c);
@@ -872,51 +888,7 @@ export class Game {
     if (!area) return;
     const s = this.state;
     area.innerHTML = '';
-    // Render all gangsters uniformly
-    s.gangsters.forEach(g => {
-      this._ensureGangsterStats(g);
-      const el = document.createElement('div');
-      el.className = 'card' + (g.busy ? ' busy' : '');
-      el.setAttribute('draggable', g.busy ? 'false' : 'true');
-      el.dataset.gid = String(g.id);
-      const stats = {
-        face: this.effectiveStat(g, 'face'),
-        fist: this.effectiveStat(g, 'fist'),
-        brain: this.effectiveStat(g, 'brain'),
-        meat: this.effectiveStat(g, 'meat'),
-      };
-      const title = g.name ? g.name : `${g.type.toUpperCase()} #${g.id}`;
-      el.innerHTML = `<div><strong>${title}</strong></div>
-    <div>Heat: ${g.personalHeat || 0}</div>
-    <div>F:${stats.fist} Fa:${stats.face} Br:${stats.brain} M:${stats.meat}</div>
-    <div class="eq">Eq: ${(g.equipped||[]).map(it=>it.type).join(', ') || '-'}</div>`;
-      el.addEventListener('dragstart', ev => {
-        if (g.busy) { ev.preventDefault(); return; }
-        ev.dataTransfer.setData('text/plain', String(g.id));
-        ev.dataTransfer.effectAllowed = 'move';
-      });
-      // Make gangster cards droppable for equipment
-      el.addEventListener('dragover', ev => { ev.preventDefault(); el.classList.add('highlight'); });
-      el.addEventListener('dragleave', () => el.classList.remove('highlight'));
-      el.addEventListener('drop', ev => {
-        ev.preventDefault();
-        el.classList.remove('highlight');
-        const data = ev.dataTransfer.getData('text/plain') || '';
-        if (!data.startsWith('equip:')) return; // ignore non-equipment drops here
-        const eqId = parseInt(data.slice(6), 10);
-        const idx = this.state.inventory.findIndex(it => it.id === eqId);
-        if (idx === -1) { this._cardMsg('Item not found'); return; }
-        const item = this.state.inventory[idx];
-        // Enforce one-per-type constraint
-        if ((g.equipped || []).some(it => it.type === item.type)) { this._cardMsg('Already equipped'); return; }
-        g.equipped.push(item);
-        // remove from inventory
-        this.state.inventory.splice(idx, 1);
-        this.renderCards();
-        this.updateUI();
-      });
-      area.appendChild(el);
-    });
+    // Do not render gangsters here; they live in the world panel now
 
     // Render equipment inventory as cards
     (s.inventory || []).forEach(it => {
@@ -936,47 +908,7 @@ export class Game {
     });
   }
 
-  renderActionBlocks() {
-    const area = this.cardEls && this.cardEls.actionsArea;
-    if (!area) return;
-    area.innerHTML = '';
-    const blocks = ACTIONS;
-    blocks.forEach(b => {
-      const el = document.createElement('div');
-      el.className = 'action-block';
-      el.style.overflow = 'hidden';
-      el.style.position = 'relative';
-      const title = document.createElement('div');
-      title.className = 'name';
-      title.textContent = b.label;
-      title.style.textAlign = 'center';
-      title.style.fontWeight = '600';
-      title.style.marginBottom = '6px';
-      const prog = document.createElement('div');
-      prog.className = 'progress progress-stack';
-      prog.style.width = '100%';
-      prog.style.position = 'relative';
-      prog.style.display = 'flex';
-      prog.style.flexDirection = 'column';
-      prog.style.gap = '4px';
-      el.appendChild(title);
-      el.appendChild(prog);
-      el.addEventListener('dragover', ev => { ev.preventDefault(); el.classList.add('highlight'); });
-      el.addEventListener('dragleave', () => el.classList.remove('highlight'));
-      el.addEventListener('drop', ev => {
-        ev.preventDefault();
-        el.classList.remove('highlight');
-        const idStr = ev.dataTransfer.getData('text/plain');
-        const gid = parseInt(idStr, 10);
-        const g = this.state.gangsters.find(x => x.id === gid);
-        if (!g || g.busy) return;
-        const dur = this.durationWithStat(b.base, b.stat, g);
-        const ok = this.executeAction(b, g, prog, dur);
-        if (!ok) this._cardMsg('Cannot start action.');
-      });
-      area.appendChild(el);
-    });
-  }
+  // Actions panel removed
 
   _cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
 
@@ -1034,7 +966,7 @@ export class Game {
         // Resume world render if this is the last active work
         this._suspendWorldRender = Math.max(0, (this._suspendWorldRender || 1) - 1);
         this.renderCards();
-        if (!this._suspendWorldRender) this.renderWorld();
+        this.renderWorld();
         this.updateUI();
       }
     });
@@ -1105,13 +1037,26 @@ export class Game {
       s.salaryTick = 0;
       this.paySalaries();
     }
+    // Update cooldown badges in-place to avoid full world re-render flicker
+    const disc = (this.state.discovery && this.state.discovery.discovered) || [];
+    const now = s.time || 0;
+    disc.forEach(item => {
+      if (!['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) return;
+      if (item.extorted) return; // permanently disabled; static badge
+      if (item.cooldownUntil && now < item.cooldownUntil) {
+        const remain = item.cooldownUntil - now;
+        if (item._badgeEl) item._badgeEl.textContent = `Recovering (${remain}s)`;
+      } else if (item.cooldownUntil && now >= item.cooldownUntil) {
+        // Cooldown ended; remove badge and mark world dirty for a clean state
+        item.cooldownUntil = 0;
+        if (item._badgeEl) { try { item._badgeEl.remove(); } catch(e){} item._badgeEl = null; }
+        this.renderWorld();
+      }
+    });
     this.updateUI();
   }
-
-  _cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
-
+  
   executeAction(action, g, progEl, durMs) {
-    // Pass-through for legacy handlers while we refactor
     if (action && typeof action.handler === 'function') {
       return action.handler(this, g, progEl, durMs);
     }
