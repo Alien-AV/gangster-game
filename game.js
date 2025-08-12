@@ -324,40 +324,72 @@ export class Game {
       this.updateUI();
       return;
     }
-    const stacked = container.classList.contains('progress-stack');
+    // Detect ring-only mode: container can be the card itself
+    const isCard = container.classList && container.classList.contains('world-card');
+    // Find the card element to toggle ring animation and update --p
+    let cardEl = isCard ? container : (container.closest && container.closest('.world-card'));
+    const ringWrap = cardEl ? cardEl.parentElement : null;
+    if (ringWrap && ringWrap.classList.contains('ring-wrap')) {
+      try { ringWrap.classList.add('ring-active'); } catch(e){}
+      // Add a left badge for remaining seconds
+      let leftBadge = cardEl.querySelector('.world-card-badge.left');
+      if (!leftBadge) {
+        leftBadge = document.createElement('div');
+        leftBadge.className = 'world-card-badge left';
+        cardEl.appendChild(leftBadge);
+      }
+      leftBadge.textContent = `${Math.ceil(duration/1000)}s`;
+    }
+    // For ring-only mode, we skip creating/using a bottom progress bar
+    const stacked = !isCard && container.classList.contains('progress-stack');
     let bar = null;
-    if (stacked) {
-      bar = document.createElement('div');
-      bar.className = 'progress-bar';
-      bar.style.height = '6px';
-      bar.style.background = '#4caf50';
-      bar.style.width = '0%';
-      container.appendChild(bar);
-    } else {
-      bar = container.querySelector('.progress-bar');
-      if (!bar) {
+    if (!isCard) {
+      if (stacked) {
         bar = document.createElement('div');
         bar.className = 'progress-bar';
+        bar.style.height = '6px';
+        bar.style.background = '#4caf50';
+        bar.style.width = '0%';
         container.appendChild(bar);
+      } else {
+        bar = container.querySelector('.progress-bar');
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.className = 'progress-bar';
+          container.appendChild(bar);
+        }
+        bar.style.width = '0%';
       }
-      bar.style.width = '0%';
+      container.classList.remove('hidden');
     }
-    container.classList.remove('hidden');
     const start = Date.now();
     const interval = setInterval(() => {
       const elapsed = Date.now() - start;
       const percent = Math.min((elapsed / duration) * 100, 100);
-      bar.style.width = percent + '%';
+      if (bar) bar.style.width = percent + '%';
+      if (ringWrap) {
+        const cyc = Math.min(Math.max(elapsed / duration, 0), 1);
+        try { ringWrap.style.setProperty('--p', `${cyc}`); } catch(e){}
+        const leftBadge = cardEl.querySelector('.world-card-badge.left');
+        if (leftBadge) leftBadge.textContent = `${Math.max(0, Math.ceil((duration - elapsed)/1000))}s`;
+      }
       if (elapsed >= duration) {
         clearInterval(interval);
-        if (stacked) {
-          // remove only this bar; keep container visible for other bars
-          bar.remove();
-        } else {
-          container.classList.add('hidden');
-          bar.style.width = '100%';
+        if (bar) {
+          if (stacked) {
+            // remove only this bar; keep container visible for other bars
+            bar.remove();
+          } else {
+            container.classList.add('hidden');
+            bar.style.width = '100%';
+          }
         }
         callback();
+        if (ringWrap) {
+          try { ringWrap.classList.remove('ring-active'); ringWrap.style.removeProperty('--p'); } catch(e){}
+          const leftBadge = cardEl.querySelector('.world-card-badge.left');
+          if (leftBadge) { try { leftBadge.remove(); } catch(e){} }
+        }
         this.updateUI();
       }
     }, 50);
@@ -541,6 +573,8 @@ export class Game {
     // Render all gangsters as normal world cards (no separate zone)
     (this.state.gangsters || []).forEach(g => {
       this._ensureGangsterStats(g);
+      const wrap = document.createElement('div');
+      wrap.className = 'ring-wrap';
       const gc = document.createElement('div');
       gc.className = 'card world-card' + (g.busy ? ' busy' : '');
       gc.setAttribute('draggable', g.busy ? 'false' : 'true');
@@ -602,9 +636,12 @@ export class Game {
         desc: gDesc,
         hint: g.busy ? 'Busy' : 'Drag onto world cards',
       }));
-      el.appendChild(gc);
+      wrap.appendChild(gc);
+      el.appendChild(wrap);
     });
     // Neighborhood explore card (drop gangster to explore)
+    const exploreWrap = document.createElement('div');
+    exploreWrap.className = 'ring-wrap';
     const exploreCard = document.createElement('div');
     exploreCard.className = 'card world-card';
     const ndeck = (this._decks || {}).neighborhood;
@@ -618,10 +655,6 @@ export class Game {
       </div>
       <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
     `;
-    const exploreProg = document.createElement('div');
-    exploreProg.className = 'progress hidden';
-    exploreProg.innerHTML = '<div class="progress-bar"></div>';
-    exploreCard.appendChild(exploreProg);
     // No native tooltip
     exploreCard.removeAttribute('title');
     {
@@ -652,10 +685,11 @@ export class Game {
       const act = (ACTIONS || []).find(a => a.id === 'actExploreNeighborhood');
       if (!act) return;
       const dur = this.durationWithStat(act.base, act.stat, g);
-      const ok = this.executeAction(act, g, exploreProg, dur);
+      const ok = this.executeAction(act, g, exploreCard, dur);
       if (!ok) this._cardMsg('Cannot explore.');
     });
-    el.appendChild(exploreCard);
+    exploreWrap.appendChild(exploreCard);
+    el.appendChild(exploreWrap);
 
     // World cards list (table)
     const disc = (this.state.table && this.state.table.cards) || [];
@@ -680,13 +714,12 @@ export class Game {
       // Simple action by id helper
       const simple = (opts) => ({
         hint: opts.hint,
-        handler: (g, prog) => {
+        handler: (g, prog, cardEl) => {
           const baseAct = (ACTIONS || []).find(a => a.id === opts.actId);
           if (!baseAct) return;
           const act = { ...baseAct, ...(opts.patch || {}) };
-          if (prog) prog.style.display = 'block';
           const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
+          const ok = this.executeAction(act, g, cardEl, dur);
           if (!ok) this._cardMsg(opts.failMsg || 'Cannot act.');
         }
       });
@@ -698,7 +731,7 @@ export class Game {
           const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 200;
           return `<div style="margin-top:6px;color:#888">Drop a gangster to Hire this recruit (Costs $${price})</div>`;
         })(),
-        handler: (g, prog) => {
+        handler: (g, prog, cardEl) => {
           const baseAct = (ACTIONS || []).find(a => a.id === 'actHireGangster');
           if (!baseAct) return;
           // Pre-check funds to avoid flashing an empty progress bar
@@ -717,7 +750,7 @@ export class Game {
           };
           // Let executeAction manage showing progress; hide on failure for safety
           const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
+          const ok = this.executeAction(act, g, cardEl, dur);
           if (!ok) { if (prog) { try { prog.classList.add('hidden'); } catch(e){} } this._cardMsg('Cannot hire.'); }
         }
       };
@@ -726,7 +759,7 @@ export class Game {
           const price = (typeof this.enforcerCost === 'function') ? this.enforcerCost() : 50;
           return `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers (Costs $${price})</div>`;
         })(),
-        handler: (g, prog) => {
+        handler: (g, prog, cardEl) => {
           const baseAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
           if (!baseAct) return;
           const act = { ...baseAct, id: 'actRecruitCrooks', label: 'Recruit Local Crooks', stat: 'face',
@@ -738,9 +771,8 @@ export class Game {
               ef.data = ef.data || {}; ef.data.count = (ef.data.count || 0) + 1;
             }
           };
-          if (prog) prog.style.display = 'block';
           const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
+          const ok = this.executeAction(act, g, cardEl, dur);
           if (!ok) this._cardMsg('Cannot recruit.');
         }
       };
@@ -785,16 +817,15 @@ export class Game {
               }
               if (choiceId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; if (typeof baseAct.effect === 'function') baseAct.effect(game, gg); }
             } };
-            if (prog) prog.style.display = 'block';
             const dur = this.durationWithStat(act.base, act.stat, g);
-            const ok = this.executeAction(act, g, prog, dur);
+            const ok = this.executeAction(act, g, cardEl, dur);
             if (!ok) this._cardMsg('Cannot act on business.');
           });
         }
       };
       if (item.id === 'disagreeable_owner') return {
         hint: `<div style=\"margin-top:6px;color:#888\">Drop Face or Fist to pressure the owner</div>`,
-        handler: (g, prog) => {
+        handler: (g, prog, cardEl) => {
           const face = this.effectiveStat(g, 'face');
           const fist = this.effectiveStat(g, 'fist');
           const useStat = (face >= fist) ? 'face' : 'fist';
@@ -820,9 +851,8 @@ export class Game {
               if (game.state.disagreeableOwners > 0) game.state.disagreeableOwners -= 1;
               game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
             } };
-          if (prog) prog.style.display = 'block';
           const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
+          const ok = this.executeAction(act, g, cardEl, dur);
           if (!ok) this._cardMsg('Cannot pressure owner.');
         }
       };
@@ -834,6 +864,8 @@ export class Game {
 
     disc.forEach(item => {
       if (item.used && !item.reusable) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'ring-wrap';
       const c = document.createElement('div');
       c.className = 'card world-card' + (item.type === 'recruit' ? ' recruit' : '');
       const title = item.name || item.title || item.id;
@@ -902,13 +934,9 @@ export class Game {
         if (imgEl) imgEl.style.filter = 'grayscale(1) contrast(0.95)';
       }
       // Per-card progress bar
-      const prog = document.createElement('div');
-      prog.className = 'progress hidden';
-      prog.innerHTML = '<div class="progress-bar"></div>';
-      c.appendChild(prog);
-      // Attach declarative behavior listeners now that prog exists
+      // Attach declarative behavior listeners
       if (behavior) {
-        attachDrop(c, behavior.handler, prog);
+        attachDrop(c, behavior.handler, c);
       }
       // Show info in top-right panel on hover/click
       const infoData = (() => {
@@ -927,7 +955,9 @@ export class Game {
       }
       c.addEventListener('click', () => this._showInfoPanel(infoData));
       // Show disabled/cooldown state
-      if (['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) {
+      if ([
+        'hot_dog_stand','bakery','diner','laundromat'
+      ].includes(item.id)) {
         const now = this.state.time || 0;
         if (item.extorted) {
           const badge = document.createElement('div'); badge.className = 'world-card-badge'; badge.style.color = 'var(--badge-disabled)'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
@@ -938,7 +968,8 @@ export class Game {
           item._badgeEl = badge;
         }
       }
-      el.appendChild(c);
+      wrap.appendChild(c);
+      el.appendChild(wrap);
     });
   }
 
