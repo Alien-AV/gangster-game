@@ -16,6 +16,10 @@
       --btn-disabled-border: #bbb;
       --prog-bg: #ccc;
       --prog-bar: #4caf50;
+      /* Card vars (light default) */
+      --card-bg: #f8f8f8;
+      --card-border: #ccc;
+      --card-highlight: #888;
     }
     body.dark-mode {
       --bg: #121212;
@@ -29,6 +33,10 @@
       --btn-disabled-border: #777;
       --prog-bg: #555;
       --prog-bar: #81c784;
+      /* Dark card vars */
+      --card-bg: #1f1f1f;
+      --card-border: #444;
+      --card-highlight: #aaa;
     }
 
     body {
@@ -166,8 +174,8 @@
     <h3>Game Table</h3>
     <div id="worldArea" style="display:flex; flex-wrap:wrap; gap:8px; min-height:72px; padding:8px; border:1px dashed #666;"></div>
     <style>
-      .world-card { background:#222; border:1px solid #555; border-radius:6px; padding:8px; width:200px; }
-      .world-card.highlight { outline:2px dashed #888; }
+      .world-card { background: var(--card-bg); border:1px solid var(--card-border); border-radius:6px; padding:8px; width:200px; }
+      .world-card.highlight { outline:2px dashed var(--card-highlight); }
     </style>
   </div>
 
