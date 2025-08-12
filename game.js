@@ -77,6 +77,7 @@ export class Game {
     this._gangsterSelect = { queue: [], active: false };
     this._illicitSelect = { queue: [], active: false };
     this._equipSelect = { queue: [], active: false };
+    this._actionSelect = { queue: [], active: false };
 
     // Initialize world table / deck system
     this.initTable();
@@ -440,6 +441,42 @@ export class Game {
     container.classList.remove('hidden');
   }
 
+  showActionSelection(options, callback) {
+    this._actionSelect.queue.push({ options, callback });
+    if (!this._actionSelect.active) this._processActionSelection();
+  }
+
+  _processActionSelection() {
+    const mgr = this._actionSelect;
+    if (mgr.active) return;
+    const item = mgr.queue.shift();
+    if (!item) return;
+    mgr.active = true;
+    const container = document.getElementById('actionChoice');
+    const buttonsHost = document.getElementById('actionChoiceButtons');
+    // Clear previous dynamic buttons
+    buttonsHost.innerHTML = '';
+    const cleanup = () => {
+      container.classList.add('hidden');
+      // Remove all listeners by replacing content
+      buttonsHost.innerHTML = '';
+      mgr.active = false;
+      if (mgr.queue.length) this._processActionSelection();
+    };
+    const onChoose = (choiceId) => {
+      cleanup();
+      try { item.callback(choiceId); } finally { this.updateUI(); }
+    };
+    // Build a button per option
+    (item.options || []).forEach(opt => {
+      const b = document.createElement('button');
+      b.textContent = opt.label || opt.id;
+      b.addEventListener('click', () => onChoose(opt.id));
+      buttonsHost.appendChild(b);
+    });
+    container.classList.remove('hidden');
+  }
+
   // Initialize card UI prototype
   initCardUI() {
     this.cardEls = {
@@ -641,53 +678,48 @@ export class Game {
         handler: (g, prog) => {
           const now = this.state.time || 0;
           if (item.cooldownUntil && now < item.cooldownUntil) { this._cardMsg('Business is recovering after a raid.'); return; }
-          const face = this.effectiveStat(g, 'face');
-          const brain = this.effectiveStat(g, 'brain');
-          const fist = this.effectiveStat(g, 'fist');
-          const preferRaid = (fist >= Math.max(face, brain));
-          const actId = preferRaid ? 'actRaid' : 'actExtort';
-          const baseAct = (ACTIONS || []).find(a => a.id === actId);
-          if (!baseAct) return;
-          const act = { ...baseAct, effect: (game, gg) => {
-            if (actId === 'actExtort') {
-              // For test: make the second extortion always fail into a Disagreeable Owner
-              this._extortAttemptCount = (this._extortAttemptCount || 0) + 1;
-              const forceFail = (this._extortAttemptCount === 2);
-              // Apply baseline heat for acting
-              if (gg) gg.personalHeat = (gg.personalHeat || 0) + 1;
-              const discArr = (game.state.table && game.state.table.cards) || [];
-              const idx = discArr.indexOf(item);
-              if (forceFail) {
-                // Spawn owner card instead of immediate extortion success
-                let owner = makeCard('disagreeable_owner');
-                if (idx >= 0) discArr.splice(idx, 1, owner); else discArr.push(owner);
-                // Track a simple counter for analytics
-                game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
-              } else {
-                // Success path: convert to/stack onto extorted business
-                let xb = discArr.find(x => x.id === 'extorted_business');
-                if (!xb) {
-                  xb = makeCard('extorted_business');
-                  xb.data = xb.data || {}; xb.data.count = 1;
-                  if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
+          const options = [
+            { id: 'actExtort', label: 'Extort' },
+            { id: 'actRaid', label: 'Raid' },
+          ];
+          this.showActionSelection(options, (choiceId) => {
+            const baseAct = (ACTIONS || []).find(a => a.id === choiceId);
+            if (!baseAct) return;
+            const act = { ...baseAct, effect: (game, gg) => {
+              if (choiceId === 'actExtort') {
+                this._extortAttemptCount = (this._extortAttemptCount || 0) + 1;
+                const forceFail = (this._extortAttemptCount === 2);
+                if (gg) gg.personalHeat = (gg.personalHeat || 0) + 1;
+                const discArr = (game.state.table && game.state.table.cards) || [];
+                const idx = discArr.indexOf(item);
+                if (forceFail) {
+                  let owner = makeCard('disagreeable_owner');
+                  if (idx >= 0) discArr.splice(idx, 1, owner); else discArr.push(owner);
+                  game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
                 } else {
-                  xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-                  if (idx >= 0) {
-                    discArr.splice(idx, 1);
-                    const oldIdx = discArr.indexOf(xb);
-                    if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
+                  let xb = discArr.find(x => x.id === 'extorted_business');
+                  if (!xb) {
+                    xb = makeCard('extorted_business');
+                    xb.data = xb.data || {}; xb.data.count = 1;
+                    if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
+                  } else {
+                    xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                    if (idx >= 0) {
+                      discArr.splice(idx, 1);
+                      const oldIdx = discArr.indexOf(xb);
+                      if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
+                    }
                   }
+                  game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
                 }
-                // Increment extorted businesses counter
-                game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
               }
-            }
-            if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; if (typeof baseAct.effect === 'function') baseAct.effect(game, gg); }
-          } };
-          if (prog) prog.style.display = 'block';
-          const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot act on business.');
+              if (choiceId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; if (typeof baseAct.effect === 'function') baseAct.effect(game, gg); }
+            } };
+            if (prog) prog.style.display = 'block';
+            const dur = this.durationWithStat(act.base, act.stat, g);
+            const ok = this.executeAction(act, g, prog, dur);
+            if (!ok) this._cardMsg('Cannot act on business.');
+          });
         }
       };
       if (item.id === 'disagreeable_owner') return {
