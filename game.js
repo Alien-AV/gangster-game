@@ -139,17 +139,17 @@ export class Game {
     try {
       const data = this.serializeState();
       localStorage.setItem(this.slotKey(n), JSON.stringify(data));
-      alert(`Saved to slot ${n}`);
+      this._cardMsg(`Saved to slot ${n}`);
     } catch (e) {
       console.error('Save failed', e);
-      alert('Save failed');
+      this._cardMsg('Save failed');
     }
   }
 
   loadFromSlot(n) {
     const raw = localStorage.getItem(this.slotKey(n));
     if (!raw) {
-      alert(`No save found in slot ${n}`);
+      this._cardMsg(`No save found in slot ${n}`);
       return;
     }
     try {
@@ -167,11 +167,14 @@ export class Game {
       this._illicitSelect = { queue: [], active: false };
       this._equipSelect = { queue: [], active: false };
       console.debug('[LoadSlot] state:', this.state);
+      // Ensure table/deck and UI refresh after load
+      this.initTable();
+      this.renderWorld();
       this.updateUI();
-      alert(`Loaded slot ${n}`);
+      this._cardMsg(`Loaded slot ${n}`);
     } catch (e) {
       console.error('Load failed', e);
-      alert('Load failed');
+      this._cardMsg('Load failed');
     }
   }
 
