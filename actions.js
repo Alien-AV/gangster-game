@@ -32,22 +32,22 @@ export const ACTIONS = [
       game.state.respect += 1;
       game.updateUI();
     } },
-  { id: 'actLaunder', label: 'Launder $100 (Brain)', stat: 'brain', base: 4000,
+  { id: 'actLaunder', label: 'Launder $1000 (Brain)', stat: 'brain', base: 4000,
     cost: (game) => {
-      if ((game.state.dirtyMoney || 0) < 100) return false;
-      game.state.dirtyMoney -= 100;
+      if ((game.state.dirtyMoney || 0) < 1000) return false;
+      game.state.dirtyMoney -= 1000;
       return true;
     },
     effect: (game, g) => {
-      const base = 80;
+      const base = 800;
       const bonus = Math.floor(base * 0.1 * game.respectLevel());
       game.state.cleanMoney += base + bonus;
       g.personalHeat = (g.personalHeat || 0) + 1;
     } },
   { id: 'actPromo', label: 'Promotional Campaign (Face)', stat: 'face', base: 3000,
     cost: (game) => {
-      if ((game.state.cleanMoney || 0) < 50) return false;
-      game.state.cleanMoney -= 50;
+      if ((game.state.cleanMoney || 0) < 500) return false;
+      game.state.cleanMoney -= 500;
       return true;
     },
     effect: (game) => { game.state.respect += 1; } },
@@ -59,7 +59,7 @@ export const ACTIONS = [
     } },
   { id: 'actRaid', label: 'Raid Business (Fist)', stat: 'fist', base: 3500,
     effect: (game, g) => {
-      game.state.dirtyMoney += 150;
+      game.state.dirtyMoney += 1500;
       game.state.heat += 2;
       g.personalHeat = (g.personalHeat || 0) + 2;
     } },
@@ -106,7 +106,7 @@ export const ACTIONS = [
     } },
   // Procure Equipment: lets player choose an equipment card to add to inventory
   { id: 'actProcureEquipment', label: 'Procure Equipment (Brain)', stat: 'brain', base: 3000,
-    cost: { money: 20 },
+    cost: { money: 200 },
     effect: (game) => {
       if (typeof game.showEquipmentSelection === 'function') {
         game.showEquipmentSelection(type => {
@@ -123,16 +123,16 @@ export const ACTIONS = [
         game.state.inventory.push(item);
       }
     } },
-  { id: 'actPayCops', label: 'Pay Cops -$50', stat: 'brain', base: 3000,
-    cost: { money: 50 },
+  { id: 'actPayCops', label: 'Pay Cops -$500', stat: 'brain', base: 3000,
+    cost: { money: 500 },
     effect: (game) => {
       game.state.heat = Math.max(0, (game.state.heat || 0) - 1);
       game.updateUI();
     } },
   { id: 'actDonate', label: 'Donate to Soup Kitchen (Brain)', stat: 'brain', base: 4000,
     cost: (game) => {
-      if ((game.state.cleanMoney || 0) < 40) return false;
-      game.state.cleanMoney -= 40;
+      if ((game.state.cleanMoney || 0) < 400) return false;
+      game.state.cleanMoney -= 400;
       return true;
     },
     effect: (game) => {

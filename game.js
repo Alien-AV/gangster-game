@@ -7,7 +7,7 @@ export class Game {
   constructor() {
     this.state = {
       time: 0,
-      cleanMoney: 10,
+      cleanMoney: 100,
       dirtyMoney: 0,
       patrol: 0,
       extortedBusinesses: 0,
@@ -31,7 +31,7 @@ export class Game {
     };
     // Chance that an extortion attempt results in a disagreeable owner (used by actions.js)
     this.DISAGREEABLE_CHANCE = 0.25;
-    this.SALARY_PER_10S = { face: 5, fist: 5, brain: 7 };
+    this.SALARY_PER_10S = { face: 50, fist: 50, brain: 70 };
 
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
@@ -77,6 +77,7 @@ export class Game {
     this._gangsterSelect = { queue: [], active: false };
     this._illicitSelect = { queue: [], active: false };
     this._equipSelect = { queue: [], active: false };
+    this._actionSelect = { queue: [], active: false };
 
     // Initialize world table / deck system
     this.initTable();
@@ -243,18 +244,20 @@ export class Game {
 
   enforcerCost() {
     const level = this.fearLevel();
-    return Math.max(1, 5 - level);
+    return Math.max(10, 50 - level * 10);
   }
+
+  enforcerSalaryPer10s() { return 0; }
 
   gangsterCost() {
     const level = this.fearLevel();
-    return Math.max(5, 20 - level * 2);
+    return Math.max(50, 200 - level * 20);
   }
 
   businessCost() {
-    const base = 100;
-    const discount = this.fearLevel() * 5; // $5 off per fear level
-    return Math.max(50, base - discount);
+    const base = 1000;
+    const discount = this.fearLevel() * 50; // $50 off per fear level
+    return Math.max(500, base - discount);
   }
 
   paySalaries() {
@@ -294,7 +297,7 @@ export class Game {
     if (fearBonusEl) fearBonusEl.textContent = rl > 0 ? `Business cost $${bCost}` : 'None';
     const rL = this.respectLevel();
     const respectBonusEl = document.getElementById('respectBonus');
-    if (respectBonusEl) respectBonusEl.textContent = rL > 0 ? `Fronts +$${rL} clean/s each; Laundering +${rL * 10}% yield` : 'None';
+    if (respectBonusEl) respectBonusEl.textContent = rL > 0 ? `Fronts +$${rL * 10} clean/s each; Laundering +${rL * 10}% yield` : 'None';
     document.getElementById('businesses').textContent = s.businesses;
     const availFronts = Math.max(0, (s.businesses || 0) - (s.illicit || 0));
     const afEl = document.getElementById('availableFronts');
@@ -438,6 +441,42 @@ export class Game {
     container.classList.remove('hidden');
   }
 
+  showActionSelection(options, callback) {
+    this._actionSelect.queue.push({ options, callback });
+    if (!this._actionSelect.active) this._processActionSelection();
+  }
+
+  _processActionSelection() {
+    const mgr = this._actionSelect;
+    if (mgr.active) return;
+    const item = mgr.queue.shift();
+    if (!item) return;
+    mgr.active = true;
+    const container = document.getElementById('actionChoice');
+    const buttonsHost = document.getElementById('actionChoiceButtons');
+    // Clear previous dynamic buttons
+    buttonsHost.innerHTML = '';
+    const cleanup = () => {
+      container.classList.add('hidden');
+      // Remove all listeners by replacing content
+      buttonsHost.innerHTML = '';
+      mgr.active = false;
+      if (mgr.queue.length) this._processActionSelection();
+    };
+    const onChoose = (choiceId) => {
+      cleanup();
+      try { item.callback(choiceId); } finally { this.updateUI(); }
+    };
+    // Build a button per option
+    (item.options || []).forEach(opt => {
+      const b = document.createElement('button');
+      b.textContent = opt.label || opt.id;
+      b.addEventListener('click', () => onChoose(opt.id));
+      buttonsHost.appendChild(b);
+    });
+    container.classList.remove('hidden');
+  }
+
   // Initialize card UI prototype
   initCardUI() {
     this.cardEls = {
@@ -507,14 +546,62 @@ export class Game {
       gc.setAttribute('draggable', g.busy ? 'false' : 'true');
       gc.dataset.gid = String(g.id);
       const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
-      gc.innerHTML = `<div><strong>${gCard.name}</strong></div>`+
-        `<div>${gCard.desc}</div>`+
-        `<div>${g.busy ? 'Busy' : 'Drag onto world cards'}</div>`;
+      const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
+      const artImg = g.type === 'boss' ? 'boss.png' : (g.type === 'face' ? 'face.png' : (g.type === 'fist' ? 'fist.png' : (g.type === 'brain' ? 'brain.png' : null)));
+      const gDesc = (
+        g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
+        g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
+        g.type === 'fist' ? 'Bruiser. Raids and intimidates when needed.' :
+        g.type === 'brain' ? 'A planner who knows the angles.' :
+        ''
+      );
+      gc.innerHTML = `
+        <div class="world-card-title">${gCard.name}</div>
+        <div class="world-card-art">
+          ${artImg ? `<img class="world-card-artImg" src="${artImg}" alt="${gCard.name}">` : ''}
+          <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
+        </div>
+        <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
+      `;
+      // No native tooltip
+      gc.removeAttribute('title');
+      // Fallback if image fails
+      if (artImg) {
+        const img = gc.querySelector('.world-card-artImg');
+        const emojiEl = gc.querySelector('.world-card-artEmoji');
+        if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+      }
       gc.addEventListener('dragstart', ev => {
         if (g.busy) { ev.preventDefault(); return; }
         ev.dataTransfer.setData('text/plain', String(g.id));
         ev.dataTransfer.effectAllowed = 'move';
       });
+      // Ensure image doesn't steal the drag; start drag on image by proxying mousedown
+      gc.addEventListener('mousedown', (ev) => {
+        const target = ev.target;
+        if (target && target.closest && target.closest('.world-card-art')) {
+          // Allow drag to start from the card container itself
+          gc.setAttribute('draggable', g.busy ? 'false' : 'true');
+        }
+      });
+      // Desktop-only popover for gangster cards
+      if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+        // Show info in top-right panel on hover
+        gc.addEventListener('mouseenter', () => this._showInfoPanel({
+          title: gCard.name,
+          stats: `F:${g.stats.fist} Fa:${g.stats.face} Br:${g.stats.brain}`,
+          desc: gDesc,
+          hint: g.busy ? 'Busy' : 'Drag onto world cards',
+        }));
+        gc.addEventListener('mouseleave', () => this._hideInfoPanel());
+      }
+      // Also show on click (mobile or desktop)
+      gc.addEventListener('click', () => this._showInfoPanel({
+        title: gCard.name,
+        stats: `F:${g.stats.fist} Fa:${g.stats.face} Br:${g.stats.brain}`,
+        desc: gDesc,
+        hint: g.busy ? 'Busy' : 'Drag onto world cards',
+      }));
       el.appendChild(gc);
     });
     // Neighborhood explore card (drop gangster to explore)
@@ -523,12 +610,35 @@ export class Game {
     const ndeck = (this._decks || {}).neighborhood;
     const disabled = !ndeck || !ndeck.hasMore();
     exploreCard.style.opacity = disabled ? '0.5' : '1.0';
-    exploreCard.innerHTML = '<div><strong>Neighborhood</strong></div>' +
-      (disabled ? '<div>Deck exhausted</div>' : '<div>Drop a gangster to explore</div>');
+    exploreCard.innerHTML = `
+      <div class="world-card-title">Neighborhood</div>
+      <div class="world-card-art">
+        <img class="world-card-artImg" src="neighborhood.png" alt="Neighborhood">
+        <div class="world-card-artEmoji hidden">🏙️</div>
+      </div>
+      <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
+    `;
     const exploreProg = document.createElement('div');
     exploreProg.className = 'progress hidden';
     exploreProg.innerHTML = '<div class="progress-bar"></div>';
     exploreCard.appendChild(exploreProg);
+    // No native tooltip
+    exploreCard.removeAttribute('title');
+    {
+      const img = exploreCard.querySelector('.world-card-artImg');
+      const emojiEl = exploreCard.querySelector('.world-card-artEmoji');
+      if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+    }
+    // Info panel on hover/click
+    if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      exploreCard.addEventListener('mouseenter', () => this._showInfoPanel({
+        title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore'
+      }));
+      exploreCard.addEventListener('mouseleave', () => this._hideInfoPanel());
+    }
+    exploreCard.addEventListener('click', () => this._showInfoPanel({
+      title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore'
+    }));
     exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
     exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
     exploreCard.addEventListener('drop', ev => {
@@ -585,14 +695,14 @@ export class Game {
       if (item.type === 'cop') return simple({ hint: `<div style="margin-top:6px;color:#888">Drop a gangster to Pay Off Cops</div>`, actId: 'actPayCops', failMsg: 'Cannot pay cops.' });
       if (item.type === 'recruit') return {
         hint: (() => {
-          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 20;
+          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 200;
           return `<div style="margin-top:6px;color:#888">Drop a gangster to Hire this recruit (Costs $${price})</div>`;
         })(),
         handler: (g, prog) => {
           const baseAct = (ACTIONS || []).find(a => a.id === 'actHireGangster');
           if (!baseAct) return;
           // Pre-check funds to avoid flashing an empty progress bar
-          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 20;
+          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 200;
           if (this.totalMoney() < price) { this._cardMsg(`Need $${price} to hire.`); return; }
           const chosen = (item.data && item.data.type) || 'face';
           const act = { ...baseAct, label: `Hire ${chosen.charAt(0).toUpperCase()+chosen.slice(1)}`,
@@ -612,7 +722,10 @@ export class Game {
         }
       };
       if (item.type === 'crooks') return {
-        hint: `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers</div>`,
+        hint: (() => {
+          const price = (typeof this.enforcerCost === 'function') ? this.enforcerCost() : 50;
+          return `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers (Costs $${price})</div>`;
+        })(),
         handler: (g, prog) => {
           const baseAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
           if (!baseAct) return;
@@ -631,58 +744,55 @@ export class Game {
           if (!ok) this._cardMsg('Cannot recruit.');
         }
       };
-      if (['hot_dog_stand', 'bakery', 'diner', 'laundromat'].includes(item.id)) return {
+      if ([
+        'hot_dog_stand', 'bakery', 'diner', 'laundromat'
+      ].includes(item.id)) return {
         hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`,
         handler: (g, prog) => {
           const now = this.state.time || 0;
           if (item.cooldownUntil && now < item.cooldownUntil) { this._cardMsg('Business is recovering after a raid.'); return; }
-          const face = this.effectiveStat(g, 'face');
-          const brain = this.effectiveStat(g, 'brain');
-          const fist = this.effectiveStat(g, 'fist');
-          const preferRaid = (fist >= Math.max(face, brain));
-          const actId = preferRaid ? 'actRaid' : 'actExtort';
-          const baseAct = (ACTIONS || []).find(a => a.id === actId);
-          if (!baseAct) return;
-          const act = { ...baseAct, effect: (game, gg) => {
-            if (actId === 'actExtort') {
-              // For test: make the second extortion always fail into a Disagreeable Owner
-              this._extortAttemptCount = (this._extortAttemptCount || 0) + 1;
-              const forceFail = (this._extortAttemptCount === 2);
-              // Apply baseline heat for acting
-              if (gg) gg.personalHeat = (gg.personalHeat || 0) + 1;
-              const discArr = (game.state.table && game.state.table.cards) || [];
-              const idx = discArr.indexOf(item);
-              if (forceFail) {
-                // Spawn owner card instead of immediate extortion success
-                let owner = makeCard('disagreeable_owner');
-                if (idx >= 0) discArr.splice(idx, 1, owner); else discArr.push(owner);
-                // Track a simple counter for analytics
-                game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
-              } else {
-                // Success path: convert to/stack onto extorted business
-                let xb = discArr.find(x => x.id === 'extorted_business');
-                if (!xb) {
-                  xb = makeCard('extorted_business');
-                  xb.data = xb.data || {}; xb.data.count = 1;
-                  if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
+          const options = [
+            { id: 'actExtort', label: 'Extort' },
+            { id: 'actRaid', label: 'Raid' },
+          ];
+          this.showActionSelection(options, (choiceId) => {
+            const baseAct = (ACTIONS || []).find(a => a.id === choiceId);
+            if (!baseAct) return;
+            const act = { ...baseAct, effect: (game, gg) => {
+              if (choiceId === 'actExtort') {
+                this._extortAttemptCount = (this._extortAttemptCount || 0) + 1;
+                const forceFail = (this._extortAttemptCount === 2);
+                if (gg) gg.personalHeat = (gg.personalHeat || 0) + 1;
+                const discArr = (game.state.table && game.state.table.cards) || [];
+                const idx = discArr.indexOf(item);
+                if (forceFail) {
+                  let owner = makeCard('disagreeable_owner');
+                  if (idx >= 0) discArr.splice(idx, 1, owner); else discArr.push(owner);
+                  game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
                 } else {
-                  xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-                  if (idx >= 0) {
-                    discArr.splice(idx, 1);
-                    const oldIdx = discArr.indexOf(xb);
-                    if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
+                  let xb = discArr.find(x => x.id === 'extorted_business');
+                  if (!xb) {
+                    xb = makeCard('extorted_business');
+                    xb.data = xb.data || {}; xb.data.count = 1;
+                    if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
+                  } else {
+                    xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                    if (idx >= 0) {
+                      discArr.splice(idx, 1);
+                      const oldIdx = discArr.indexOf(xb);
+                      if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
+                    }
                   }
+                  game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
                 }
-                // Increment extorted businesses counter
-                game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
               }
-            }
-            if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; if (typeof baseAct.effect === 'function') baseAct.effect(game, gg); }
-          } };
-          if (prog) prog.style.display = 'block';
-          const dur = this.durationWithStat(act.base, act.stat, g);
-          const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot act on business.');
+              if (choiceId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; if (typeof baseAct.effect === 'function') baseAct.effect(game, gg); }
+            } };
+            if (prog) prog.style.display = 'block';
+            const dur = this.durationWithStat(act.base, act.stat, g);
+            const ok = this.executeAction(act, g, prog, dur);
+            if (!ok) this._cardMsg('Cannot act on business.');
+          });
         }
       };
       if (item.id === 'disagreeable_owner') return {
@@ -721,31 +831,79 @@ export class Game {
       };
       if (item.id === 'newspaper') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to run a Promo Campaign</div>`, actId: 'actPromo', failMsg: 'Cannot run promo.' });
       if (item.id === 'pawn_shop') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Procure Equipment</div>`, actId: 'actProcureEquipment', failMsg: 'Cannot procure equipment.' });
-      if (item.id === 'bookmaker') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a Brain to Launder $100</div>`, actId: 'actLaunder', failMsg: 'Cannot launder.' });
+      if (item.id === 'bookmaker') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a Brain to Launder $1000</div>`, actId: 'actLaunder', failMsg: 'Cannot launder.' });
       return null;
     };
 
     disc.forEach(item => {
       if (item.used && !item.reusable) return;
       const c = document.createElement('div');
-      c.className = 'card world-card';
-      let body = `<div><strong>${item.name || item.title || item.id}</strong></div><div>${item.desc || ''}</div>`;
+      c.className = 'card world-card' + (item.type === 'recruit' ? ' recruit' : '');
+      const title = item.name || item.title || item.id;
+      const artEmoji = (
+        item.id === 'hot_dog_stand' ? '🌭' :
+        item.id === 'bakery' ? '🥖' :
+        item.id === 'diner' ? '🍽️' :
+        item.id === 'laundromat' ? '🧺' :
+        item.id === 'bookmaker' ? '🎲' :
+        item.id === 'newspaper' ? '📰' :
+        item.id === 'pawn_shop' ? '💼' :
+        item.id === 'disagreeable_owner' ? '🙅' :
+        item.id === 'extorted_business' ? '💵' :
+        item.type === 'crooks' ? '🧍‍♂️' :
+        item.type === 'cop' ? '👮' :
+        item.type === 'priest' ? '⛪' :
+        item.type === 'milestone' ? '🚪' :
+        '🃏'
+      );
+      const artImg = (
+        item.id === 'bakery' ? 'bakery.png' :
+        item.type === 'cop' ? 'cop.png' :
+        item.type === 'recruit' ? (item.data && item.data.type === 'face' ? 'face.png' : (item.data && item.data.type === 'fist' ? 'fist.png' : 'brain.png')) :
+        null
+      );
+      let body = `
+        <div class="world-card-title">${title}</div>
+        <div class="world-card-art">
+          ${artImg ? `<img class=\"world-card-artImg\" src=\"${artImg}\" alt=\"${title}\">` : ''}
+          <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
+        </div>
+        <div class="world-card-desc"><p class="world-card-descText">${item.desc || '&nbsp;'}</p></div>
+      `;
       // Type-based behaviors to remove per-id duplication
       // Attach declarative drop behavior, if any
       const behavior = getDropBehavior(item);
-      if (behavior) {
-        if (behavior.hint) body += behavior.hint;
-      }
+      // Do not merge hints into the card face; hints are shown only in the top-right info panel
       // Counter cards: Enforcers and Extorted Businesses (display counts)
       if (item.id === 'enforcers') {
         const count = (item.data && item.data.count) || 0;
-        body = `<div><strong>${item.name}</strong></div><div>Count: ${count}</div>`;
+        body = `
+          <div class="world-card-title">${item.name}</div>
+          <div class="world-card-art"><div class="world-card-artEmoji">🧍‍♂️</div></div>
+          <div class="world-card-desc"><p class="world-card-descText">Count: ${count}</p></div>
+        `;
       }
       if (item.id === 'extorted_business') {
         const count = (item.data && item.data.count) || 0;
-        body = `<div><strong>${item.name}</strong></div><div>Protection owed: ${count}</div>`;
+        body = `
+          <div class="world-card-title">${item.name}</div>
+          <div class="world-card-art"><div class="world-card-artEmoji">💵</div></div>
+          <div class="world-card-desc"><p class="world-card-descText">Protection owed: ${count}</p></div>
+        `;
       }
       c.innerHTML = body;
+      // No native tooltip
+      c.removeAttribute('title');
+      {
+        const img = c.querySelector('.world-card-artImg');
+        const emojiEl = c.querySelector('.world-card-artEmoji');
+        if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+      }
+      // Apply grayscale for recruits
+      if (item.type === 'recruit') {
+        const imgEl = c.querySelector('.world-card-artImg');
+        if (imgEl) imgEl.style.filter = 'grayscale(1) contrast(0.95)';
+      }
       // Per-card progress bar
       const prog = document.createElement('div');
       prog.className = 'progress hidden';
@@ -755,15 +913,31 @@ export class Game {
       if (behavior) {
         attachDrop(c, behavior.handler, prog);
       }
+      // Show info in top-right panel on hover/click
+      const infoData = (() => {
+        const stats = '';
+        const desc = item.desc || (item.type === 'cop' ? 'A familiar face on the beat. Can arrange favors for a price.' : (item.type === 'crooks' ? 'Can be swayed to patrol for you.' : (item.id === 'enforcers' ? 'Muscle on call.' : '')));
+        const hint = (() => {
+          // No hints on the card face; use only for info panel if needed
+          if (behavior && behavior.hint) return behavior.hint.replace(/<[^>]*>/g,'');
+          return '';
+        })();
+        return { title, stats, desc, hint };
+      })();
+      if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+        c.addEventListener('mouseenter', () => this._showInfoPanel(infoData));
+        c.addEventListener('mouseleave', () => this._hideInfoPanel());
+      }
+      c.addEventListener('click', () => this._showInfoPanel(infoData));
       // Show disabled/cooldown state
       if (['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) {
         const now = this.state.time || 0;
         if (item.extorted) {
-          const badge = document.createElement('div'); badge.style.color = 'var(--badge-disabled)'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
+          const badge = document.createElement('div'); badge.className = 'world-card-badge'; badge.style.color = 'var(--badge-disabled)'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
           item._badgeEl = badge;
         } else if (item.cooldownUntil && now < item.cooldownUntil) {
           const remain = item.cooldownUntil - now;
-          const badge = document.createElement('div'); badge.style.color = 'var(--badge-warn)'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
+          const badge = document.createElement('div'); badge.className = 'world-card-badge'; badge.style.color = 'var(--badge-warn)'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
           item._badgeEl = badge;
         }
       }
@@ -857,11 +1031,11 @@ export class Game {
   tick() {
     const s = this.state;
     s.time += 1;
-    s.dirtyMoney += (s.extortedBusinesses || 0);
-    s.cleanMoney += s.businesses * 2;
+    s.dirtyMoney += (s.extortedBusinesses || 0) * 10;
+    s.cleanMoney += s.businesses * 20;
     // Respect increases front legitimacy: +$respectLevel per business per tick
-    s.cleanMoney += s.businesses * this.respectLevel();
-    s.dirtyMoney += s.illicit * 5;
+    s.cleanMoney += s.businesses * (this.respectLevel() * 10);
+    s.dirtyMoney += s.illicit * 50;
     let heatTick = s.disagreeableOwners;
     const unpatrolled = (s.extortedBusinesses || 0) - s.patrol;
     if (unpatrolled > 0) heatTick += unpatrolled;
@@ -937,6 +1111,26 @@ export class Game {
         action.effect(this, g);
       }
     });
+  }
+
+  _showInfoPanel({ title = '', stats = '', desc = '', hint = '' } = {}) {
+    const panel = document.getElementById('infoPanel');
+    if (!panel) return;
+    const t = document.getElementById('infoPanelTitle');
+    const s = document.getElementById('infoPanelStats');
+    const d = document.getElementById('infoPanelDesc');
+    const h = document.getElementById('infoPanelHint');
+    if (t) t.textContent = title;
+    if (s) s.textContent = stats;
+    if (d) d.textContent = desc;
+    if (h) h.textContent = hint;
+    panel.classList.remove('hidden');
+  }
+
+  _hideInfoPanel() {
+    const panel = document.getElementById('infoPanel');
+    if (!panel) return;
+    panel.classList.add('hidden');
   }
 
 }
