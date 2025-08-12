@@ -25,9 +25,7 @@ export class Game {
       illicitProgress: 0,
       unlockedIllicit: false,
       gangsters: [],
-      inventory: [], // equipment items available to equip
       nextGangId: 1,
-      nextEquipId: 1,
       salaryTick: 0,
       table: null,
     };
@@ -65,14 +63,13 @@ export class Game {
     this.loadState();
     // Ensure gangster objects are normalized
     (this.state.gangsters || []).forEach(g => { this._ensureGangsterStats(g); if (!Array.isArray(g.equipped)) g.equipped = []; });
-    if (!Array.isArray(this.state.inventory)) this.state.inventory = [];
     // Ensure Boss exists as a normal gangster with special stats/name
     if (!this.state.gangsters.some(g => g.type === 'boss')) {
       const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
       this.state.gangsters.unshift(bossGang);
     }
 
-    // Initialize card UI prototype
+    // Initialize message UI
     this.initCardUI();
     this.interval = setInterval(() => this.tick(), 1000);
 
@@ -103,44 +100,6 @@ export class Game {
 
   // Actions panel removed; world is the single panel
 
-  // Equipment selection (Procure Equipment)
-  showEquipmentSelection(callback) {
-    this._equipSelect.queue.push(callback);
-    if (!this._equipSelect.active) this._processEquipSelection();
-  }
-
-  _processEquipSelection() {
-    const mgr = this._equipSelect;
-    if (mgr.active) return;
-    const next = mgr.queue.shift();
-    if (!next) return;
-    mgr.active = true;
-    const container = document.getElementById('equipChoice');
-    const pBtn = document.getElementById('choosePistol');
-    const sBtn = document.getElementById('chooseSuitcase');
-    const tBtn = document.getElementById('chooseSilkTie');
-    const eBtn = document.getElementById('chooseEquipEnforcer');
-    const cleanup = () => {
-      container.classList.add('hidden');
-      pBtn.removeEventListener('click', onP);
-      sBtn.removeEventListener('click', onS);
-      tBtn.removeEventListener('click', onT);
-      eBtn.removeEventListener('click', onE);
-      mgr.active = false;
-      if (mgr.queue.length) this._processEquipSelection();
-    };
-    const onChoose = type => { try { next(type); } finally { this.updateUI(); } cleanup(); };
-    const onP = () => onChoose('pistol');
-    const onS = () => onChoose('suitcase');
-    const onT = () => onChoose('silk_tie');
-    const onE = () => onChoose('enforcer');
-    pBtn.addEventListener('click', onP);
-    sBtn.addEventListener('click', onS);
-    tBtn.addEventListener('click', onT);
-    eBtn.addEventListener('click', onE);
-    container.classList.remove('hidden');
-  }
-
   saveState() {
     const data = this.serializeState();
     localStorage.setItem('gameState', JSON.stringify(data));
@@ -169,8 +128,6 @@ export class Game {
       unlockedIllicit: s.unlockedIllicit,
       gangsters: (s.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), name: g.name, equipped: Array.isArray(g.equipped) ? g.equipped : [] })),
       nextGangId: s.nextGangId,
-      inventory: s.inventory || [],
-      nextEquipId: s.nextEquipId || 1,
       salaryTick: s.salaryTick,
       table: s.table || null,
     };
@@ -200,8 +157,6 @@ export class Game {
       console.debug('[LoadSlot] parsed data', data);
       Object.assign(this.state, data);
       this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [] }));
-      if (!Array.isArray(this.state.inventory)) this.state.inventory = data.inventory || [];
-      if (typeof this.state.nextEquipId !== 'number') this.state.nextEquipId = data.nextEquipId || 1;
       // Ensure Boss exists
       if (!this.state.gangsters.some(x => x.type === 'boss')) {
         const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
@@ -211,8 +166,7 @@ export class Game {
       this._gangsterSelect = { queue: [], active: false };
       this._illicitSelect = { queue: [], active: false };
       this._equipSelect = { queue: [], active: false };
-      this.renderCards();
-      console.debug('[LoadSlot] after renderCards, state:', this.state);
+      console.debug('[LoadSlot] state:', this.state);
       this.updateUI();
       alert(`Loaded slot ${n}`);
     } catch (e) {
@@ -235,8 +189,6 @@ export class Game {
       console.error('Failed to load saved state', e);
     }
     this.updateUI();
-    // Keep card UI in sync
-    this.renderCards();
     // Removed actions panel
     // Ensure Boss exists as a normal gangster with special stats/name
     if (!this.state.gangsters.some(g => g.type === 'boss')) {
@@ -333,8 +285,7 @@ export class Game {
     document.getElementById('drugCount').textContent = s.illicitCounts.drugs;
     document.getElementById('gamblingCount').textContent = s.illicitCounts.gambling;
     document.getElementById('fencingCount').textContent = s.illicitCounts.fencing;
-    // Card UI only for inventory; gangsters now live in world
-    this.renderCards();
+    // All UI renders via world/table now
     this.saveState();
   }
 
@@ -465,11 +416,8 @@ export class Game {
   // Initialize card UI prototype
   initCardUI() {
     this.cardEls = {
-      cardsArea: document.getElementById('cardsArea'),
       msg: document.getElementById('cardMessages'),
     };
-    if (!this.cardEls.cardsArea) return;
-    this.renderCards();
   }
 
   // ----- World Table / Deck System -----
@@ -599,8 +547,36 @@ export class Game {
         }
       });
       // Map by item.type or id
-      if (item.type === 'priest') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster here to Donate</div>`, actId: 'actDonate', failMsg: 'Cannot donate.' });
-      if (item.type === 'cop') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Pay Off Cops</div>`, actId: 'actPayCops', failMsg: 'Cannot pay cops.' });
+      if (item.type === 'priest') return simple({ hint: `<div style="margin-top:6px;color:#888">Drop a gangster here to Donate</div>`, actId: 'actDonate', failMsg: 'Cannot donate.' });
+      if (item.type === 'cop') return simple({ hint: `<div style="margin-top:6px;color:#888">Drop a gangster to Pay Off Cops</div>`, actId: 'actPayCops', failMsg: 'Cannot pay cops.' });
+      if (item.type === 'recruit') return {
+        hint: (() => {
+          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 20;
+          return `<div style="margin-top:6px;color:#888">Drop a gangster to Hire this recruit (Costs $${price})</div>`;
+        })(),
+        handler: (g, prog) => {
+          const baseAct = (ACTIONS || []).find(a => a.id === 'actHireGangster');
+          if (!baseAct) return;
+          // Pre-check funds to avoid flashing an empty progress bar
+          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 20;
+          if (this.totalMoney() < price) { this._cardMsg(`Need $${price} to hire.`); return; }
+          const chosen = (item.data && item.data.type) || 'face';
+          const act = { ...baseAct, label: `Hire ${chosen.charAt(0).toUpperCase()+chosen.slice(1)}`,
+            effect: (game) => {
+              const s = game.state;
+              const newG = { id: s.nextGangId++, type: chosen, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(chosen) };
+              s.gangsters.push(newG);
+              // consume this recruit card
+              item.used = true;
+              game.updateUI();
+            }
+          };
+          // Let executeAction manage showing progress; hide on failure for safety
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) { if (prog) { try { prog.classList.add('hidden'); } catch(e){} } this._cardMsg('Cannot hire.'); }
+        }
+      };
       if (item.type === 'crooks') return {
         hint: `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers</div>`,
         handler: (g, prog) => {
@@ -713,31 +689,6 @@ export class Game {
     });
   }
 
-  renderCards() {
-    const area = this.cardEls && this.cardEls.cardsArea;
-    if (!area) return;
-    const s = this.state;
-    area.innerHTML = '';
-    // Do not render gangsters here; they live in the world panel now
-
-    // Render equipment inventory as cards
-    (s.inventory || []).forEach(it => {
-      const el = document.createElement('div');
-      el.className = 'card equip-card';
-      el.setAttribute('draggable', 'true');
-      el.dataset.eid = String(it.id);
-      const bonus = this._equipBonusFor(it);
-      const bonusTxt = `+F:${bonus.fist} +Fa:${bonus.face} +Br:${bonus.brain} +M:${bonus.meat}`;
-      const label = ({pistol:'Pistol', suitcase:'Suitcase', silk_tie:'Silk Tie', enforcer:'Enforcer'})[it.type] || it.type;
-      el.innerHTML = `<div><strong>${label}</strong></div><div>${bonusTxt}</div><div>Drag onto gangster to equip</div>`;
-      el.addEventListener('dragstart', ev => {
-        ev.dataTransfer.setData('text/plain', 'equip:' + String(it.id));
-        ev.dataTransfer.effectAllowed = 'move';
-      });
-      area.appendChild(el);
-    });
-  }
-
   _cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
 
   executeAction(action, g, progEl, durMs) {
@@ -780,7 +731,6 @@ export class Game {
     g.busy = true;
     // Suspend world re-render so progress elements persist during work
     this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
-    this.renderCards();
     this.runProgress(progEl, durMs, () => {
       try {
         onDone && onDone();
@@ -788,7 +738,6 @@ export class Game {
         g.busy = false;
         // Resume world render if this is the last active work
         this._suspendWorldRender = Math.max(0, (this._suspendWorldRender || 1) - 1);
-        this.renderCards();
         this.renderWorld();
         this.updateUI();
       }
@@ -810,21 +759,10 @@ export class Game {
     if (!Array.isArray(g.equipped)) g.equipped = [];
   }
 
-  _equipBonusFor(item) {
-    // Returns {face,fist,brain,meat} bonus for an equipment item
-    switch (item.type) {
-      case 'pistol': return { face: 0, fist: 1, brain: 0, meat: 0 };
-      case 'suitcase': return { face: 0, fist: 0, brain: 1, meat: 0 };
-      case 'silk_tie': return { face: 1, fist: 0, brain: 0, meat: 0 };
-      case 'enforcer': return { face: 0, fist: 0, brain: 0, meat: 1 };
-      default: return { face: 0, fist: 0, brain: 0, meat: 0 };
-    }
-  }
-
   effectiveStat(g, key) {
     this._ensureGangsterStats(g);
     const base = (g.stats && typeof g.stats[key] === 'number') ? g.stats[key] : 0;
-    const bonus = (g.equipped || []).reduce((acc, it) => acc + (this._equipBonusFor(it)[key] || 0), 0);
+    const bonus = 0; // equipment removed
     return base + bonus;
   }
 
