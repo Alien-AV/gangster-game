@@ -7,7 +7,7 @@ export class Game {
   constructor() {
     this.state = {
       time: 0,
-      cleanMoney: 10,
+      cleanMoney: 100,
       dirtyMoney: 0,
       patrol: 0,
       extortedBusinesses: 0,
@@ -31,7 +31,7 @@ export class Game {
     };
     // Chance that an extortion attempt results in a disagreeable owner (used by actions.js)
     this.DISAGREEABLE_CHANCE = 0.25;
-    this.SALARY_PER_10S = { face: 5, fist: 5, brain: 7 };
+    this.SALARY_PER_10S = { face: 50, fist: 50, brain: 70 };
 
     this.darkToggle = document.getElementById('darkToggle');
     const storedDark = localStorage.getItem('dark') === '1';
@@ -243,18 +243,20 @@ export class Game {
 
   enforcerCost() {
     const level = this.fearLevel();
-    return Math.max(1, 5 - level);
+    return Math.max(10, 50 - level * 10);
   }
+
+  enforcerSalaryPer10s() { return 0; }
 
   gangsterCost() {
     const level = this.fearLevel();
-    return Math.max(5, 20 - level * 2);
+    return Math.max(50, 200 - level * 20);
   }
 
   businessCost() {
-    const base = 100;
-    const discount = this.fearLevel() * 5; // $5 off per fear level
-    return Math.max(50, base - discount);
+    const base = 1000;
+    const discount = this.fearLevel() * 50; // $50 off per fear level
+    return Math.max(500, base - discount);
   }
 
   paySalaries() {
@@ -294,7 +296,7 @@ export class Game {
     if (fearBonusEl) fearBonusEl.textContent = rl > 0 ? `Business cost $${bCost}` : 'None';
     const rL = this.respectLevel();
     const respectBonusEl = document.getElementById('respectBonus');
-    if (respectBonusEl) respectBonusEl.textContent = rL > 0 ? `Fronts +$${rL} clean/s each; Laundering +${rL * 10}% yield` : 'None';
+    if (respectBonusEl) respectBonusEl.textContent = rL > 0 ? `Fronts +$${rL * 10} clean/s each; Laundering +${rL * 10}% yield` : 'None';
     document.getElementById('businesses').textContent = s.businesses;
     const availFronts = Math.max(0, (s.businesses || 0) - (s.illicit || 0));
     const afEl = document.getElementById('availableFronts');
@@ -585,14 +587,14 @@ export class Game {
       if (item.type === 'cop') return simple({ hint: `<div style="margin-top:6px;color:#888">Drop a gangster to Pay Off Cops</div>`, actId: 'actPayCops', failMsg: 'Cannot pay cops.' });
       if (item.type === 'recruit') return {
         hint: (() => {
-          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 20;
+          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 200;
           return `<div style="margin-top:6px;color:#888">Drop a gangster to Hire this recruit (Costs $${price})</div>`;
         })(),
         handler: (g, prog) => {
           const baseAct = (ACTIONS || []).find(a => a.id === 'actHireGangster');
           if (!baseAct) return;
           // Pre-check funds to avoid flashing an empty progress bar
-          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 20;
+          const price = (typeof this.gangsterCost === 'function') ? this.gangsterCost() : 200;
           if (this.totalMoney() < price) { this._cardMsg(`Need $${price} to hire.`); return; }
           const chosen = (item.data && item.data.type) || 'face';
           const act = { ...baseAct, label: `Hire ${chosen.charAt(0).toUpperCase()+chosen.slice(1)}`,
@@ -612,7 +614,10 @@ export class Game {
         }
       };
       if (item.type === 'crooks') return {
-        hint: `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers</div>`,
+        hint: (() => {
+          const price = (typeof this.enforcerCost === 'function') ? this.enforcerCost() : 50;
+          return `<div style=\"margin-top:6px;color:#888\">Drop a Face to recruit local crooks as Enforcers (Costs $${price})</div>`;
+        })(),
         handler: (g, prog) => {
           const baseAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
           if (!baseAct) return;
@@ -721,7 +726,7 @@ export class Game {
       };
       if (item.id === 'newspaper') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to run a Promo Campaign</div>`, actId: 'actPromo', failMsg: 'Cannot run promo.' });
       if (item.id === 'pawn_shop') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Procure Equipment</div>`, actId: 'actProcureEquipment', failMsg: 'Cannot procure equipment.' });
-      if (item.id === 'bookmaker') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a Brain to Launder $100</div>`, actId: 'actLaunder', failMsg: 'Cannot launder.' });
+      if (item.id === 'bookmaker') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a Brain to Launder $1000</div>`, actId: 'actLaunder', failMsg: 'Cannot launder.' });
       return null;
     };
 
@@ -857,11 +862,11 @@ export class Game {
   tick() {
     const s = this.state;
     s.time += 1;
-    s.dirtyMoney += (s.extortedBusinesses || 0);
-    s.cleanMoney += s.businesses * 2;
+    s.dirtyMoney += (s.extortedBusinesses || 0) * 10;
+    s.cleanMoney += s.businesses * 20;
     // Respect increases front legitimacy: +$respectLevel per business per tick
-    s.cleanMoney += s.businesses * this.respectLevel();
-    s.dirtyMoney += s.illicit * 5;
+    s.cleanMoney += s.businesses * (this.respectLevel() * 10);
+    s.dirtyMoney += s.illicit * 50;
     let heatTick = s.disagreeableOwners;
     const unpatrolled = (s.extortedBusinesses || 0) - s.patrol;
     if (unpatrolled > 0) heatTick += unpatrolled;
