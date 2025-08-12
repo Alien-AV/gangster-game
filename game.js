@@ -130,6 +130,20 @@ export class Game {
       nextGangId: s.nextGangId,
       salaryTick: s.salaryTick,
       table: s.table || null,
+      // Persist deck states (neighborhood only for now)
+      decks: (() => {
+        const res = {};
+        const d = this._decks || {};
+        const n = d.neighborhood;
+        if (n) {
+          res.neighborhood = {
+            start: Array.isArray(n._start) ? n._start.slice() : [],
+            middle: Array.isArray(n._middle) ? n._middle.slice() : [],
+            end: Array.isArray(n._end) ? n._end.slice() : [],
+          };
+        }
+        return res;
+      })(),
     };
   }
 
@@ -168,6 +182,8 @@ export class Game {
       this._equipSelect = { queue: [], active: false };
       console.debug('[LoadSlot] state:', this.state);
       // Ensure table/deck and UI refresh after load
+      // Force rebuild decks from saved snapshot
+      this._decks = {};
       this.initTable();
       this.renderWorld();
       this.updateUI();
@@ -431,17 +447,26 @@ export class Game {
     // Build runtime deck objects (not saved directly)
     this._decks = this._decks || {};
     if (!this._decks.neighborhood) {
-      this._decks.neighborhood = new Deck({
-        // Guaranteed groups at the start: first the three recruits together, second the local crooks
-        start: [ ['recruit_face', 'recruit_fist', 'recruit_brain'], 'small_crooks' ],
-        // Shuffled middle content (exclude small_crooks to avoid duplicate instances)
-        pool: [
-          'corrupt_cop', 'priest',
-          'hot_dog_stand', 'bakery', 'diner', 'laundromat', 'pawn_shop', 'newspaper', 'bookmaker',
-        ],
-        // Guaranteed end
-        end: ['city_entrance'],
-      });
+      const snap = (this.state.decks && this.state.decks.neighborhood) || null;
+      if (snap) {
+        const d = new Deck({});
+        d._start = Array.isArray(snap.start) ? snap.start.slice() : [];
+        d._middle = Array.isArray(snap.middle) ? snap.middle.slice() : [];
+        d._end = Array.isArray(snap.end) ? snap.end.slice() : [];
+        this._decks.neighborhood = d;
+      } else {
+        this._decks.neighborhood = new Deck({
+          // Guaranteed groups at the start: first the three recruits together, second the local crooks
+          start: [ ['recruit_face', 'recruit_fist', 'recruit_brain'], 'small_crooks' ],
+          // Shuffled middle content (exclude small_crooks to avoid duplicate instances)
+          pool: [
+            'corrupt_cop', 'priest',
+            'hot_dog_stand', 'bakery', 'diner', 'laundromat', 'pawn_shop', 'newspaper', 'bookmaker',
+          ],
+          // Guaranteed end
+          end: ['city_entrance'],
+        });
+      }
     }
   }
 
@@ -680,11 +705,11 @@ export class Game {
       if (['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) {
         const now = this.state.time || 0;
         if (item.extorted) {
-          const badge = document.createElement('div'); badge.style.color = '#f88'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
+          const badge = document.createElement('div'); badge.style.color = 'var(--badge-disabled)'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
           item._badgeEl = badge;
         } else if (item.cooldownUntil && now < item.cooldownUntil) {
           const remain = item.cooldownUntil - now;
-          const badge = document.createElement('div'); badge.style.color = '#ff8'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
+          const badge = document.createElement('div'); badge.style.color = 'var(--badge-warn)'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
           item._badgeEl = badge;
         }
       }
