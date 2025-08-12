@@ -546,14 +546,62 @@ export class Game {
       gc.setAttribute('draggable', g.busy ? 'false' : 'true');
       gc.dataset.gid = String(g.id);
       const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
-      gc.innerHTML = `<div><strong>${gCard.name}</strong></div>`+
-        `<div>${gCard.desc}</div>`+
-        `<div>${g.busy ? 'Busy' : 'Drag onto world cards'}</div>`;
+      const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
+      const artImg = g.type === 'boss' ? 'boss.png' : (g.type === 'face' ? 'face.png' : (g.type === 'fist' ? 'fist.png' : (g.type === 'brain' ? 'brain.png' : null)));
+      const gDesc = (
+        g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
+        g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
+        g.type === 'fist' ? 'Bruiser. Raids and intimidates when needed.' :
+        g.type === 'brain' ? 'A planner who knows the angles.' :
+        ''
+      );
+      gc.innerHTML = `
+        <div class="world-card-title">${gCard.name}</div>
+        <div class="world-card-art">
+          ${artImg ? `<img class="world-card-artImg" src="${artImg}" alt="${gCard.name}">` : ''}
+          <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
+        </div>
+        <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
+      `;
+      // No native tooltip
+      gc.removeAttribute('title');
+      // Fallback if image fails
+      if (artImg) {
+        const img = gc.querySelector('.world-card-artImg');
+        const emojiEl = gc.querySelector('.world-card-artEmoji');
+        if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+      }
       gc.addEventListener('dragstart', ev => {
         if (g.busy) { ev.preventDefault(); return; }
         ev.dataTransfer.setData('text/plain', String(g.id));
         ev.dataTransfer.effectAllowed = 'move';
       });
+      // Ensure image doesn't steal the drag; start drag on image by proxying mousedown
+      gc.addEventListener('mousedown', (ev) => {
+        const target = ev.target;
+        if (target && target.closest && target.closest('.world-card-art')) {
+          // Allow drag to start from the card container itself
+          gc.setAttribute('draggable', g.busy ? 'false' : 'true');
+        }
+      });
+      // Desktop-only popover for gangster cards
+      if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+        // Show info in top-right panel on hover
+        gc.addEventListener('mouseenter', () => this._showInfoPanel({
+          title: gCard.name,
+          stats: `F:${g.stats.fist} Fa:${g.stats.face} Br:${g.stats.brain}`,
+          desc: gDesc,
+          hint: g.busy ? 'Busy' : 'Drag onto world cards',
+        }));
+        gc.addEventListener('mouseleave', () => this._hideInfoPanel());
+      }
+      // Also show on click (mobile or desktop)
+      gc.addEventListener('click', () => this._showInfoPanel({
+        title: gCard.name,
+        stats: `F:${g.stats.fist} Fa:${g.stats.face} Br:${g.stats.brain}`,
+        desc: gDesc,
+        hint: g.busy ? 'Busy' : 'Drag onto world cards',
+      }));
       el.appendChild(gc);
     });
     // Neighborhood explore card (drop gangster to explore)
@@ -562,12 +610,35 @@ export class Game {
     const ndeck = (this._decks || {}).neighborhood;
     const disabled = !ndeck || !ndeck.hasMore();
     exploreCard.style.opacity = disabled ? '0.5' : '1.0';
-    exploreCard.innerHTML = '<div><strong>Neighborhood</strong></div>' +
-      (disabled ? '<div>Deck exhausted</div>' : '<div>Drop a gangster to explore</div>');
+    exploreCard.innerHTML = `
+      <div class="world-card-title">Neighborhood</div>
+      <div class="world-card-art">
+        <img class="world-card-artImg" src="neighborhood.png" alt="Neighborhood">
+        <div class="world-card-artEmoji hidden">🏙️</div>
+      </div>
+      <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
+    `;
     const exploreProg = document.createElement('div');
     exploreProg.className = 'progress hidden';
     exploreProg.innerHTML = '<div class="progress-bar"></div>';
     exploreCard.appendChild(exploreProg);
+    // No native tooltip
+    exploreCard.removeAttribute('title');
+    {
+      const img = exploreCard.querySelector('.world-card-artImg');
+      const emojiEl = exploreCard.querySelector('.world-card-artEmoji');
+      if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+    }
+    // Info panel on hover/click
+    if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      exploreCard.addEventListener('mouseenter', () => this._showInfoPanel({
+        title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore'
+      }));
+      exploreCard.addEventListener('mouseleave', () => this._hideInfoPanel());
+    }
+    exploreCard.addEventListener('click', () => this._showInfoPanel({
+      title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore'
+    }));
     exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
     exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
     exploreCard.addEventListener('drop', ev => {
@@ -673,7 +744,9 @@ export class Game {
           if (!ok) this._cardMsg('Cannot recruit.');
         }
       };
-      if (['hot_dog_stand', 'bakery', 'diner', 'laundromat'].includes(item.id)) return {
+      if ([
+        'hot_dog_stand', 'bakery', 'diner', 'laundromat'
+      ].includes(item.id)) return {
         hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`,
         handler: (g, prog) => {
           const now = this.state.time || 0;
@@ -765,24 +838,72 @@ export class Game {
     disc.forEach(item => {
       if (item.used && !item.reusable) return;
       const c = document.createElement('div');
-      c.className = 'card world-card';
-      let body = `<div><strong>${item.name || item.title || item.id}</strong></div><div>${item.desc || ''}</div>`;
+      c.className = 'card world-card' + (item.type === 'recruit' ? ' recruit' : '');
+      const title = item.name || item.title || item.id;
+      const artEmoji = (
+        item.id === 'hot_dog_stand' ? '🌭' :
+        item.id === 'bakery' ? '🥖' :
+        item.id === 'diner' ? '🍽️' :
+        item.id === 'laundromat' ? '🧺' :
+        item.id === 'bookmaker' ? '🎲' :
+        item.id === 'newspaper' ? '📰' :
+        item.id === 'pawn_shop' ? '💼' :
+        item.id === 'disagreeable_owner' ? '🙅' :
+        item.id === 'extorted_business' ? '💵' :
+        item.type === 'crooks' ? '🧍‍♂️' :
+        item.type === 'cop' ? '👮' :
+        item.type === 'priest' ? '⛪' :
+        item.type === 'milestone' ? '🚪' :
+        '🃏'
+      );
+      const artImg = (
+        item.id === 'bakery' ? 'bakery.png' :
+        item.type === 'cop' ? 'cop.png' :
+        item.type === 'recruit' ? (item.data && item.data.type === 'face' ? 'face.png' : (item.data && item.data.type === 'fist' ? 'fist.png' : 'brain.png')) :
+        null
+      );
+      let body = `
+        <div class="world-card-title">${title}</div>
+        <div class="world-card-art">
+          ${artImg ? `<img class=\"world-card-artImg\" src=\"${artImg}\" alt=\"${title}\">` : ''}
+          <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
+        </div>
+        <div class="world-card-desc"><p class="world-card-descText">${item.desc || '&nbsp;'}</p></div>
+      `;
       // Type-based behaviors to remove per-id duplication
       // Attach declarative drop behavior, if any
       const behavior = getDropBehavior(item);
-      if (behavior) {
-        if (behavior.hint) body += behavior.hint;
-      }
+      // Do not merge hints into the card face; hints are shown only in the top-right info panel
       // Counter cards: Enforcers and Extorted Businesses (display counts)
       if (item.id === 'enforcers') {
         const count = (item.data && item.data.count) || 0;
-        body = `<div><strong>${item.name}</strong></div><div>Count: ${count}</div>`;
+        body = `
+          <div class="world-card-title">${item.name}</div>
+          <div class="world-card-art"><div class="world-card-artEmoji">🧍‍♂️</div></div>
+          <div class="world-card-desc"><p class="world-card-descText">Count: ${count}</p></div>
+        `;
       }
       if (item.id === 'extorted_business') {
         const count = (item.data && item.data.count) || 0;
-        body = `<div><strong>${item.name}</strong></div><div>Protection owed: ${count}</div>`;
+        body = `
+          <div class="world-card-title">${item.name}</div>
+          <div class="world-card-art"><div class="world-card-artEmoji">💵</div></div>
+          <div class="world-card-desc"><p class="world-card-descText">Protection owed: ${count}</p></div>
+        `;
       }
       c.innerHTML = body;
+      // No native tooltip
+      c.removeAttribute('title');
+      {
+        const img = c.querySelector('.world-card-artImg');
+        const emojiEl = c.querySelector('.world-card-artEmoji');
+        if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+      }
+      // Apply grayscale for recruits
+      if (item.type === 'recruit') {
+        const imgEl = c.querySelector('.world-card-artImg');
+        if (imgEl) imgEl.style.filter = 'grayscale(1) contrast(0.95)';
+      }
       // Per-card progress bar
       const prog = document.createElement('div');
       prog.className = 'progress hidden';
@@ -792,15 +913,31 @@ export class Game {
       if (behavior) {
         attachDrop(c, behavior.handler, prog);
       }
+      // Show info in top-right panel on hover/click
+      const infoData = (() => {
+        const stats = '';
+        const desc = item.desc || (item.type === 'cop' ? 'A familiar face on the beat. Can arrange favors for a price.' : (item.type === 'crooks' ? 'Can be swayed to patrol for you.' : (item.id === 'enforcers' ? 'Muscle on call.' : '')));
+        const hint = (() => {
+          // No hints on the card face; use only for info panel if needed
+          if (behavior && behavior.hint) return behavior.hint.replace(/<[^>]*>/g,'');
+          return '';
+        })();
+        return { title, stats, desc, hint };
+      })();
+      if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+        c.addEventListener('mouseenter', () => this._showInfoPanel(infoData));
+        c.addEventListener('mouseleave', () => this._hideInfoPanel());
+      }
+      c.addEventListener('click', () => this._showInfoPanel(infoData));
       // Show disabled/cooldown state
       if (['hot_dog_stand','bakery','diner','laundromat'].includes(item.id)) {
         const now = this.state.time || 0;
         if (item.extorted) {
-          const badge = document.createElement('div'); badge.style.color = 'var(--badge-disabled)'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
+          const badge = document.createElement('div'); badge.className = 'world-card-badge'; badge.style.color = 'var(--badge-disabled)'; badge.textContent = 'Disabled after extortion'; c.appendChild(badge);
           item._badgeEl = badge;
         } else if (item.cooldownUntil && now < item.cooldownUntil) {
           const remain = item.cooldownUntil - now;
-          const badge = document.createElement('div'); badge.style.color = 'var(--badge-warn)'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
+          const badge = document.createElement('div'); badge.className = 'world-card-badge'; badge.style.color = 'var(--badge-warn)'; badge.textContent = `Recovering (${remain}s)`; c.appendChild(badge);
           item._badgeEl = badge;
         }
       }
@@ -974,6 +1111,26 @@ export class Game {
         action.effect(this, g);
       }
     });
+  }
+
+  _showInfoPanel({ title = '', stats = '', desc = '', hint = '' } = {}) {
+    const panel = document.getElementById('infoPanel');
+    if (!panel) return;
+    const t = document.getElementById('infoPanelTitle');
+    const s = document.getElementById('infoPanelStats');
+    const d = document.getElementById('infoPanelDesc');
+    const h = document.getElementById('infoPanelHint');
+    if (t) t.textContent = title;
+    if (s) s.textContent = stats;
+    if (d) d.textContent = desc;
+    if (h) h.textContent = hint;
+    panel.classList.remove('hidden');
+  }
+
+  _hideInfoPanel() {
+    const panel = document.getElementById('infoPanel');
+    if (!panel) return;
+    panel.classList.add('hidden');
   }
 
 }
