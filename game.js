@@ -671,7 +671,7 @@ export class Game {
         const gid = parseInt(idStr, 10);
         const g = this.state.gangsters.find(x => x.id === gid);
         if (!g || g.busy) return;
-        onDrop(g, prog);
+        onDrop(g, prog, cardEl);
       });
     };
 
@@ -748,14 +748,11 @@ export class Game {
         'hot_dog_stand', 'bakery', 'diner', 'laundromat'
       ].includes(item.id)) return {
         hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to Extort or Raid</div>`,
-        handler: (g, prog) => {
+        handler: (g, prog, cardEl) => {
           const now = this.state.time || 0;
           if (item.cooldownUntil && now < item.cooldownUntil) { this._cardMsg('Business is recovering after a raid.'); return; }
-          const options = [
-            { id: 'actExtort', label: 'Extort' },
-            { id: 'actRaid', label: 'Raid' },
-          ];
-          this.showActionSelection(options, (choiceId) => {
+          const options = [ { id: 'actExtort', label: 'Extort' }, { id: 'actRaid', label: 'Raid' } ];
+          this.showInlineActionChoice(cardEl, options, (choiceId) => {
             const baseAct = (ACTIONS || []).find(a => a.id === choiceId);
             if (!baseAct) return;
             const act = { ...baseAct, effect: (game, gg) => {
@@ -1131,6 +1128,41 @@ export class Game {
     const panel = document.getElementById('infoPanel');
     if (!panel) return;
     panel.classList.add('hidden');
+  }
+
+  showInlineActionChoice(anchorEl, options, onChoose) {
+    // Remove any existing chooser first
+    this._destroyInlineChoice();
+    const chooser = document.createElement('div');
+    chooser.className = 'inline-choice';
+    (options || []).forEach(opt => {
+      const b = document.createElement('button');
+      b.textContent = opt.label || opt.id;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._destroyInlineChoice();
+        onChoose && onChoose(opt.id);
+      });
+      chooser.appendChild(b);
+    });
+    // Close chooser if clicking elsewhere
+    const onDoc = (e) => {
+      if (!chooser.contains(e.target) && !anchorEl.contains(e.target)) {
+        this._destroyInlineChoice();
+      }
+    };
+    document.addEventListener('click', onDoc, { once: true });
+    // Attach to anchor card
+    anchorEl.style.position = anchorEl.style.position || 'relative';
+    anchorEl.appendChild(chooser);
+    this._activeInlineChoice = chooser;
+  }
+
+  _destroyInlineChoice() {
+    if (this._activeInlineChoice && this._activeInlineChoice.remove) {
+      try { this._activeInlineChoice.remove(); } catch(e){}
+    }
+    this._activeInlineChoice = null;
   }
 
 }
