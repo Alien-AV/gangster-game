@@ -10,7 +10,7 @@ export class Game {
       cleanMoney: 10,
       dirtyMoney: 0,
       patrol: 0,
-      territory: 0,
+      extortedBusinesses: 0,
       heat: 0,
       heatProgress: 0,
       disagreeableOwners: 0,
@@ -112,7 +112,7 @@ export class Game {
       cleanMoney: s.cleanMoney,
       dirtyMoney: s.dirtyMoney,
       patrol: s.patrol,
-      territory: s.territory,
+      extortedBusinesses: s.extortedBusinesses,
       heat: s.heat,
       heatProgress: s.heatProgress,
       disagreeableOwners: s.disagreeableOwners,
@@ -170,6 +170,11 @@ export class Game {
       const data = JSON.parse(raw);
       console.debug('[LoadSlot] parsed data', data);
       Object.assign(this.state, data);
+      // Back-compat: migrate legacy 'territory' to 'extortedBusinesses'
+      if (this.state.extortedBusinesses == null && typeof data.territory === 'number') {
+        this.state.extortedBusinesses = data.territory;
+        delete this.state.territory;
+      }
       this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [] }));
       // Ensure Boss exists
       if (!this.state.gangsters.some(x => x.type === 'boss')) {
@@ -275,7 +280,8 @@ export class Game {
     document.getElementById('cleanMoney').textContent = s.cleanMoney;
     document.getElementById('dirtyMoney').textContent = s.dirtyMoney;
     document.getElementById('patrol').textContent = s.patrol;
-    document.getElementById('territory').textContent = s.territory;
+    const extEl = document.getElementById('extortedBusinesses');
+    if (extEl) extEl.textContent = s.extortedBusinesses;
     document.getElementById('heat').textContent = s.heat;
     const heatBar = document.getElementById('heatProgressBar');
     heatBar.style.width = (s.heatProgress * 10) + '%';
@@ -638,9 +644,56 @@ export class Game {
           const baseAct = (ACTIONS || []).find(a => a.id === actId);
           if (!baseAct) return;
           const act = { ...baseAct, effect: (game, gg) => {
-            baseAct.effect(game, gg);
             if (actId === 'actExtort') {
-              // Replace business with counter card in-place
+              // For test: make the second extortion always fail into a Disagreeable Owner
+              this._extortAttemptCount = (this._extortAttemptCount || 0) + 1;
+              const forceFail = (this._extortAttemptCount === 2);
+              // Apply baseline heat for acting
+              if (gg) gg.personalHeat = (gg.personalHeat || 0) + 1;
+              const discArr = (game.state.table && game.state.table.cards) || [];
+              const idx = discArr.indexOf(item);
+              if (forceFail) {
+                // Spawn owner card instead of immediate extortion success
+                let owner = makeCard('disagreeable_owner');
+                if (idx >= 0) discArr.splice(idx, 1, owner); else discArr.push(owner);
+                // Track a simple counter for analytics
+                game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
+              } else {
+                // Success path: convert to/stack onto extorted business
+                let xb = discArr.find(x => x.id === 'extorted_business');
+                if (!xb) {
+                  xb = makeCard('extorted_business');
+                  xb.data = xb.data || {}; xb.data.count = 1;
+                  if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
+                } else {
+                  xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                  if (idx >= 0) {
+                    discArr.splice(idx, 1);
+                    const oldIdx = discArr.indexOf(xb);
+                    if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
+                  }
+                }
+                // Increment extorted businesses counter
+                game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
+              }
+            }
+            if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; if (typeof baseAct.effect === 'function') baseAct.effect(game, gg); }
+          } };
+          if (prog) prog.style.display = 'block';
+          const dur = this.durationWithStat(act.base, act.stat, g);
+          const ok = this.executeAction(act, g, prog, dur);
+          if (!ok) this._cardMsg('Cannot act on business.');
+        }
+      };
+      if (item.id === 'disagreeable_owner') return {
+        hint: `<div style=\"margin-top:6px;color:#888\">Drop Face or Fist to pressure the owner</div>`,
+        handler: (g, prog) => {
+          const face = this.effectiveStat(g, 'face');
+          const fist = this.effectiveStat(g, 'fist');
+          const useStat = (face >= fist) ? 'face' : 'fist';
+          const baseMs = 3500;
+          const act = { id: 'actConvinceOrThreaten', label: useStat === 'face' ? 'Convince Owner (Face)' : 'Threaten Owner (Fist)', stat: useStat, base: baseMs,
+            effect: (game, gg) => {
               const discArr = (game.state.table && game.state.table.cards) || [];
               const idx = discArr.indexOf(item);
               let xb = discArr.find(x => x.id === 'extorted_business');
@@ -656,13 +709,14 @@ export class Game {
                   if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
                 }
               }
-            }
-            if (actId === 'actRaid')  { item.cooldownUntil = (game.state.time || 0) + 60; }
-          } };
+              // Update counters: resolved one owner, gained one extorted business
+              if (game.state.disagreeableOwners > 0) game.state.disagreeableOwners -= 1;
+              game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
+            } };
           if (prog) prog.style.display = 'block';
           const dur = this.durationWithStat(act.base, act.stat, g);
           const ok = this.executeAction(act, g, prog, dur);
-          if (!ok) this._cardMsg('Cannot act on business.');
+          if (!ok) this._cardMsg('Cannot pressure owner.');
         }
       };
       if (item.id === 'newspaper') return simple({ hint: `<div style=\"margin-top:6px;color:#888\">Drop a gangster to run a Promo Campaign</div>`, actId: 'actPromo', failMsg: 'Cannot run promo.' });
@@ -803,13 +857,13 @@ export class Game {
   tick() {
     const s = this.state;
     s.time += 1;
-    s.dirtyMoney += s.territory;
+    s.dirtyMoney += (s.extortedBusinesses || 0);
     s.cleanMoney += s.businesses * 2;
     // Respect increases front legitimacy: +$respectLevel per business per tick
     s.cleanMoney += s.businesses * this.respectLevel();
     s.dirtyMoney += s.illicit * 5;
     let heatTick = s.disagreeableOwners;
-    const unpatrolled = s.territory - s.patrol;
+    const unpatrolled = (s.extortedBusinesses || 0) - s.patrol;
     if (unpatrolled > 0) heatTick += unpatrolled;
     if (heatTick > 0) {
       s.heatProgress += heatTick;

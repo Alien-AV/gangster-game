@@ -68,7 +68,7 @@ export const ACTIONS = [
       if (Math.random() < game.DISAGREEABLE_CHANCE) {
         game.state.disagreeableOwners += 1;
       } else {
-        game.state.territory += 1;
+        game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
       }
       g.personalHeat = (g.personalHeat || 0) + 1;
     } },
