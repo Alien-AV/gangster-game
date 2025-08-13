@@ -41,6 +41,22 @@ export function makeCard(id) {
   return f ? f() : new Card({ id, name: id, desc: '', reusable: true, type: 'generic' });
 }
 
+// Compute dynamic info line for a card (counts, timers, etc.)
+export function computeCardDynamic(game, item) {
+  if (!item) return '';
+  if (item.type === 'enforcer') {
+    const count = (item.data && item.data.count) || 0; return `Amount: ${count}`;
+  }
+  if (item.id === 'extorted_business') {
+    const count = (item.data && item.data.count) || 0; return `Amount: ${count}`;
+  }
+  if (item.type === 'business' && item.cooldownUntil) {
+    const remain = Math.max(0, (item.cooldownUntil - (game.state.time || 0)));
+    if (remain > 0) return `Recovers in ${remain}s`;
+  }
+  return '';
+}
+
 // Create a Card facade for a gangster entity
 export function makeGangsterCard(g) {
   const { id, type, name, stats = {} } = g || {};
@@ -274,11 +290,17 @@ export function renderWorldCard(game, item) {
     <div class="world-card-art">
       ${artHtml}
     </div>
-    <div class="world-card-desc"><p class="world-card-descText">${computeDesc()}</p></div>
+    <div class="world-card-desc">
+      <p class="world-card-descText">${computeDesc()}</p>
+      <p class="world-card-descDyn"></p>
+    </div>
   `;
   const imgEl = c.querySelector('.world-card-artImg');
   const emojiEl = c.querySelector('.world-card-artEmoji');
   if (imgEl) imgEl.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); imgEl.remove(); });
+  // Seed dynamic text
+  const dynEl = c.querySelector('.world-card-descDyn');
+  if (dynEl) dynEl.textContent = computeCardDynamic(game, item);
   if (item.type === 'recruit' && imgEl) imgEl.style.filter = 'grayscale(1) contrast(0.95)';
   if (item.type === 'business') {
     const now = game.state.time || 0;
@@ -302,6 +324,8 @@ export function renderWorldCard(game, item) {
   wrap.appendChild(c);
   // Expose wrapper for cooldown ring updates
   item._ringWrapEl = wrap;
+  // Expose dynamic element for live updates
+  item._dynEl = dynEl;
   return { wrap, card: c };
 }
 
@@ -324,16 +348,6 @@ export function getCardInfo(game, item) {
   else if (item.type === 'cop') hint = 'Bribe the local cop to deflect the attention of authorities.';
   else if (item.type === 'owner') hint = 'Sway the owner with a $500 donation — or break a few windows to intimidate.';
   // Dynamic line
-  let dynamic = '';
-  if (item.type === 'enforcer') {
-    const count = (item.data && item.data.count) || 0; dynamic = `Amount: ${count}`;
-  }
-  if (item.id === 'extorted_business') {
-    const count = (item.data && item.data.count) || 0; dynamic = `Amount: ${count}`;
-  }
-  if (item.type === 'business' && item.cooldownUntil) {
-    const remain = Math.max(0, (item.cooldownUntil - (game.state.time || 0)));
-    if (remain > 0) dynamic = `Recovers in ${remain}s`;
-  }
+  const dynamic = computeCardDynamic(game, item);
   return { title, desc, hint, dynamic };
 }
