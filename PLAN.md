@@ -26,8 +26,4 @@ This file tracks near-term tasks to align the prototype with the intended design
   - Add salaries to enforcers.
   - Display a per-tick breakdown line of income/expenses, e.g., "+100 from protection −50 from gangsters −10 from enforcers".
 
-## Conventions
-
-- Terminology: use "table" (not "world").
-- Chooser-first: when multiple actions are valid, show a choice popup anchored to the card. Stats will gate availability rather than auto-pick a default.
-
+- Specialized Gangsters having better specialized stat than the Boss
