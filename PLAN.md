@@ -27,3 +27,5 @@ This file tracks near-term tasks to align the prototype with the intended design
   - Display a per-tick breakdown line of income/expenses, e.g., "+100 from protection −50 from gangsters −10 from enforcers".
 
 - Specialized Gangsters having better specialized stat than the Boss
+
+- Reduce flickering on the main screen and unneeded reload after actions that breaks animations
