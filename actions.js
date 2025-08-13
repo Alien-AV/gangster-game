@@ -46,14 +46,15 @@ export const ACTIONS = [
     } },
   { id: 'actPromo', label: 'Promotional Campaign (Face)', stat: 'face', base: 3000,
     cost: (game) => {
-      if ((game.state.cleanMoney || 0) < 500) return false;
-      game.state.cleanMoney -= 500;
+      if ((game.state.dirtyMoney || 0) < 500) return false;
+      game.state.dirtyMoney -= 500;
       return true;
     },
     effect: (game) => { game.state.respect += 1; } },
   { id: 'actVigilante', label: 'Vigilante Patrol (Fist)', stat: 'fist', base: 3000,
     effect: (game, g) => {
       game.state.respect += 1;
+      game.state.fear = (game.state.fear || 0) + 1;
       game.state.heat += 1;
       g.personalHeat = (g.personalHeat || 0) + 1;
     } },

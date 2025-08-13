@@ -19,8 +19,8 @@ export class Card {
 export const CARD_REGISTRY = {
   corrupt_cop: () => new Card({ id: 'corrupt_cop', name: 'Local Corrupt Cop', desc: 'A familiar face on the beat. Can arrange favors for a price.', reusable: true, type: 'cop', img: 'cop.png', verbs: ['pay_cops'] }),
   priest: () => new Card({ id: 'priest', name: 'Priest at the Church', desc: 'Donations improve your reputation in the neighborhood.', reusable: true, type: 'priest', verbs: ['donate'] }),
-  small_crooks: () => new Card({ id: 'small_crooks', name: 'Small-time Crooks', desc: 'Can be swayed to patrol for you.', reusable: true, type: 'crooks', verbs: ['recruit_enforcer'] }),
-  enforcers: () => new Card({ id: 'enforcers', name: 'Enforcers', desc: 'Muscle on call.', reusable: true, type: 'enforcer', data: { count: 0 }, verbs: [] }),
+  small_crooks: () => new Card({ id: 'small_crooks', name: 'Small-time Crooks', desc: 'Local criminals: hurt them to earn respect and fear of the streets - or recruit them as enforcers.', reusable: true, type: 'crooks', verbs: ['recruit_enforcer'] }),
+  enforcers: () => new Card({ id: 'enforcers', name: 'Enforcers', desc: 'Hired muscle - when you need just need some extra hands.', reusable: true, type: 'enforcer', data: { count: 0 }, verbs: [] }),
   hot_dog_stand: () => new Card({ id: 'hot_dog_stand', name: 'Hot-dog Stand', desc: 'A flimsy front ripe for a shake-down.', reusable: true, type: 'business', verbs: ['extort_or_raid'] }),
   bakery: () => new Card({ id: 'bakery', name: 'Corner Bakery', desc: 'Busy mornings. Might pay for protection.', reusable: false, type: 'business', img: 'bakery.png', verbs: ['extort_or_raid'] }),
   diner: () => new Card({ id: 'diner', name: 'Mom-and-Pop Diner', desc: 'Cash business with regulars.', reusable: false, type: 'business', verbs: ['extort_or_raid'] }),
@@ -28,8 +28,8 @@ export const CARD_REGISTRY = {
   pawn_shop: () => new Card({ id: 'pawn_shop', name: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false, type: 'business', verbs: ['procure_equipment'] }),
   newspaper: () => new Card({ id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'business', verbs: ['promo'] }),
   bookmaker: () => new Card({ id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', verbs: ['launder'] }),
-  extorted_business: () => new Card({ id: 'extorted_business', name: 'Extorted Businesses', desc: 'Neighborhood protection under your wing.', reusable: true, type: 'extorted_business', data: { count: 0 }, verbs: [] }),
-  disagreeable_owner: () => new Card({ id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'Stands up to your shakedown. Convince (Face) or threaten (Fist) to secure protection.', reusable: false, type: 'owner', verbs: ['pressure_owner'] }),
+  extorted_business: () => new Card({ id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', data: { count: 0 }, verbs: [] }),
+  disagreeable_owner: () => new Card({ id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', reusable: false, type: 'owner', verbs: ['pressure_owner'] }),
   recruit_face: () => new Card({ id: 'recruit_face', name: 'Recruit: Face', desc: 'A smooth talker looking for work. Hire when you have cash.', reusable: false, type: 'recruit', data: { type: 'face' }, img: 'face.png', verbs: ['hire_recruit'] }),
   recruit_fist: () => new Card({ id: 'recruit_fist', name: 'Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, type: 'recruit', data: { type: 'fist' }, img: 'fist.png', verbs: ['hire_recruit'] }),
   recruit_brain: () => new Card({ id: 'recruit_brain', name: 'Recruit: Brain', desc: 'A planner who knows the angles.', reusable: false, type: 'recruit', data: { type: 'brain' }, img: 'brain.png', verbs: ['hire_recruit'] }),
@@ -136,20 +136,33 @@ export const CARD_BEHAVIORS = {
   },
   crooks: {
     onDrop: function (game, item, gangster, cardEl) {
-      const baseAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
-      if (!baseAct) return;
-      const act = {
-        ...baseAct, id: 'actRecruitCrooks', label: 'Recruit Local Crooks', stat: 'face',
-        effect: (gme, gg) => {
-          baseAct.effect(gme, gg);
-          const discArr = (gme.state.table && gme.state.table.cards) || [];
-          let ef = discArr.find(x => x.id === 'enforcers');
-          if (!ef) { ef = makeCard('enforcers'); discArr.push(ef); }
-          ef.data = ef.data || {}; ef.data.count = (ef.data.count || 0) + 1;
+      const recruitAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
+      const vigilAct = (ACTIONS || []).find(a => a.id === 'actVigilante');
+      if (!recruitAct && !vigilAct) return;
+      const options = [];
+      if (recruitAct) options.push({ id: 'recruit', label: 'Recruit' });
+      if (vigilAct) options.push({ id: 'vigilante', label: 'Beat Up' });
+      if (!options.length) return;
+      game.showInlineActionChoice(cardEl, options, (choiceId) => {
+        if (choiceId === 'recruit' && recruitAct) {
+          const act = {
+            ...recruitAct, id: 'actRecruitCrooks', label: 'Recruit Local Crooks', stat: 'face',
+            effect: (gme, gg) => {
+              recruitAct.effect(gme, gg);
+              const discArr = (gme.state.table && gme.state.table.cards) || [];
+              let ef = discArr.find(x => x.id === 'enforcers');
+              if (!ef) { ef = makeCard('enforcers'); discArr.push(ef); }
+              ef.data = ef.data || {}; ef.data.count = (ef.data.count || 0) + 1;
+            }
+          };
+          const dur = game.durationWithStat(act.base, act.stat, gangster);
+          game.executeAction(act, gangster, cardEl, dur);
+        } else if (choiceId === 'vigilante' && vigilAct) {
+          const act = { ...vigilAct };
+          const dur = game.durationWithStat(act.base, act.stat, gangster);
+          game.executeAction(act, gangster, cardEl, dur);
         }
-      };
-      const dur = game.durationWithStat(act.base, act.stat, gangster);
-      game.executeAction(act, gangster, cardEl, dur);
+      });
     }
   },
   priest: {
@@ -214,6 +227,7 @@ export const CARD_BEHAVIORS = {
       const baseMs = 3500;
       const act = {
         id: 'actConvinceOrThreaten', label: useStat === 'face' ? 'Convince Owner (Face)' : 'Threaten Owner (Fist)', stat: useStat, base: baseMs,
+        cost: useStat === 'face' ? { money: 500 } : undefined,
         effect: (gme, gg) => {
           const discArr = (gme.state.table && gme.state.table.cards) || [];
           const idx = discArr.indexOf(item);
@@ -250,12 +264,6 @@ export function renderWorldCard(game, item) {
   const imgSrc = item.img || (item.type === 'recruit' ? ((item.data && item.data.type) + '.png') : (item.type === 'cop' ? 'cop.png' : undefined));
   const artEmoji = '🃏';
   const computeDesc = () => {
-    if (item.type === 'enforcer') {
-      const count = (item.data && item.data.count) || 0; return `Muscle on call.<br/>Amount: ${count}`;
-    }
-    if (item.id === 'extorted_business') {
-      const count = (item.data && item.data.count) || 0; return `Extorted businesses under your protection.<br/>Amount: ${count}`;
-    }
     return item.desc || '\u00A0';
   };
   const artHtml = imgSrc
@@ -302,25 +310,19 @@ export function getCardInfo(game, item) {
   const title = item.name || item.title || item.id;
   // Flavor
   let desc = item.desc || '';
-  if (item.type === 'enforcer') {
-    desc = 'Muscle on call.';
-  }
-  if (item.id === 'extorted_business') {
-    desc = 'Extorted businesses under your protection.';
-  }
   // Hint
   let hint = '';
   const verbs = Array.isArray(item.verbs) ? item.verbs : [];
   if (item.type === 'recruit') {
     const price = (typeof game.gangsterCost === 'function') ? game.gangsterCost() : 200;
-    hint = `Hire cost $${price}`;
-  } else if (verbs.includes('launder')) hint = 'Launder $1000';
-  else if (verbs.includes('procure_equipment')) hint = 'Procure Equipment';
-  else if (verbs.includes('promo')) hint = 'Promotional Campaign';
-  else if (item.type === 'business') hint = 'Extort or Raid';
-  else if (item.type === 'crooks') hint = 'Recruit Enforcer';
-  else if (item.type === 'cop') hint = 'Pay Cops';
-  else if (item.type === 'owner') hint = 'Convince or Threaten';
+    hint = `Hire for $${price}. Bring new blood into the crew.`;
+  } else if (verbs.includes('launder')) hint = 'Launder $1000 into clean money — you will lose some on the way.';
+  else if (verbs.includes('procure_equipment')) hint = 'Pick up gear to tip the odds in your favor.';
+  else if (verbs.includes('promo')) hint = 'Grease the press to paint you in a good light — costs dirty cash, builds respect.';
+  else if (item.type === 'business') hint = 'Raid for a quick influx of cash — or extort for steady protection payments.';
+  else if (item.type === 'crooks') hint = 'Beat up local hooligans to earn respect and fear — or recruit them as enforcers.';
+  else if (item.type === 'cop') hint = 'Bribe the local cop to deflect the attention of authorities.';
+  else if (item.type === 'owner') hint = 'Sway the owner with a $500 donation — or break a few windows to intimidate.';
   // Dynamic line
   let dynamic = '';
   if (item.type === 'enforcer') {
