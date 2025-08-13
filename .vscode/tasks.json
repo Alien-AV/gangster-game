@@ -32,6 +32,38 @@
         "panel": "dedicated",
         "clear": true
       }
+    },
+    {
+      "label": "Start Static Server (5600)",
+      "type": "shell",
+      "command": "npx",
+      "args": ["http-server", "-c-1", "-p", "5600", "."],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "custom",
+        "pattern": [
+          {
+            "regexp": "^([^:]+):(\\d+):(\\d+):\\s+(.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "message": 4
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^Starting up http-server",
+          "endsPattern": "^Available on:"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
     }
   ]
 }
