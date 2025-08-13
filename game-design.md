@@ -15,8 +15,9 @@ When a gangster is dropped onto a discovered world card, there can be multiple v
   - __End-of-Stack Modal__: Complete the stack visually, then present a minimal modal to choose result. Pros: clear. Cons: modal churn if used often.
 
 • __MVP Decision__
-  - Implement a __Stat-Based Default__ heuristic now: if Fist ≥ Face prefer Raid; otherwise Extort. For single-purpose cards (e.g., Priest), the choice is implicit (Donate).
-  - Document and instrument a simple inline popup to add later for explicit choice. This keeps the loop fast today while providing a path to richer interactions.
+  - Use a __Context Choice Popup (chooser)__ anchored to the target card as the default selection method.
+  - Stats will soon gate availability (low stats hide/disable some options). Example: bribing a judge may require a high Face stat.
+  - Keep the loop fast; chooser appears only when multiple valid actions are present.
 
 
 This prototype explores a lightweight mafia management loop. Actions unlock progressively and the entire UI is kept intentionally minimal so we can focus on whether the core balancing act is fun.
@@ -30,7 +31,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 - **Available Fronts** – businesses not yet hosting illicit operations.
 - **Fear** – represents how cowed local businesses are. Certain actions raise it and may unlock future bonuses.
 
-## Card-Based Overhaul (Prototype Plan)
+## Table-First Interaction Model (Prototype)
 
 We are transitioning the interaction model to a card-driven UI inspired by Cultist Simulator/Stacklands.
 
@@ -45,10 +46,9 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
     - Fist stat => faster/better raids/intimidation/vigilante patrol.
   - Future: merge/equip other cards (e.g., guns, enforcers) to buff stats and form squads.
 
-- **Action Blocks (Workstations)**
-  - Actions are fixed blocks on a canvas/board (e.g., Extort, Build Illicit, Launder, Buy Business, Raid, Intimidate, Promotional Campaign, Donate to Soup Kitchen, Vigilante Patrol).
-  - Drag a gangster card onto an action block to start that action.
-  - When action completes, results (money, respect, fear, etc.) are applied and the card returns to the card area.
+- **Table Cards (Interactive Targets)**
+  - Actions are triggered by dropping gangsters onto interactive cards on the table (e.g., businesses, Priest, Corrupt Cop, Crooks, Bookmaker, Pawn Shop, Neighborhood).
+  - When an action completes, results (money, respect, fear, etc.) apply and the gangster is unlocked.
 
 ### Drag-and-Drop Rules
 
@@ -59,11 +59,10 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 
 ### MVP Scope (this iteration)
 
-- Keep the existing UI working, and layer a prototype board:
-  - Render a Cards area with gangster cards.
-  - Render an Actions area with blocks for: Extort, Recruit Enforcer, Buy Business, Build Illicit, Launder, Raid, Intimidate, Promotional Campaign, Donate Soup, Vigilante Patrol.
-  - Implement drag-and-drop triggers to call the same underlying effects already present in game logic with stat-modified durations.
-  - Show progress bars on action blocks while a gangster is working; lock the gangster until completion.
+- Table-first UI with no separate action panel:
+  - Render gangster cards and discovered interactive targets directly on the table.
+  - Implement drag-and-drop to trigger actions with stat-modified durations.
+  - Show progress bars anchored to the target card while a gangster is working; lock the gangster until completion.
 
 ### Persistence
 
@@ -98,7 +97,7 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 
 ## Gameplay Loop Example
 1. Extort with the boss to seize your first block of territory.
-2. Recruit enforcers (they automatically patrol your territory) to keep heat down. Fists specialize in this and can also raid rival businesses for large cash payouts.
+2. Recruit enforcers to support actions and keep risks manageable. Fists specialize in forceful play and can raid rival businesses for large cash payouts. (Planned: enforcers are assigned from a stack; no passive patrol.)
 3. Hire gangsters and choose their specialty. Faces handle the recruiting once unlocked.
 4. Use Face gangsters to expand territory which increases your passive income.
 5. Have Brains purchase businesses and then create illicit operations behind them. When building an illicit operation you can select from counterfeiting money, producing drugs, running illegal gambling or fencing stolen goods.
@@ -125,9 +124,9 @@ These notes are kept short on purpose – the goal is simply to track the protot
 6. After establishing a foothold, Boss can find a way to expand into other neighborhoods, which he personally couldn't tackle, and needs to equip and prepare his gangsters to handle the new territory.
 
 
-## World Tableau System (Initial Deck)
+## Table System (Initial Deck)
 
-Goal: The world is represented by a unified tableau `state.table.cards`. Exploring draws cards and adds them to this tableau. Actions are available based on the card you interact with and game state, not global unlock flags.
+Goal: The table is represented by `state.table.cards`. Exploring draws cards and adds them to this table. Actions are available based on the card you interact with and game state, not global unlock flags.
 
 - __Decks__
   - `neighborhood` deck draws feed directly into `state.table.cards`.
@@ -138,10 +137,10 @@ Goal: The world is represented by a unified tableau `state.table.cards`. Explori
   - No `unlockedActions` flags. Simple prereqs may still check resources/state (e.g., Build Illicit requires an available business slot).
 
 - __Explore Neighborhood__
-  - A world card that accepts gangster drops to draw from `neighborhood` and add new cards to the tableau. Adds small personal heat.
+  - A table card that accepts gangster drops to draw from `neighborhood` and add new cards to the table. Adds small personal heat.
 
-- __World UI__
-  - The `World Area` renders `state.table.cards`. Cards display title/flavor, hints, and accept gangster drops. Some cards aggregate counts (e.g., `extorted_business`, `enforcers`).
+- __Table UI__
+  - The `Table` renders `state.table.cards`. Cards display title/flavor, hints, and accept gangster drops. Some cards aggregate counts (e.g., `extorted_business`, `enforcers`).
 
 - __Persistence__
   - Save/load `state.table.cards` and omit legacy discovery/unlock data.
@@ -149,21 +148,4 @@ Goal: The world is represented by a unified tableau `state.table.cards`. Explori
 - __Progression Hook__
   - Future regions/decks can be introduced by adding new deck sources/cards without changing the gating model.
 
-## Multi-Choice Drop Problem and Proposed Solutions
-
-When a gangster is dropped onto a discovered world card, there can be multiple valid outcomes. Example: dropping on a business could either Extort or Raid; dropping on a “people” card like a Priest could Donate, or later, ask for a Favor. We need a clear, quick UI pattern to resolve these choices.
-
-• __Problem__
-  - Same pairing (e.g., `gangster + business`) maps to multiple actions.
-  - We need to let the player choose without heavy UI or breaking flow.
-
-• __Solution Options__
-  - __Context Choice Popup__: After drop, show a small inline popup anchored to the target card with the available actions (e.g., Extort, Raid). Player clicks the choice; action starts immediately. Pros: explicit, scalable. Cons: one extra click.
-  - __Action Tokens (Crafting)__: Actions exist as separate “verb” cards (Extort, Raid, Donate). Player stacks a verb on a location first, then adds a gangster. The resulting stack defines the action. Pros: highly systemic; discoverable combos. Cons: adds inventory complexity.
-  - __Stat-Based Default + Modifier__: Auto-pick by the gangster’s dominant relevant stat (Face → Extort, Fist → Raid), with a held modifier (e.g., Shift) or right-click to open the choice instead. Pros: fast for experts. Cons: hidden mechanic; needs affordance.
-  - __Drop-Preview Wheel__: On hover hold before drop, show a small radial menu of possible actions; releasing over a slice chooses it. Pros: single gesture. Cons: more complex to implement; mobile-unfriendly.
-  - __End-of-Stack Modal__: Complete the stack visually, then present a minimal modal to choose result. Pros: clear. Cons: modal churn if used often.
-
-• __MVP Decision__
-  - Implement a __Stat-Based Default__ heuristic now: if Fist ≥ Face and Raid is unlocked, prefer Raid; otherwise Extort. For single-purpose cards (e.g., Priest), the choice is implicit (Donate).
-  - Document and instrument a simple inline popup to add later for explicit choice. This keeps the loop fast today while providing a path to richer interactions.
+ 
