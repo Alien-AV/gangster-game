@@ -727,41 +727,7 @@ export class Game {
 
   _cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
 
-  executeAction(action, g, progEl, durMs) {
-    // Prerequisites
-    if (action && typeof action.prereq === 'function') {
-      const ok = action.prereq(this, g);
-      if (!ok) return false;
-    }
-
-    // Costs
-    if (action && action.cost) {
-      if (typeof action.cost === 'function') {
-        const ok = action.cost(this, g);
-        if (!ok) return false;
-      } else if (typeof action.cost === 'object') {
-        if (action.cost.money) {
-          if (this.totalMoney() < action.cost.money) return false;
-          this.spendMoney(action.cost.money);
-        }
-        if (action.cost.respect) {
-          if ((this.state.respect || 0) < action.cost.respect) return false;
-          this.state.respect -= action.cost.respect;
-        }
-        if (action.cost.heat) {
-          if ((this.state.heat || 0) < action.cost.heat) return false;
-          this.state.heat -= action.cost.heat;
-        }
-      }
-    }
-
-    // Start timed work and apply effect
-    return this._startCardWork(g, progEl, durMs, () => {
-      if (action && typeof action.effect === 'function') {
-        action.effect(this, g);
-      }
-    });
-  }
+  
 
   _startCardWork(g, progEl, durMs, onDone) {
     g.busy = true;
