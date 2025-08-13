@@ -1,6 +1,6 @@
 // JavaScript for Gangster Game moved from index.html
 import { ACTIONS } from './actions.js';
-import { makeCard, makeGangsterCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo } from './card.js';
+import { makeCard, makeGangsterCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 
 // behaviors and renderer moved to card.js
@@ -878,6 +878,11 @@ export class Game {
         const elapsed = Math.max(0, Math.min(total, now - (item.cooldownStartMs || now)));
         const p = 1 - (elapsed / total);
         try { item._ringWrapEl.classList.add('cooldown-active'); item._ringWrapEl.style.setProperty('--p', String(p)); } catch(e){}
+        // Update dynamic text with remaining seconds
+        const remainSec = Math.max(0, Math.ceil((item.cooldownEndMs - now) / 1000));
+        if (item._dynEl) {
+          try { item._dynEl.textContent = remainSec > 0 ? `Recovers in ${remainSec}s` : ''; } catch(e){}
+        }
         anyActive = anyActive || (now < item.cooldownEndMs);
         if (now >= item.cooldownEndMs) {
           // cleanup
@@ -891,6 +896,18 @@ export class Game {
       this._cooldownRAF = anyActive ? requestAnimationFrame(step) : null;
     };
     this._cooldownRAF = requestAnimationFrame(step);
+  }
+
+  // Called to refresh only dynamic lines on cards without rebuilding the whole world
+  refreshCardDynamics() {
+    const disc = (this.state.table && this.state.table.cards) || [];
+    for (const item of disc) {
+      if (!item || !item._dynEl) continue;
+      try {
+        const text = computeCardDynamic(this, item);
+        item._dynEl.textContent = text || '';
+      } catch(e) {}
+    }
   }
 
   showInlineActionChoice(anchorEl, options, onChoose) {
