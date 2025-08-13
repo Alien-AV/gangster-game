@@ -8,6 +8,14 @@
       "url": "http://localhost:5500/index.html",
       "webRoot": "${workspaceFolder}",
       "preLaunchTask": "Start Static Server"
+    },
+    {
+      "name": "Launch Game (Chrome, 5600)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5600/index.html",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "Start Static Server (5600)"
     }
   ]
 }
