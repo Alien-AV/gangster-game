@@ -35,14 +35,7 @@ export class Game {
     this.DISAGREEABLE_CHANCE = 0.25;
     this.SALARY_PER_10S = { face: 50, fist: 50, brain: 70 };
 
-    this.darkToggle = document.getElementById('darkToggle');
-    const storedDark = localStorage.getItem('dark') === '1';
-    this.darkToggle.checked = storedDark;
-    document.body.classList.toggle('dark-mode', storedDark);
-    this.darkToggle.addEventListener('change', e => {
-      document.body.classList.toggle('dark-mode', e.target.checked);
-      localStorage.setItem('dark', e.target.checked ? '1' : '0');
-    });
+    
 
     // Removed Pay Cops button wiring
     document.getElementById('resetGame').onclick = () => {

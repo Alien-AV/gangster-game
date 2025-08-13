@@ -5,44 +5,24 @@
     <title>Mafia Manager Prototype</title>
     <style>
         :root {
-      --bg: #fff;
-      --text: #000;
-      --btn-bg: #f0f0f0;
-      --btn-color: #222;
-      --btn-border: #ccc;
-      --btn-hover: #e0e0e0;
-      --btn-disabled-bg: #ddd;
-      --btn-disabled-color: #888;
-      --btn-disabled-border: #bbb;
-      --prog-bg: #ccc;
-      --prog-bar: #4caf50;
-      /* Card vars (light default) */
-      --card-bg: #f8f8f8;
-      --card-border: #ccc;
-      --card-highlight: #888;
-      /* Badge colors */
-      --badge-warn: #b36b00; /* dark amber for light bg */
-      --badge-disabled: #b00020; /* deep red for light bg */
-    }
-    body.dark-mode {
-      --bg: #121212;
-      --text: #eee;
-      --btn-bg: #333;
-      --btn-color: #eee;
-      --btn-border: #555;
-      --btn-hover: #444;
-      --btn-disabled-bg: #555;
-      --btn-disabled-color: #aaa;
-      --btn-disabled-border: #777;
-      --prog-bg: #555;
+      --bg: #151517;
+      --text: #e6e6e6;
+      --btn-bg: #2a2a2f;
+      --btn-color: #e6e6e6;
+      --btn-border: #3a3a40;
+      --btn-hover: #34343a;
+      --btn-disabled-bg: #3a3a40;
+      --btn-disabled-color: #a3a3a3;
+      --btn-disabled-border: #4a4a50;
+      --prog-bg: #4a4a50;
       --prog-bar: #81c784;
       /* Dark card vars */
-      --card-bg: #1f1f1f;
+      --card-bg: #1f1f22;
       --card-border: #444;
       --card-highlight: #aaa;
       /* Badges on dark */
-      --badge-warn: #ffd54f; /* soft yellow */
-      --badge-disabled: #ff8a80; /* soft red */
+      --badge-warn: #ffd54f;
+      --badge-disabled: #ff8a80;
     }
 
     body {
@@ -127,7 +107,7 @@
 </head>
 <body>
 <h1>Mafia Manager Prototype</h1>
-<label class="counter"><input type="checkbox" id="darkToggle"> Dark Mode</label>
+
 <div class="counter">Time: <span id="time">0</span>s</div>
 <div class="counter">Clean Money: $<span id="cleanMoney">0</span></div>
 <div class="counter">Dirty Money: $<span id="dirtyMoney">0</span></div>
