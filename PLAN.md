@@ -18,7 +18,11 @@ This file tracks near-term tasks to align the prototype with the intended design
   - Introduce equipment as cards that can be assigned to gangsters or stacks.
   - Equipment modifies relevant stats (e.g., +Face, +Fist, +Brain, +Meat) while attached.
 
-- Reduce flickering on the main screen and unneeded reload after actions that breaks animations
+- Reduce flickering on the main screen and unneeded reload after actions that breaks animations.
 
-- Actions locked behind stat requirements
-  - Disagreeable owner can't be intimidated by gangster with Fist < 3 - forcing the boss to hire specialized gangster
+- Actions locked behind stat requirements.
+  - Disagreeable owner can't be intimidated by gangster with Fist < 3 - forcing the boss to hire specialized gangster.
+
+- Buy business fronts, create illegal businesses behind.
+
+- Save/load the actions progress - it's currently possible to start an action on one save, load during the action, and get the effects on another save.
