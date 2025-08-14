@@ -4,10 +4,6 @@ This file tracks near-term tasks to align the prototype with the intended design
 
 ## Upcoming changes
 
-- Implement vigilantism as a choice for local criminals
-  - On the `small_crooks` table card, present a chooser with options like "Recruit Enforcer" or "Vigilante Patrol" when a gangster is dropped.
-  - Use the existing `actVigilante` semantics (Fist-based duration, +respect, +heat) for the vigilantism branch.
-
 - Rework heat mechanic (remove global heat counter)
   - Replace the global heat/heatProgress with spawned Heat cards on the table.
   - Each Heat card has a timer and a consequence on expiration (e.g., fines, crackdowns, loss of assets).
@@ -21,10 +17,6 @@ This file tracks near-term tasks to align the prototype with the intended design
 - Equipment cards and stat modification
   - Introduce equipment as cards that can be assigned to gangsters or stacks.
   - Equipment modifies relevant stats (e.g., +Face, +Fist, +Brain, +Meat) while attached.
-
-- Salaries and money flow breakdown
-  - Add salaries to enforcers.
-  - Display a per-tick breakdown line of income/expenses, e.g., "+100 from protection −50 from gangsters −10 from enforcers".
 
 - Specialized Gangsters having better specialized stat than the Boss
 
