@@ -813,7 +813,7 @@ export class Game {
     const computedTotal = breakdown.reduce((sum, row) => sum + (row && typeof row.value === 'number' ? row.value : 0), 0);
     // Prefer provided total only when an explicit breakdown is provided; otherwise use computed
     const total = (providedBreakdown.length > 0 && providedTotal != null) ? providedTotal : computedTotal;
-    const sign = (total || 0) >= 0 ? '+' : '';
+    const sign = (total || 0) >= 0 ? '+' : '-';
     el.textContent = `${sign}$${Math.abs(total || 0)}/m`;
     // Bind tooltip with lazy content computation so it reflects latest state at hover time
     const anchor = (el.parentElement) ? el.parentElement : el;
@@ -828,11 +828,11 @@ export class Game {
     }
     const rows = lines.map(({ label, value }) => {
       const cls = value >= 0 ? 'pos' : 'neg';
-      const sign = value >= 0 ? '+' : '';
+      const sign = value >= 0 ? '+' : '-';
       return `<div class=\"tip-row\"><div>${label}</div><div class=\"${cls}\">${sign}$${Math.abs(value)}</div></div>`;
     }).join('');
     const sum = lines.reduce((a,b)=>a+b.value,0);
-    const sgn = sum >= 0 ? '+' : '';
+    const sgn = sum >= 0 ? '+' : '-';
     return `<h4>Cash Flow</h4>${rows}<hr/><div class=\"tip-row\"><div>Total</div><div>${sgn}$${Math.abs(sum)}/m</div></div>`;
   }
 
