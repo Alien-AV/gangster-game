@@ -80,8 +80,9 @@ export class Game {
 
     // Initialize world table / deck system
     this.initTable();
-    // Initial world paint
-    this.renderWorld();
+    // DOM caches for reconciliation and initial world paint
+    this._dom = { cardByUid: new Map(), gangsterById: new Map(), exploreWrap: null };
+    this.reconcileWorld && this.reconcileWorld();
 
     // Global drag state to prevent world re-render flicker while hovering over droppables
     const self = this;
@@ -608,38 +609,149 @@ export class Game {
     }
   }
 
-  drawFromDeck(deckId) {
-    const table = this.state.table;
-    if (!table) return;
-    const deck = (this._decks || {})[deckId];
-    if (!deck) return;
-    if (!deck.hasMore()) return;
-    const batch = deck.draw(); // array of ids (grouped multi-pull) or null
-    if (!batch || !batch.length) return;
-    batch.forEach(id => {
-      const card = makeCard(id);
-      table.cards.push(card);
-    });
-    // Reflect immediately
-    this.renderWorld();
-    this.updateUI();
+  // ---- Targeted DOM ops (incremental) ----
+  _worldContainer() {
+    return document.getElementById('worldArea');
   }
 
-  renderWorld() {
-    const el = document.getElementById('worldArea');
-    if (!el) return;
-    el.innerHTML = '';
-    // Render all gangsters as normal world cards (no separate zone)
+  _ensureExploreWrap() {
+    if (this._dom.exploreWrap) return this._dom.exploreWrap;
+    const wrap = document.createElement('div'); wrap.className = 'ring-wrap';
+    const exploreCard = document.createElement('div'); exploreCard.className = 'card world-card';
+    exploreCard.innerHTML = `
+      <div class="world-card-title">Neighborhood</div>
+      <div class="world-card-art">
+        <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
+        <div class="world-card-artEmoji hidden">🏙️</div>
+      </div>
+      <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
+    `;
+    exploreCard.removeAttribute('title');
+    const img = exploreCard.querySelector('.world-card-artImg');
+    const emojiEl = exploreCard.querySelector('.world-card-artEmoji');
+    if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+    const ndeck = (this._decks || {}).neighborhood; const disabled = !ndeck || !ndeck.hasMore();
+    if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      exploreCard.addEventListener('mouseenter', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
+      exploreCard.addEventListener('mouseleave', () => this._hideInfoPanel());
+    }
+    exploreCard.addEventListener('click', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
+    exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
+    exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
+    exploreCard.addEventListener('drop', ev => {
+      if (disabled) return;
+      ev.preventDefault();
+      exploreCard.classList.remove('highlight');
+      const idStr = ev.dataTransfer.getData('text/plain');
+      const gid = parseInt(idStr, 10);
+      const g = this.state.gangsters.find(x => x.id === gid);
+      if (!g || g.busy) return;
+      const act = (ACTIONS || []).find(a => a.id === 'actExploreNeighborhood');
+      if (!act) return;
+      const dur = this.durationWithStat(act.base, act.stat, g);
+      const ok = this.executeAction(act, g, exploreCard, dur);
+      if (!ok) this._cardMsg('Cannot explore.');
+    });
+    wrap.appendChild(exploreCard);
+    this._dom.exploreWrap = wrap;
+    return wrap;
+  }
+
+  ensureCardNode(item, index) {
+    if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
+    let wrap = this._dom.cardByUid.get(item.uid);
+    if (!wrap) {
+      const rendered = renderWorldCard(this, item);
+      wrap = rendered.wrap;
+      const card = rendered.card;
+      const behavior = CARD_BEHAVIORS[item.type];
+      if (behavior && typeof behavior.onDrop === 'function') {
+        card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
+        card.addEventListener('dragleave', () => card.classList.remove('highlight'));
+        card.addEventListener('drop', ev => {
+          ev.preventDefault(); card.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          behavior.onDrop(this, item, g, card);
+        });
+      }
+      const buildInfo = () => getCardInfo(this, item);
+      if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+        card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
+        card.addEventListener('mouseleave', () => this._hideInfoPanel());
+      }
+      card.addEventListener('click', () => this._showInfoPanel(buildInfo()));
+      this._dom.cardByUid.set(item.uid, wrap);
+    }
+    // Update dynamic text if available
+    try {
+      if (item._dynEl) item._dynEl.textContent = computeCardDynamic(this, item) || '';
+      else {
+        const dyn = wrap.querySelector('.world-card-descDyn');
+        if (dyn) dyn.textContent = computeCardDynamic(this, item) || '';
+      }
+    } catch(e){}
+    // Insert/reposition at appropriate position: [gangsters][explore][cards]
+    const container = this._worldContainer();
+    if (!container) return wrap;
+    this._ensureExploreWrap();
+    if (typeof index === 'number') {
+      const offset = (this.state.gangsters || []).length + 1; // +1 explore
+      const desiredPosition = offset + index;
+      const current = container.childNodes[desiredPosition];
+      if (container.childNodes[desiredPosition] !== wrap) {
+        container.insertBefore(wrap, current || null);
+      }
+    }
+    return wrap;
+  }
+
+  removeCardByUid(uid) {
+    const wrap = this._dom.cardByUid.get(uid);
+    if (wrap) {
+      try { wrap.remove(); } catch(e){}
+      this._dom.cardByUid.delete(uid);
+    }
+  }
+
+  updateCardDynamic(item) {
+    try {
+      if (item && item._dynEl) {
+        item._dynEl.textContent = computeCardDynamic(this, item) || '';
+        return;
+      }
+      if (item && item.uid) {
+        const wrap = this._dom.cardByUid.get(item.uid);
+        if (wrap) {
+          const dyn = wrap.querySelector('.world-card-descDyn');
+          if (dyn) dyn.textContent = computeCardDynamic(this, item) || '';
+        }
+      }
+    } catch(e){}
+  }
+
+  // Incremental reconciler for world and gangster cards
+  reconcileWorld() {
+    const container = document.getElementById('worldArea');
+    if (!container) return;
+    const desiredNodes = [];
+
+    // 1) Reconcile gangster cards
+    const gangsterIds = new Set();
     (this.state.gangsters || []).forEach(g => {
-      const wrap = document.createElement('div');
+      gangsterIds.add(g.id);
+      let wrap = this._dom.gangsterById.get(g.id);
+      if (!wrap) {
+        wrap = document.createElement('div');
       wrap.className = 'ring-wrap';
       const gc = document.createElement('div');
-      gc.className = 'card world-card' + (g.busy ? ' busy' : '');
-      gc.setAttribute('draggable', g.busy ? 'false' : 'true');
+        gc.className = 'card world-card';
       gc.dataset.gid = String(g.id);
       const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
       const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
-      const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
+        const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
       const gDesc = (
         g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
         g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
@@ -655,16 +767,6 @@ export class Game {
         </div>
         <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
       `;
-      if (g.busy) {
-        const busyBadge = document.createElement('div');
-        busyBadge.className = 'world-card-center-badge';
-        busyBadge.textContent = 'Busy';
-        busyBadge.style.background = '#1d2f33';
-        busyBadge.style.color = '#b3f0ff';
-        busyBadge.style.borderColor = '#2d4f55';
-        gc.appendChild(busyBadge);
-      }
-      // No native tooltip
       gc.removeAttribute('title');
       if (artImg) {
         const img = gc.querySelector('.world-card-artImg');
@@ -682,56 +784,58 @@ export class Game {
           gc.setAttribute('draggable', g.busy ? 'false' : 'true');
         }
       });
-      if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
-        gc.addEventListener('mouseenter', () => this._showInfoPanel({
+        const showGangInfo = () => this._showInfoPanel({
           title: gCard.name,
           stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
           desc: gDesc,
-          hint: g.busy ? 'Busy' : 'Drag onto world cards',
-        }));
+          hint: g.busy ? 'Busy' : 'Drag onto table cards',
+        });
+        if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+          gc.addEventListener('mouseenter', showGangInfo);
         gc.addEventListener('mouseleave', () => this._hideInfoPanel());
       }
-      gc.addEventListener('click', () => this._showInfoPanel({
-        title: gCard.name,
-        stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
-        desc: gDesc,
-        hint: g.busy ? 'Busy' : 'Drag onto world cards',
-      }));
+        gc.addEventListener('click', showGangInfo);
+        if (g.busy) gc.classList.add('busy'); else gc.classList.remove('busy');
       wrap.appendChild(gc);
-      el.appendChild(wrap);
+        this._dom.gangsterById.set(g.id, wrap);
+      } else {
+        const gc = wrap.querySelector('.world-card');
+        if (gc) {
+          if (g.busy) gc.classList.add('busy'); else gc.classList.remove('busy');
+        }
+      }
+      desiredNodes.push(this._dom.gangsterById.get(g.id));
     });
-    // Neighborhood explore card (drop gangster to explore)
-    const exploreWrap = document.createElement('div');
-    exploreWrap.className = 'ring-wrap';
-    const exploreCard = document.createElement('div');
-    exploreCard.className = 'card world-card';
+    for (const [gid, wrap] of Array.from(this._dom.gangsterById.entries())) {
+      if (!gangsterIds.has(gid)) {
+        try { wrap.remove(); } catch(e){}
+        this._dom.gangsterById.delete(gid);
+      }
+    }
+
+    // 2) Ensure Neighborhood explore card exists and updated
     const ndeck = (this._decks || {}).neighborhood;
     const disabled = !ndeck || !ndeck.hasMore();
-    exploreCard.style.opacity = disabled ? '0.5' : '1.0';
+    if (!this._dom.exploreWrap) {
+      const wrap = document.createElement('div'); wrap.className = 'ring-wrap';
+      const exploreCard = document.createElement('div'); exploreCard.className = 'card world-card';
     exploreCard.innerHTML = `
       <div class="world-card-title">Neighborhood</div>
       <div class="world-card-art">
-        <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
+          <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
         <div class="world-card-artEmoji hidden">🏙️</div>
       </div>
       <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
     `;
-    // No native tooltip
     exploreCard.removeAttribute('title');
-    {
       const img = exploreCard.querySelector('.world-card-artImg');
       const emojiEl = exploreCard.querySelector('.world-card-artEmoji');
       if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
-    }
     if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
-      exploreCard.addEventListener('mouseenter', () => this._showInfoPanel({
-        title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore'
-      }));
+        exploreCard.addEventListener('mouseenter', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
       exploreCard.addEventListener('mouseleave', () => this._hideInfoPanel());
     }
-    exploreCard.addEventListener('click', () => this._showInfoPanel({
-      title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore'
-    }));
+      exploreCard.addEventListener('click', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
     exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
     exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
     exploreCard.addEventListener('drop', ev => {
@@ -748,14 +852,16 @@ export class Game {
       const ok = this.executeAction(act, g, exploreCard, dur);
       if (!ok) this._cardMsg('Cannot explore.');
     });
-    exploreWrap.appendChild(exploreCard);
-    el.appendChild(exploreWrap);
+      wrap.appendChild(exploreCard);
+      this._dom.exploreWrap = wrap;
+    }
+    const exploreCard = this._dom.exploreWrap.querySelector('.world-card');
+    if (exploreCard) exploreCard.style.opacity = disabled ? '0.5' : '1.0';
+    desiredNodes.push(this._dom.exploreWrap);
 
-    // World cards list (table)
-    const disc = (this.state.table && this.state.table.cards) || [];
-
-    // Helper to attach standard DnD listeners
+    // 3) Reconcile discovered table cards
     const attachDrop = (cardEl, onDrop, prog) => {
+      if (cardEl._dropBound) return;
       cardEl.addEventListener('dragover', ev => { ev.preventDefault(); cardEl.classList.add('highlight'); });
       cardEl.addEventListener('dragleave', () => cardEl.classList.remove('highlight'));
       cardEl.addEventListener('drop', ev => {
@@ -767,26 +873,71 @@ export class Game {
         if (!g || g.busy) return;
         onDrop(g, prog, cardEl);
       });
+      cardEl._dropBound = true;
     };
 
-    // Declarative behaviors for discovered cards using CARD_BEHAVIORS
+    const disc = (this.state.table && this.state.table.cards) || [];
+    const keepUids = new Set();
     disc.forEach(item => {
-      if (item.used && !item.reusable) return;
-      const { wrap, card } = renderWorldCard(this, item);
+      if (!item.uid) { item.uid = 'c_' + Math.random().toString(36).slice(2); }
+      keepUids.add(item.uid);
+      if (item.used && !item.reusable) { return; }
+      let wrap = this._dom.cardByUid.get(item.uid);
+      if (!wrap) {
+        const rendered = renderWorldCard(this, item);
+        wrap = rendered.wrap;
+        const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
       if (behavior && typeof behavior.onDrop === 'function') {
         attachDrop(card, (g, _prog, cardEl) => behavior.onDrop(this, item, g, cardEl), card);
       }
-      // Attach info panel events (hover/click) for all world cards
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
         card.addEventListener('mouseleave', () => this._hideInfoPanel());
       }
       card.addEventListener('click', () => this._showInfoPanel(buildInfo()));
-      el.appendChild(wrap);
+        this._dom.cardByUid.set(item.uid, wrap);
+      }
+      desiredNodes.push(wrap);
     });
+    for (const [uid, wrap] of Array.from(this._dom.cardByUid.entries())) {
+      if (!keepUids.has(uid)) {
+        try { wrap.remove(); } catch(e){}
+        this._dom.cardByUid.delete(uid);
+      }
+    }
+
+    // 4) Attach/reorder without clearing container
+    for (let i = 0; i < desiredNodes.length; i++) {
+      const node = desiredNodes[i];
+      const current = container.childNodes[i];
+      if (current !== node) {
+        container.insertBefore(node, current || null);
+      }
+    }
+    while (container.childNodes.length > desiredNodes.length) {
+      container.removeChild(container.lastChild);
+    }
   }
+  drawFromDeck(deckId) {
+    const table = this.state.table;
+    if (!table) return;
+    const deck = (this._decks || {})[deckId];
+    if (!deck) return;
+    if (!deck.hasMore()) return;
+    const batch = deck.draw(); // array of ids (grouped multi-pull) or null
+    if (!batch || !batch.length) return;
+    batch.forEach((id, i) => {
+      const card = makeCard(id);
+      table.cards.push(card);
+      // Create DOM incrementally for just-drawn cards
+      this.ensureCardNode(card, (table.cards.length - 1));
+    });
+    this.updateUI();
+  }
+
+  renderWorld() { if (this.reconcileWorld) this.reconcileWorld(); }
 
   _cardMsg(txt) {
     const host = this.cardEls && this.cardEls.msg ? this.cardEls.msg : null;
