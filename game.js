@@ -316,6 +316,16 @@ export class Game {
 
     // Flow display (placeholder math; real data later)
     this._updateFlowDisplay();
+
+    // Attach rich tooltips for Respect and Fear (bind once, compute on hover)
+    const respectElForTip = document.getElementById('respect');
+    if (respectElForTip && respectElForTip.parentElement) {
+      this.showTooltip(respectElForTip.parentElement, () => this.buildRespectTooltip());
+    }
+    const fearElForTip = document.getElementById('fear');
+    if (fearElForTip && fearElForTip.parentElement) {
+      this.showTooltip(fearElForTip.parentElement, () => this.buildFearTooltip());
+    }
     // All UI renders via world/table now
     this.saveState();
   }
@@ -404,6 +414,37 @@ export class Game {
         this.updateUI();
       }
     }, 50);
+  }
+
+  // Generic small tooltip builder
+  buildSimpleTooltip(title, rows) {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const body = safeRows.map(([label, val]) => `<div class=\"tip-row\"><div>${label}</div><div>${val}</div></div>`).join('');
+    return `<h4>${title}</h4>${body}`;
+  }
+
+  buildRespectTooltip() {
+    const lvl = this.respectLevel();
+    const perFrontPerSec = lvl * 10;
+    const launderingBoostPct = lvl * 10;
+    return this.buildSimpleTooltip('Respect Effects', [
+      ['Level', String(lvl)],
+      ['Fronts', `+${perFrontPerSec}$/s each`],
+      ['Laundering', `+${launderingBoostPct}% yield`],
+    ]);
+  }
+
+  buildFearTooltip() {
+    const lvl = this.fearLevel();
+    const businessPrice = this.businessCost();
+    const enforcerPrice = this.enforcerCost();
+    const speedPct = Math.min(50, lvl * 10);
+    return this.buildSimpleTooltip('Fear Effects', [
+      ['Level', String(lvl)],
+      ['Business cost', `$${businessPrice}`],
+      ['Enforcer cost', `$${enforcerPrice}`],
+      ['Action speed', `${speedPct}% faster (extort/raid)`],
+    ]);
   }
 
   showGangsterTypeSelection(callback) {
@@ -765,23 +806,82 @@ export class Game {
   _updateFlowDisplay() {
     const el = document.getElementById('moneyFlowValue');
     if (!el) return;
-    // Placeholder computation: derive a rough per-minute from current state deltas we use per tick (1s)
-    // Income per second
-    const cleanPerSec = (this.state.businesses * 20) + (this.state.businesses * (this.respectLevel() * 10));
-    const dirtyPerSec = (this.state.extortedBusinesses * 10) + (this.state.illicit * 50);
-    // Expenses per second (salaries every 10s): approximate as average per second
-    const salaryPer10 = (this.state.gangsters || []).reduce((sum, g) => sum + (this.SALARY_PER_10S[g.type] || 0), 0);
+    const s = this.state;
+    const breakdown = this._computeFlowBreakdown();
+    const providedBreakdown = (s.flow && Array.isArray(s.flow.breakdown)) ? s.flow.breakdown : [];
+    const providedTotal = (s.flow && typeof s.flow.perMinuteTotal === 'number') ? s.flow.perMinuteTotal : null;
+    const computedTotal = breakdown.reduce((sum, row) => sum + (row && typeof row.value === 'number' ? row.value : 0), 0);
+    // Prefer provided total only when an explicit breakdown is provided; otherwise use computed
+    const total = (providedBreakdown.length > 0 && providedTotal != null) ? providedTotal : computedTotal;
+    const sign = (total || 0) >= 0 ? '+' : '';
+    el.textContent = `${sign}$${Math.abs(total || 0)}/m`;
+    // Bind tooltip with lazy content computation so it reflects latest state at hover time
+    const anchor = (el.parentElement) ? el.parentElement : el;
+    this.showTooltip(anchor, () => this.buildFlowTooltip(this._computeFlowBreakdown()));
+  }
+
+  // Returns HTML string for the money flow tooltip
+  buildFlowTooltip(breakdown) {
+    const lines = Array.isArray(breakdown) ? breakdown : [];
+    if (!lines.length) {
+      return '<h4>Cash Flow</h4><div class="tip-row"><div>No data</div></div>';
+    }
+    const rows = lines.map(({ label, value }) => {
+      const cls = value >= 0 ? 'pos' : 'neg';
+      const sign = value >= 0 ? '+' : '';
+      return `<div class=\"tip-row\"><div>${label}</div><div class=\"${cls}\">${sign}$${Math.abs(value)}</div></div>`;
+    }).join('');
+    const sum = lines.reduce((a,b)=>a+b.value,0);
+    const sgn = sum >= 0 ? '+' : '';
+    return `<h4>Cash Flow</h4>${rows}<hr/><div class=\"tip-row\"><div>Total</div><div>${sgn}$${Math.abs(sum)}/m</div></div>`;
+  }
+
+  // Compute current per-minute flow breakdown from state or fallback heuristics
+  _computeFlowBreakdown() {
+    const s = this.state;
+    if (s && s.flow && Array.isArray(s.flow.breakdown) && s.flow.breakdown.length) {
+      return s.flow.breakdown.slice();
+    }
+    const cleanPerSec = (s.businesses * 20) + (s.businesses * (this.respectLevel() * 10));
+    const dirtyPerSec = (s.extortedBusinesses * 10) + (s.illicit * 50);
+    const salaryPer10 = (s.gangsters || []).reduce((sum, g) => sum + (this.SALARY_PER_10S[g.type] || 0), 0);
     const salaryPerSec = salaryPer10 / 10;
-    const netPerSec = (cleanPerSec + dirtyPerSec) - salaryPerSec;
-    const netPerMin = Math.round(netPerSec * 60);
-    const sign = netPerMin >= 0 ? '+' : '';
-    el.textContent = `${sign}$${netPerMin}/m`;
-    // Tooltip breakdown (placeholder labels)
-    const parts = [];
-    if (cleanPerSec) parts.push(`${Math.round(cleanPerSec*60)} from fronts`);
-    if (dirtyPerSec) parts.push(`${Math.round(dirtyPerSec*60)} from rackets`);
-    if (salaryPerSec) parts.push(`${-Math.round(salaryPerSec*60)} salaries`);
-    el.title = parts.length ? parts.map(p => (p[0] === '-' ? p : '+' + p)).join('  ') : '+$0';
+    const arr = [];
+    if (cleanPerSec) arr.push({ label: 'Fronts', value: Math.round(cleanPerSec * 60) });
+    if (dirtyPerSec) arr.push({ label: 'Rackets', value: Math.round(dirtyPerSec * 60) });
+    if (salaryPerSec) arr.push({ label: 'Salaries', value: -Math.round(salaryPerSec * 60) });
+    return arr;
+  }
+
+  // Unified tooltip show helper: positions tooltip near the anchor and updates on hover
+  showTooltip(anchorEl, htmlContent) {
+    if (!anchorEl) return;
+    let tip = anchorEl._uiTip;
+    const getHtml = (typeof htmlContent === 'function') ? htmlContent : () => htmlContent;
+    const ensure = () => {
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.className = 'ui-tooltip';
+        document.body.appendChild(tip);
+        anchorEl._uiTip = tip;
+      }
+    };
+    const place = () => {
+      const rect = anchorEl.getBoundingClientRect();
+      const x = Math.min(window.innerWidth - 16, rect.left + rect.width + 10);
+      const y = Math.max(10, rect.top + window.scrollY);
+      tip.style.left = `${x}px`;
+      tip.style.top = `${y}px`;
+    };
+    const show = () => { tip.classList.add('show'); };
+    const hide = () => { tip.classList.remove('show'); };
+    // Attach listeners once
+    if (!anchorEl._tipBound) {
+      anchorEl.addEventListener('mouseenter', () => { ensure(); try { tip.innerHTML = getHtml(); } catch(e) { tip.innerHTML = ''; } place(); show(); });
+      anchorEl.addEventListener('mouseleave', () => { hide(); });
+      anchorEl.addEventListener('mousemove', () => { if (tip) place(); });
+      anchorEl._tipBound = true;
+    }
   }
 
   
@@ -996,6 +1096,11 @@ export class Game {
     this._destroyInlineChoice();
     const chooser = document.createElement('div');
     chooser.className = 'inline-choice';
+    // Add heading directly into chooser UI
+    const heading = document.createElement('div');
+    heading.className = 'inline-choice-title';
+    heading.textContent = 'Choose Action';
+    chooser.appendChild(heading);
     (options || []).forEach(opt => {
       const b = document.createElement('button');
       b.textContent = opt.label || opt.id;
