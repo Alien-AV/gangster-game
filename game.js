@@ -30,6 +30,11 @@ export class Game {
       nextGangId: 1,
       salaryTick: 0,
       table: null,
+      // Placeholder flow stats per minute (clean): we'll compute presentation only for now
+      flow: {
+        perMinuteTotal: 0,
+        breakdown: [], // e.g., [{label:'+100 from protection', value: 100}, {label:'-50 from gangsters', value:-50}]
+      },
     };
     // Chance that an extortion attempt results in a disagreeable owner (used by actions.js)
     this.DISAGREEABLE_CHANCE = 0.25;
@@ -66,6 +71,7 @@ export class Game {
 
     // Initialize message UI
     this.initCardUI();
+    this._initLog();
     this.interval = setInterval(() => this.tick(), 1000);
 
     // Queued selection managers to avoid overlapping popups
@@ -277,40 +283,41 @@ export class Game {
 
   updateUI() {
     const s = this.state;
-    document.getElementById('time').textContent = s.time;
-    document.getElementById('cleanMoney').textContent = s.cleanMoney;
-    document.getElementById('dirtyMoney').textContent = s.dirtyMoney;
-    document.getElementById('patrol').textContent = s.patrol;
-    const extEl = document.getElementById('extortedBusinesses');
-    if (extEl) extEl.textContent = s.extortedBusinesses;
-    document.getElementById('heat').textContent = s.heat;
-    const heatBar = document.getElementById('heatProgressBar');
-    heatBar.style.width = (s.heatProgress * 10) + '%';
-    document.getElementById('disagreeableOwners').textContent = s.disagreeableOwners;
-    document.getElementById('fear').textContent = s.fear;
+    const timeEl = document.getElementById('time'); if (timeEl) timeEl.textContent = s.time;
+    const cmEl = document.getElementById('cleanMoney'); if (cmEl) cmEl.textContent = s.cleanMoney;
+    const dmEl = document.getElementById('dirtyMoney'); if (dmEl) dmEl.textContent = s.dirtyMoney;
+    const patrolEl = document.getElementById('patrol'); if (patrolEl) patrolEl.textContent = s.patrol;
+    const extEl = document.getElementById('extortedBusinesses'); if (extEl) extEl.textContent = s.extortedBusinesses;
+    const heatEl = document.getElementById('heat'); if (heatEl) heatEl.textContent = s.heat;
+    const heatBar = document.getElementById('heatProgressBar'); if (heatBar) heatBar.style.width = (s.heatProgress * 10) + '%';
+    const disEl = document.getElementById('disagreeableOwners'); if (disEl) disEl.textContent = s.disagreeableOwners;
+    const fearEl = document.getElementById('fear'); if (fearEl) fearEl.textContent = s.fear;
     const rl = this.fearLevel();
     const bCost = this.businessCost();
-    document.getElementById('respect').textContent = s.respect;
+    const respEl = document.getElementById('respect'); if (respEl) respEl.textContent = s.respect;
     const fearBonusEl = document.getElementById('fearBonus');
     if (fearBonusEl) fearBonusEl.textContent = rl > 0 ? `Business cost $${bCost}` : 'None';
     const rL = this.respectLevel();
     const respectBonusEl = document.getElementById('respectBonus');
     if (respectBonusEl) respectBonusEl.textContent = rL > 0 ? `Fronts +$${rL * 10} clean/s each; Laundering +${rL * 10}% yield` : 'None';
-    document.getElementById('businesses').textContent = s.businesses;
+    const busEl = document.getElementById('businesses'); if (busEl) busEl.textContent = s.businesses;
     const availFronts = Math.max(0, (s.businesses || 0) - (s.illicit || 0));
     const afEl = document.getElementById('availableFronts');
     if (afEl) afEl.textContent = availFronts;
     const faces = s.gangsters.filter(g => g.type === 'face').length;
     const fists = s.gangsters.filter(g => g.type === 'fist').length;
     const brains = s.gangsters.filter(g => g.type === 'brain').length;
-    document.getElementById('faces').textContent = faces;
-    document.getElementById('fists').textContent = fists;
-    document.getElementById('brains').textContent = brains;
-    document.getElementById('illicit').textContent = s.illicit;
-    document.getElementById('counterfeitingCount').textContent = s.illicitCounts.counterfeiting;
-    document.getElementById('drugCount').textContent = s.illicitCounts.drugs;
-    document.getElementById('gamblingCount').textContent = s.illicitCounts.gambling;
-    document.getElementById('fencingCount').textContent = s.illicitCounts.fencing;
+    const facesEl = document.getElementById('faces'); if (facesEl) facesEl.textContent = faces;
+    const fistsEl = document.getElementById('fists'); if (fistsEl) fistsEl.textContent = fists;
+    const brainsEl = document.getElementById('brains'); if (brainsEl) brainsEl.textContent = brains;
+    const illEl = document.getElementById('illicit'); if (illEl) illEl.textContent = s.illicit;
+    const cEl = document.getElementById('counterfeitingCount'); if (cEl) cEl.textContent = s.illicitCounts.counterfeiting;
+    const dEl = document.getElementById('drugCount'); if (dEl) dEl.textContent = s.illicitCounts.drugs;
+    const gEl = document.getElementById('gamblingCount'); if (gEl) gEl.textContent = s.illicitCounts.gambling;
+    const fEl = document.getElementById('fencingCount'); if (fEl) fEl.textContent = s.illicitCounts.fencing;
+
+    // Flow display (placeholder math; real data later)
+    this._updateFlowDisplay();
     // All UI renders via world/table now
     this.saveState();
   }
@@ -522,6 +529,15 @@ export class Game {
     };
   }
 
+  _initLog() {
+    const msgEl = document.getElementById('cardMessages');
+    if (!msgEl) return;
+    // Ensure it's a list container
+    if (!msgEl.classList.contains('log-window')) {
+      msgEl.classList.add('log-window');
+    }
+  }
+
   // ----- World Table / Deck System -----
   initTable() {
     if (!this.state.table || !Array.isArray(this.state.table.cards)) {
@@ -725,7 +741,42 @@ export class Game {
     });
   }
 
-  _cardMsg(txt) { if (this.cardEls && this.cardEls.msg) this.cardEls.msg.textContent = txt; }
+  _cardMsg(txt) {
+    const host = this.cardEls && this.cardEls.msg ? this.cardEls.msg : null;
+    if (!host) return;
+    const entry = document.createElement('div');
+    entry.className = 'log-entry log-flash';
+    entry.textContent = txt;
+    host.appendChild(entry);
+    // Keep to last 200 messages
+    while (host.childNodes.length > 200) { host.removeChild(host.firstChild); }
+    // Scroll to bottom
+    host.scrollTop = host.scrollHeight;
+    // Remove flash class after animation
+    setTimeout(() => { try { entry.classList.remove('log-flash'); } catch(e){} }, 700);
+  }
+
+  _updateFlowDisplay() {
+    const el = document.getElementById('moneyFlowValue');
+    if (!el) return;
+    // Placeholder computation: derive a rough per-minute from current state deltas we use per tick (1s)
+    // Income per second
+    const cleanPerSec = (this.state.businesses * 20) + (this.state.businesses * (this.respectLevel() * 10));
+    const dirtyPerSec = (this.state.extortedBusinesses * 10) + (this.state.illicit * 50);
+    // Expenses per second (salaries every 10s): approximate as average per second
+    const salaryPer10 = (this.state.gangsters || []).reduce((sum, g) => sum + (this.SALARY_PER_10S[g.type] || 0), 0);
+    const salaryPerSec = salaryPer10 / 10;
+    const netPerSec = (cleanPerSec + dirtyPerSec) - salaryPerSec;
+    const netPerMin = Math.round(netPerSec * 60);
+    const sign = netPerMin >= 0 ? '+' : '';
+    el.textContent = `${sign}$${netPerMin}/m`;
+    // Tooltip breakdown (placeholder labels)
+    const parts = [];
+    if (cleanPerSec) parts.push(`${Math.round(cleanPerSec*60)} from fronts`);
+    if (dirtyPerSec) parts.push(`${Math.round(dirtyPerSec*60)} from rackets`);
+    if (salaryPerSec) parts.push(`${-Math.round(salaryPerSec*60)} salaries`);
+    el.title = parts.length ? parts.map(p => (p[0] === '-' ? p : '+' + p)).join('  ') : '+$0';
+  }
 
   
 
@@ -860,9 +911,15 @@ export class Game {
   }
 
   _hideInfoPanel() {
-    const panel = document.getElementById('infoPanel');
-    if (!panel) return;
-    panel.classList.add('hidden');
+    // Do not hide; reset to default placeholder
+    const t = document.getElementById('infoPanelTitle');
+    const s = document.getElementById('infoPanelStats');
+    const d = document.getElementById('infoPanelDesc');
+    const h = document.getElementById('infoPanelHint');
+    if (t) t.textContent = 'Hover card for info';
+    if (s) s.textContent = '';
+    if (d) d.textContent = '';
+    if (h) h.textContent = '';
   }
 
   _ensureCooldownAnimator() {
