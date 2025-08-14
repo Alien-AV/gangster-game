@@ -39,11 +39,12 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 
 - **Gangster Cards**
   - Each gangster is represented as a draggable card.
-  - Cards show name/id, type, heat, and a stat line, e.g. `Fist:1 Face:2 Brain:1`.
+  - Cards show name/id, type, heat, and a stat line, e.g. `Fist:3 Face:1 Brain:1 Meat:1`.
   - Stats represent individual skill variance and modify action speeds/effectiveness.
     - Face stat => faster/better extortion/promotions.
     - Brain stat => faster/better illicit building/laundering/donations.
     - Fist stat => faster/better raids/intimidation/vigilante patrol.
+    - Meat stat => headcount/manpower. Always 1 for gangsters and enforcers; represents unskilled labor you can apply to tasks (collection, hauling, backup). Future: Meat contributes to actions that accept helpers.
   - Future: merge/equip other cards (e.g., guns, enforcers) to buff stats and form squads.
 
 - **Table Cards (Interactive Targets)**
@@ -54,6 +55,7 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 
 - Dragging disabled while the gangster is busy.
 - Dropping onto an incompatible action shows feedback and returns the card.
+  - While a gangster works, their card is marked Busy and visually dimmed.
 - Duration = baseDuration / (1 + relevantStat * scaling).
   - Initial scaling: 10% speed-up per stat point (tunable).
 
@@ -67,9 +69,10 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 ### Persistence
 
 - Save/Load must preserve gangster stats. For legacy saves without stats, default by type:
-  - Face: { face: 2, fist: 1, brain: 1 }
-  - Brain: { face: 1, fist: 1, brain: 2 }
-  - Fist: { face: 1, fist: 2, brain: 1 }
+  - Face: { face: 3, fist: 1, brain: 1, meat: 1 }
+  - Brain: { face: 1, fist: 1, brain: 3, meat: 1 }
+  - Fist: { face: 1, fist: 3, brain: 1, meat: 1 }
+  - Boss: { face: 2, fist: 2, brain: 2, meat: 1 }
 
 ### Future Extensions
 

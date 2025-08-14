@@ -146,7 +146,21 @@
         .ring-wrap.ring-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#b49a63 calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
         .ring-wrap.cooldown-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#cc5d5d calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
         .ring-wrap.cooldown-active .world-card{ filter: saturate(0.5) brightness(0.9); }
-        .world-card-recovery-banner{ position:absolute; top:50%; left:50%; transform: translate(-50%, -50%); background:#331d1d; color:#ffb3b3; border:1px solid #663333; padding:6px 12px; border-radius:12px; font-size:13px; z-index:2; }
+        /* Dim busy gangster cards */
+        .world-card.busy .world-card-artImg, .world-card.busy .world-card-artEmoji { filter: saturate(0.55) brightness(0.85); }
+        /* Center badge, reusable (e.g., Busy, Recovering) */
+        .world-card-center-badge{
+          position:absolute; top:50%; left:50%; transform: translate(-50%, -50%);
+          padding:6px 12px; border-radius:10px; font-size:13px; z-index: 8;
+          border:2px solid rgba(255,255,255,0.28);
+          outline: 1px solid rgba(0,0,0,0.35);
+          background: rgba(12,12,14,0.82);
+          color: #eee;
+          backdrop-filter: blur(2px) saturate(0.9);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+          text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;
+          pointer-events:none;
+        }
         .inline-choice { position:absolute; left:50%; transform: translate(-50%, -8px); bottom: calc(var(--card-desc-h) + 10px); background:#111; border:1px solid #444; border-radius:8px; padding:8px; display:flex; gap:8px; z-index: 20; box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
         .inline-choice button { background:#222; color:var(--card-ink); border:1px solid #555; padding:6px 10px; border-radius:6px; font-size:13px; }
         .inline-choice button:hover { background:#2b2b2b; }

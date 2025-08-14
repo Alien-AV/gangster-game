@@ -61,8 +61,6 @@ export class Game {
     hookSlot(1); hookSlot(2); hookSlot(3);
 
     this.loadState();
-    // Ensure gangster objects are normalized
-    (this.state.gangsters || []).forEach(g => { this._ensureGangsterStats(g); if (!Array.isArray(g.equipped)) g.equipped = []; });
     // Ensure Boss exists as a normal gangster with special stats/name
     if (!this.state.gangsters.some(g => g.type === 'boss')) {
       const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
@@ -592,7 +590,6 @@ export class Game {
     el.innerHTML = '';
     // Render all gangsters as normal world cards (no separate zone)
     (this.state.gangsters || []).forEach(g => {
-      this._ensureGangsterStats(g);
       const wrap = document.createElement('div');
       wrap.className = 'ring-wrap';
       const gc = document.createElement('div');
@@ -617,6 +614,15 @@ export class Game {
         </div>
         <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
       `;
+      if (g.busy) {
+        const busyBadge = document.createElement('div');
+        busyBadge.className = 'world-card-center-badge';
+        busyBadge.textContent = 'Busy';
+        busyBadge.style.background = '#1d2f33';
+        busyBadge.style.color = '#b3f0ff';
+        busyBadge.style.borderColor = '#2d4f55';
+        gc.appendChild(busyBadge);
+      }
       // No native tooltip
       gc.removeAttribute('title');
       if (artImg) {
@@ -638,7 +644,7 @@ export class Game {
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         gc.addEventListener('mouseenter', () => this._showInfoPanel({
           title: gCard.name,
-          stats: `F:${g.stats.fist} Fa:${g.stats.face} Br:${g.stats.brain}`,
+          stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
           desc: gDesc,
           hint: g.busy ? 'Busy' : 'Drag onto world cards',
         }));
@@ -646,7 +652,7 @@ export class Game {
       }
       gc.addEventListener('click', () => this._showInfoPanel({
         title: gCard.name,
-        stats: `F:${g.stats.fist} Fa:${g.stats.face} Br:${g.stats.brain}`,
+        stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
         desc: gDesc,
         hint: g.busy ? 'Busy' : 'Drag onto world cards',
       }));
@@ -782,13 +788,16 @@ export class Game {
 
   _startCardWork(g, progEl, durMs, onDone) {
     g.busy = true;
+    this._markGangsterBusy(g, true);
     // Suspend world re-render so progress elements persist during work
     this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
-    this.runProgress(progEl, durMs, () => {
+    // Ensure the busy state applies even if the progress container is not the gangster card
+    this.runProgress(progEl || document.querySelector('.world-card[data-gid="' + String(g.id) + '"]'), durMs, () => {
       try {
         onDone && onDone();
       } finally {
         g.busy = false;
+        this._markGangsterBusy(g, false);
         // Resume world render if this is the last active work
         this._suspendWorldRender = Math.max(0, (this._suspendWorldRender || 1) - 1);
         this.renderWorld();
@@ -798,22 +807,42 @@ export class Game {
     return true;
   }
 
-  defaultStatsForType(type) {
-    if (type === 'face') return { face: 2, fist: 1, brain: 1, meat: 0 };
-    if (type === 'brain') return { face: 1, fist: 1, brain: 2, meat: 0 };
-    if (type === 'fist') return { face: 1, fist: 2, brain: 1, meat: 0 };
-    if (type === 'boss') return { face: 2, fist: 2, brain: 2, meat: 0 };
-    return { face: 1, fist: 1, brain: 1, meat: 0 };
+  _markGangsterBusy(g, isBusy) {
+    try {
+      const card = document.querySelector('.world-card[data-gid="' + String(g.id) + '"]');
+      if (!card) return;
+      if (isBusy) {
+        card.classList.add('busy');
+        let badge = card.querySelector('.world-card-center-badge.busy-badge');
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.className = 'world-card-center-badge busy-badge';
+          badge.textContent = 'Busy';
+          // Visuals tuned for on-top feel
+          badge.style.borderColor = 'rgba(255,255,255,0.35)';
+          badge.style.outline = '1px solid rgba(0,0,0,0.5)';
+          badge.style.background = 'rgba(20,26,30,0.9)';
+          badge.style.color = '#e8f6ff';
+          card.appendChild(badge);
+        }
+      } else {
+        card.classList.remove('busy');
+        const badge = card.querySelector('.world-card-center-badge.busy-badge');
+        if (badge) { try { badge.remove(); } catch(e){} }
+      }
+    } catch(e) { /* no-op */ }
   }
 
-  _ensureGangsterStats(g) {
-    if (!g.stats) g.stats = this.defaultStatsForType(g.type);
-    ['face','fist','brain','meat'].forEach(k => { if (typeof g.stats[k] !== 'number') g.stats[k] = (k==='meat'?0:1); });
-    if (!Array.isArray(g.equipped)) g.equipped = [];
+  defaultStatsForType(type) {
+    if (type === 'face') return { face: 3, fist: 1, brain: 1, meat: 1 };
+    if (type === 'brain') return { face: 1, fist: 1, brain: 3, meat: 1 };
+    if (type === 'fist') return { face: 1, fist: 3, brain: 1, meat: 1 };
+    if (type === 'boss') return { face: 2, fist: 2, brain: 2, meat: 1 };
+    return { face: 1, fist: 1, brain: 1, meat: 1 };
   }
+
 
   effectiveStat(g, key) {
-    this._ensureGangsterStats(g);
     const base = (g.stats && typeof g.stats[key] === 'number') ? g.stats[key] : 0;
     const bonus = 0; // equipment removed
     return base + bonus;

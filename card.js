@@ -302,7 +302,7 @@ export function renderWorldCard(game, item) {
   const dynEl = c.querySelector('.world-card-descDyn');
   if (dynEl) dynEl.textContent = computeCardDynamic(game, item);
   if (item.type === 'recruit' && imgEl) imgEl.style.filter = 'grayscale(1) contrast(0.95)';
-  if (item.type === 'business') {
+    if (item.type === 'business') {
     const now = game.state.time || 0;
     if (item.extorted) {
       // no badge; static state
@@ -314,11 +314,14 @@ export function renderWorldCard(game, item) {
         const p = Math.min(1, Math.max(0, 1 - (remain / item.cooldownTotal)));
         try { wrap.style.setProperty('--p', String(p)); } catch(e){}
       }
-      // Add a recovery banner
-      const banner = document.createElement('div');
-      banner.className = 'world-card-recovery-banner';
-      banner.textContent = 'Recovering from raid';
-      c.appendChild(banner);
+        // Add a recovery center badge using reusable component
+        const banner = document.createElement('div');
+        banner.className = 'world-card-center-badge';
+        banner.textContent = 'Recovering from raid';
+        banner.style.background = '#331d1d';
+        banner.style.color = '#ffb3b3';
+        banner.style.borderColor = '#663333';
+        c.appendChild(banner);
     }
   }
   wrap.appendChild(c);
