@@ -306,7 +306,7 @@ export function renderWorldCard(game, item) {
     const now = game.state.time || 0;
     if (item.extorted) {
       // no badge; static state
-    } else if (item.cooldownUntil && now < item.cooldownUntil) {
+      } else if (item.cooldownUntil && now < item.cooldownUntil) {
       const remain = item.cooldownUntil - now;
       // Mark cooldown active and compute ring percent if total known
       wrap.classList.add('cooldown-active');
@@ -314,13 +314,10 @@ export function renderWorldCard(game, item) {
         const p = Math.min(1, Math.max(0, 1 - (remain / item.cooldownTotal)));
         try { wrap.style.setProperty('--p', String(p)); } catch(e){}
       }
-        // Add a recovery center badge using reusable component
+        // Center recovery badge (shared styles)
         const banner = document.createElement('div');
-        banner.className = 'world-card-center-badge';
+        banner.className = 'world-card-center-badge badge-recover';
         banner.textContent = 'Recovering from raid';
-        banner.style.background = '#331d1d';
-        banner.style.color = '#ffb3b3';
-        banner.style.borderColor = '#663333';
         c.appendChild(banner);
     }
   }

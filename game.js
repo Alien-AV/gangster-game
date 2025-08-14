@@ -813,21 +813,16 @@ export class Game {
       if (!card) return;
       if (isBusy) {
         card.classList.add('busy');
-        let badge = card.querySelector('.world-card-center-badge.busy-badge');
+        let badge = card.querySelector('.world-card-center-badge.badge-busy');
         if (!badge) {
           badge = document.createElement('div');
-          badge.className = 'world-card-center-badge busy-badge';
+          badge.className = 'world-card-center-badge badge-busy';
           badge.textContent = 'Busy';
-          // Visuals tuned for on-top feel
-          badge.style.borderColor = 'rgba(255,255,255,0.35)';
-          badge.style.outline = '1px solid rgba(0,0,0,0.5)';
-          badge.style.background = 'rgba(20,26,30,0.9)';
-          badge.style.color = '#e8f6ff';
           card.appendChild(badge);
         }
       } else {
         card.classList.remove('busy');
-        const badge = card.querySelector('.world-card-center-badge.busy-badge');
+        const badge = card.querySelector('.world-card-center-badge.badge-busy');
         if (badge) { try { badge.remove(); } catch(e){} }
       }
     } catch(e) { /* no-op */ }
