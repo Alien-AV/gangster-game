@@ -598,7 +598,7 @@ export class Game {
       gc.dataset.gid = String(g.id);
       const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
       const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
-      const artImg = g.type === 'boss' ? 'boss.png' : (g.type === 'face' ? 'face.png' : (g.type === 'fist' ? 'fist.png' : (g.type === 'brain' ? 'brain.png' : null)));
+      const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
       const gDesc = (
         g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
         g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
@@ -670,7 +670,7 @@ export class Game {
     exploreCard.innerHTML = `
       <div class="world-card-title">Neighborhood</div>
       <div class="world-card-art">
-        <img class="world-card-artImg" src="neighborhood.png" alt="Neighborhood">
+        <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
         <div class="world-card-artEmoji hidden">🏙️</div>
       </div>
       <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
