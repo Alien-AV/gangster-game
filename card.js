@@ -104,21 +104,31 @@ export const CARD_BEHAVIORS = {
               const idx = discArr.indexOf(item);
               if (forceFail) {
                 const owner = makeCard('disagreeable_owner');
-                if (idx >= 0) discArr.splice(idx, 1, owner); else discArr.push(owner);
+                if (idx >= 0) discArr.splice(idx, 1); // remove business
+                discArr.push(owner);
+                // Ensure DOM reflects removal and new card
+                if (item && item.uid && typeof game.removeCardByUid === 'function') { try { game.removeCardByUid(item.uid); } catch(e){} }
+                if (typeof game.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(owner); game.ensureCardNode(owner, nidx); } catch(e){} }
                 game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
               } else {
                 let xb = discArr.find(x => x.id === 'extorted_business');
                 if (!xb) {
                   xb = makeCard('extorted_business');
                   xb.data = xb.data || {}; xb.data.count = 1;
-                  if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
+                  if (idx >= 0) discArr.splice(idx, 1); // remove business
+                  discArr.push(xb);
+                  // Ensure DOM removal and creation
+                  if (item && item.uid && typeof game.removeCardByUid === 'function') { try { game.removeCardByUid(item.uid); } catch(e){} }
+                  if (typeof game.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); game.ensureCardNode(xb, nidx); } catch(e){} }
                 } else {
                   xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
                   if (idx >= 0) {
-                    discArr.splice(idx, 1);
-                    const oldIdx = discArr.indexOf(xb);
-                    if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
+                    discArr.splice(idx, 1); // remove business from data
+                    // Remove business node from DOM
+                    if (item && item.uid && typeof game.removeCardByUid === 'function') { try { game.removeCardByUid(item.uid); } catch(e){} }
                   }
+                  // Ensure extorted aggregate exists, then update its dynamic counter
+                  if (typeof game.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); game.ensureCardNode(xb, nidx); } catch(e){} }
                 }
                 game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
               }
@@ -173,6 +183,10 @@ export const CARD_BEHAVIORS = {
               if (typeof gme.updateCardDynamic === 'function') {
                 try { gme.updateCardDynamic(ef); } catch(e){}
               }
+              // Ensure DOM exists for enforcers
+              if (typeof gme.ensureCardNode === 'function') {
+                try { const idx = discArr.indexOf(ef); gme.ensureCardNode(ef, idx); } catch(e){}
+              }
             }
           };
           const dur = game.durationWithStat(act.base, act.stat, gangster);
@@ -217,6 +231,9 @@ export const CARD_BEHAVIORS = {
           s.gangsters.push(newG);
           item.used = true;
           gme.updateUI();
+          if (typeof gme.ensureGangsterNode === 'function') {
+            try { gme.ensureGangsterNode(newG); } catch(e){}
+          }
         }
       };
       const dur = game.durationWithStat(act.base, act.stat, gangster);
@@ -255,19 +272,21 @@ export const CARD_BEHAVIORS = {
           if (!xb) {
             xb = makeCard('extorted_business');
             xb.data = xb.data || {}; xb.data.count = 1;
-            if (idx >= 0) discArr.splice(idx, 1, xb); else discArr.push(xb);
-                } else {
-                  xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-                  if (idx >= 0) {
-                    discArr.splice(idx, 1);
-                    const oldIdx = discArr.indexOf(xb);
-                    if (oldIdx >= 0) { discArr.splice(oldIdx, 1); discArr.splice(idx, 0, xb); }
-                  }
-                }
-                // Update aggregate card counter live
-                if (xb && typeof game.updateCardDynamic === 'function') {
-                  try { game.updateCardDynamic(xb); } catch(e){}
-                }
+            if (idx >= 0) discArr.splice(idx, 1); // remove owner
+            discArr.push(xb);
+            if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+            if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+          } else {
+            xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+            if (idx >= 0) {
+              discArr.splice(idx, 1);
+              if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+            }
+            if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+          }
+          if (xb && typeof game.updateCardDynamic === 'function') {
+            try { game.updateCardDynamic(xb); } catch(e){}
+          }
           if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
           gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
         }

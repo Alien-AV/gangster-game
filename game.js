@@ -657,6 +657,77 @@ export class Game {
     return wrap;
   }
 
+  ensureGangsterNode(g) {
+    const container = this._worldContainer();
+    if (!container) return null;
+    let wrap = this._dom.gangsterById.get(g.id);
+    if (wrap) return wrap;
+    wrap = document.createElement('div');
+    wrap.className = 'ring-wrap';
+    const gc = document.createElement('div');
+    gc.className = 'card world-card';
+    gc.dataset.gid = String(g.id);
+    const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
+    const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
+    const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
+    const gDesc = (
+      g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
+      g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
+      g.type === 'fist' ? 'Bruiser. Raids and intimidates when needed.' :
+      g.type === 'brain' ? 'A planner who knows the angles.' :
+      ''
+    );
+    gc.innerHTML = `
+      <div class="world-card-title">${gCard.name}</div>
+      <div class="world-card-art">
+        ${artImg ? `<img class=\"world-card-artImg\" src=\"${artImg}\" alt=\"${gCard.name}\">` : ''}
+        <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
+      </div>
+      <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
+    `;
+    gc.removeAttribute('title');
+    if (artImg) {
+      const img = gc.querySelector('.world-card-artImg');
+      const emojiEl = gc.querySelector('.world-card-artEmoji');
+      if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+    }
+    gc.addEventListener('dragstart', ev => {
+      if (g.busy) { ev.preventDefault(); return; }
+      ev.dataTransfer.setData('text/plain', String(g.id));
+      ev.dataTransfer.effectAllowed = 'move';
+    });
+    gc.addEventListener('mousedown', (ev) => {
+      const target = ev.target;
+      if (target && target.closest && target.closest('.world-card-art')) {
+        gc.setAttribute('draggable', g.busy ? 'false' : 'true');
+      }
+    });
+    const showGangInfo = () => this._showInfoPanel({
+      title: gCard.name,
+      stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
+      desc: gDesc,
+      hint: g.busy ? 'Busy' : 'Drag onto table cards',
+    });
+    if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      gc.addEventListener('mouseenter', showGangInfo);
+      gc.addEventListener('mouseleave', () => this._hideInfoPanel());
+    }
+    gc.addEventListener('click', showGangInfo);
+    if (g.busy) gc.classList.add('busy');
+    wrap.appendChild(gc);
+    this._dom.gangsterById.set(g.id, wrap);
+    // Insert before explore + table cards
+    const offset = (this.state.gangsters || []).findIndex(x => x.id === g.id);
+    const node = container.childNodes[offset] || null;
+    container.insertBefore(wrap, node);
+    return wrap;
+  }
+
+  replaceCard(oldItem, newItem, index) {
+    if (oldItem && oldItem.uid) this.removeCardByUid(oldItem.uid);
+    return this.ensureCardNode(newItem, index);
+  }
+
   ensureCardNode(item, index) {
     if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
     let wrap = this._dom.cardByUid.get(item.uid);
@@ -1217,12 +1288,20 @@ export class Game {
         }
         anyActive = anyActive || (now < item.cooldownEndMs);
         if (now >= item.cooldownEndMs) {
-          // cleanup
-          try { item._ringWrapEl.classList.remove('cooldown-active'); item._ringWrapEl.style.removeProperty('--p'); } catch(e){}
+          // targeted cleanup on this card only
+          try {
+            if (item._ringWrapEl) {
+              item._ringWrapEl.classList.remove('cooldown-active');
+              item._ringWrapEl.style.removeProperty('--p');
+            }
+            const wrap = item._ringWrapEl;
+            const card = wrap && wrap.querySelector ? wrap.querySelector('.world-card') : null;
+            const banner = card ? card.querySelector('.world-card-center-badge.badge-recover') : null;
+            if (banner) { try { banner.remove(); } catch(e){} }
+          } catch(e){}
           item.cooldownUntil = 0;
           item.cooldownStartMs = 0;
           item.cooldownEndMs = 0;
-          this.renderWorld();
         }
       }
       this._cooldownRAF = anyActive ? requestAnimationFrame(step) : null;
