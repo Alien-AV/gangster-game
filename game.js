@@ -109,6 +109,15 @@ export class Game {
     localStorage.setItem('gameState', JSON.stringify(data));
   }
 
+  scheduleSave(delayMs = 1500) {
+    // Coalesce frequent UI saves; write at most every delayMs
+    if (this._saveTimer) return;
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      try { this.saveState(); } catch(e){}
+    }, delayMs);
+  }
+
   serializeState() {
     const s = this.state;
     return {
@@ -327,8 +336,8 @@ export class Game {
     if (fearElForTip && fearElForTip.parentElement) {
       this.showTooltip(fearElForTip.parentElement, () => this.buildFearTooltip());
     }
-    // All UI renders via world/table now
-    this.saveState();
+    // All UI renders via world/table now; throttle persistence
+    this.scheduleSave();
   }
 
   runProgress(container, duration, callback) {

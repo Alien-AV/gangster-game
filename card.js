@@ -167,7 +167,11 @@ export const CARD_BEHAVIORS = {
       if (!recruitAct && !vigilAct) return;
       const options = [];
       if (recruitAct) options.push({ id: 'recruit', label: 'Recruit' });
-      if (vigilAct) options.push({ id: 'vigilante', label: 'Beat Up' });
+      if (vigilAct) {
+        // Require Fist >= 3 to beat up
+        const canBeat = game.effectiveStat(gangster, 'fist') >= 3;
+        options.push({ id: 'vigilante', label: canBeat ? 'Beat Up' : 'Beat Up (Requires Fist 3)' , disabled: !canBeat });
+      }
       if (!options.length) return;
       game.showInlineActionChoice(cardEl, options, (choiceId) => {
         if (choiceId === 'recruit' && recruitAct) {
@@ -192,6 +196,7 @@ export const CARD_BEHAVIORS = {
           const dur = game.durationWithStat(act.base, act.stat, gangster);
           game.executeAction(act, gangster, cardEl, dur);
         } else if (choiceId === 'vigilante' && vigilAct) {
+          if (game.effectiveStat(gangster, 'fist') < 3) { game._cardMsg('Requires Fist 3'); return; }
           const act = { ...vigilAct };
           const dur = game.durationWithStat(act.base, act.stat, gangster);
           game.executeAction(act, gangster, cardEl, dur);
@@ -291,6 +296,7 @@ export const CARD_BEHAVIORS = {
           gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
         }
       };
+      if (useStat === 'fist' && fist < 3) { game._cardMsg('Requires Fist 3'); return; }
       const dur = game.durationWithStat(act.base, act.stat, gangster);
       game.executeAction(act, gangster, cardEl, dur);
     }
