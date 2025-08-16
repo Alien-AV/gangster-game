@@ -2,6 +2,7 @@
 import { ACTIONS } from './actions.js';
 import { makeCard, makeGangsterCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
+import { startTimer, startCountdown } from './progress-ring.js';
 
 // behaviors and renderer moved to card.js
 
@@ -97,9 +98,7 @@ export class Game {
         // No special scheduling; renders are immediate elsewhere
       }
     });
-    // Cooldown animator
-    this._cooldownRAF = null;
-    this._ensureCooldownAnimator();
+    // Progress rings are managed per-item; no global animator
   }
 
   // Actions panel removed; world is the single panel
@@ -347,27 +346,9 @@ export class Game {
       this.updateUI();
       return;
     }
-    // Detect ring-only mode: container can be the card or the wrapper
+    // For ring-only mode, we skip creating/using a bottom progress bar
     const isCard = container.classList && container.classList.contains('world-card');
     const isWrap = container.classList && container.classList.contains('ring-wrap');
-    // Find the card element to toggle ring animation and update --p
-    let cardEl = isCard ? container : (container.closest && container.closest('.world-card'));
-    const ringWrap = isWrap ? container : (cardEl ? cardEl.parentElement : null);
-    if (ringWrap && ringWrap.classList.contains('ring-wrap')) {
-      try {
-        // If this is used for normal action, mark ring-active; if used for cooldown, keep class as-is
-        if (!ringWrap.classList.contains('cooldown-active')) ringWrap.classList.add('ring-active');
-      } catch(e){}
-      // Add a left badge for remaining seconds
-      let leftBadge = cardEl && cardEl.querySelector ? cardEl.querySelector('.world-card-badge.left') : null;
-      if (!leftBadge && cardEl) {
-        leftBadge = document.createElement('div');
-        leftBadge.className = 'world-card-badge left';
-        cardEl.appendChild(leftBadge);
-      }
-      leftBadge && (leftBadge.textContent = `${Math.ceil(duration/1000)}s`);
-    }
-    // For ring-only mode, we skip creating/using a bottom progress bar
     const stacked = !isCard && container.classList.contains('progress-stack');
     let bar = null;
     if (!isCard && !isWrap) {
@@ -389,41 +370,23 @@ export class Game {
       }
       container.classList.remove('hidden');
     }
-    const start = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const percent = Math.min((elapsed / duration) * 100, 100);
-      if (bar) bar.style.width = percent + '%';
-      if (ringWrap) {
-        const cyc = Math.min(Math.max(elapsed / duration, 0), 1);
-        // For cooldown-active, show reverse (elapsed 0 => p=0; we want p=cyc anyway since ring CSS draws p arc; reverse means we start at 0 and grow)
-        try { ringWrap.style.setProperty('--p', `${cyc}`); } catch(e){}
-        const leftBadge = cardEl && cardEl.querySelector ? cardEl.querySelector('.world-card-badge.left') : null;
-        if (leftBadge) leftBadge.textContent = `${Math.max(0, Math.ceil((duration - elapsed)/1000))}s`;
-      }
-      if (elapsed >= duration) {
-        clearInterval(interval);
+    startTimer(container, {
+      durationMs: duration,
+      mode: 'action',
+      showBadge: true,
+      onTick: (p) => { if (bar) { try { bar.style.width = (p * 100) + '%'; } catch(e){} } },
+      onDone: () => {
         if (bar) {
           if (stacked) {
-            bar.remove();
+            try { bar.remove(); } catch(e){}
           } else {
-            container.classList.add('hidden');
-            bar.style.width = '100%';
+            try { container.classList.add('hidden'); } catch(e){}
+            try { bar.style.width = '100%'; } catch(e){}
           }
         }
-        callback();
-        if (ringWrap) {
-          try {
-            if (ringWrap.classList.contains('ring-active')) ringWrap.classList.remove('ring-active');
-            // Do not clear cooldown-active here; tick() will clear when cooldown ends
-            if (!ringWrap.classList.contains('cooldown-active')) ringWrap.style.removeProperty('--p');
-          } catch(e){}
-          const leftBadge = cardEl && cardEl.querySelector ? cardEl.querySelector('.world-card-badge.left') : null;
-          if (leftBadge) { try { leftBadge.remove(); } catch(e){} }
-        }
-        this.updateUI();
+        try { callback && callback(); } finally { this.updateUI(); }
       }
-    }, 50);
+    });
   }
 
   // Generic small tooltip builder
@@ -764,6 +727,8 @@ export class Game {
       }
       card.addEventListener('click', () => this._showInfoPanel(buildInfo()));
       this._dom.cardByUid.set(item.uid, wrap);
+      // Activate timers for items created now
+      this._activateTimersForItem(item, wrap);
     }
     // Update dynamic text if available
     try {
@@ -1206,8 +1171,8 @@ export class Game {
       s.salaryTick = 0;
       this.paySalaries();
     }
-    // Update cooldown badges in-place to avoid full world re-render flicker
-    // Removed discrete cooldown updates; runProgress now drives the recovery ring smoothly
+    // Heat/cooldown visuals handled by progress-ring per item
+    // Update cooldown badges in-place
     this.updateUI();
   }
   
@@ -1278,44 +1243,64 @@ export class Game {
   }
 
   _ensureCooldownAnimator() {
-    if (this._cooldownRAF) return;
-    const step = () => {
-      const disc = (this.state.table && this.state.table.cards) || [];
-      let anyActive = false;
-      const now = Date.now();
-      for (const item of disc) {
-        if (!item || item.type !== 'business') continue;
-        if (!item.cooldownEndMs || !item._ringWrapEl) continue;
-        const total = (item.cooldownEndMs - (item.cooldownStartMs || now)) || 1;
-        const elapsed = Math.max(0, Math.min(total, now - (item.cooldownStartMs || now)));
-        const p = 1 - (elapsed / total);
-        try { item._ringWrapEl.classList.add('cooldown-active'); item._ringWrapEl.style.setProperty('--p', String(p)); } catch(e){}
-        // Update dynamic text with remaining seconds
-        const remainSec = Math.max(0, Math.ceil((item.cooldownEndMs - now) / 1000));
-        if (item._dynEl) {
-          try { item._dynEl.textContent = remainSec > 0 ? `Recovers in ${remainSec}s` : ''; } catch(e){}
-        }
-        anyActive = anyActive || (now < item.cooldownEndMs);
-        if (now >= item.cooldownEndMs) {
-          // targeted cleanup on this card only
+    // No-op: kept for backward compatibility
+  }
+
+  _activateTimersForItem(item, wrap) {
+    if (!item || !wrap) return;
+    // Resume business cooldown
+    if (item.type === 'business' && item.cooldownEndMs && Date.now() < item.cooldownEndMs) {
+      startCountdown(wrap, {
+        startMs: item.cooldownStartMs || (Date.now() - 1),
+        endMs: item.cooldownEndMs,
+        mode: 'cooldown',
+        showBadge: false,
+        onTick: (_p, remaining) => {
+          if (item._dynEl) {
+            const sec = Math.max(0, Math.ceil(remaining / 1000));
+            try { item._dynEl.textContent = sec > 0 ? `Recovers in ${sec}s` : ''; } catch(e){}
+          }
+        },
+        onDone: () => {
           try {
-            if (item._ringWrapEl) {
-              item._ringWrapEl.classList.remove('cooldown-active');
-              item._ringWrapEl.style.removeProperty('--p');
-            }
-            const wrap = item._ringWrapEl;
-            const card = wrap && wrap.querySelector ? wrap.querySelector('.world-card') : null;
+            wrap.classList.remove('cooldown-active');
+            wrap.style.removeProperty('--p');
+            const card = wrap.querySelector && wrap.querySelector('.world-card');
             const banner = card ? card.querySelector('.world-card-center-badge.badge-recover') : null;
             if (banner) { try { banner.remove(); } catch(e){} }
-          } catch(e){}
+          } catch(e) {}
           item.cooldownUntil = 0;
           item.cooldownStartMs = 0;
           item.cooldownEndMs = 0;
+          this.updateCardDynamic(item);
         }
+      });
+      return;
+    }
+    // Resume heat countdown (supports legacy seconds-based data)
+    if (item.type === 'heat') {
+      if (!item.heatEndMs && item.data && typeof item.data.expiresAt === 'number') {
+        const remainSec = Math.max(0, (item.data.expiresAt - (this.state.time || 0)));
+        item.heatStartMs = Date.now();
+        item.heatEndMs = Date.now() + (remainSec * 1000);
+        try { delete item.data.expiresAt; } catch(e){}
       }
-      this._cooldownRAF = anyActive ? requestAnimationFrame(step) : null;
-    };
-    this._cooldownRAF = requestAnimationFrame(step);
+      if (item.heatEndMs && Date.now() < item.heatEndMs) {
+        startCountdown(wrap, {
+          startMs: item.heatStartMs || (Date.now() - 1),
+          endMs: item.heatEndMs,
+          mode: 'heat',
+          showBadge: true,
+          onDone: () => {
+            const disc = (this.state.table && this.state.table.cards) || [];
+            const idx = disc.indexOf(item);
+            if (idx >= 0) disc.splice(idx, 1);
+            if (item.uid) { try { this.removeCardByUid(item.uid); } catch(e){} }
+            this._cardMsg('You got arrested');
+          }
+        });
+      }
+    }
   }
 
   // Called to refresh only dynamic lines on cards without rebuilding the whole world
@@ -1371,3 +1356,4 @@ export class Game {
   }
 
 }
+

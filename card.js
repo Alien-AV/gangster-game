@@ -1,4 +1,5 @@
 import { ACTIONS } from './actions.js';
+import { startCountdown } from './progress-ring.js';
 
 // Card model
 export class Card {
@@ -29,6 +30,7 @@ export const CARD_REGISTRY = {
   newspaper: () => new Card({ id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'business', img: 'images/newspaper.jpg', verbs: ['promo'] }),
   bookmaker: () => new Card({ id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', img: 'images/bookmaker.jpg', verbs: ['launder'] }),
   extorted_business: () => new Card({ id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', data: { count: 0 }, verbs: [] }),
+  heat: () => new Card({ id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', verbs: [] }),
   disagreeable_owner: () => new Card({ id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', reusable: false, type: 'owner', verbs: ['pressure_owner'] }),
   recruit_face: () => new Card({ id: 'recruit_face', name: 'Recruit: Face', desc: 'A smooth talker looking for work.', reusable: false, type: 'recruit', data: { type: 'face' }, img: 'images/face.png', verbs: ['hire_recruit'] }),
   recruit_fist: () => new Card({ id: 'recruit_fist', name: 'Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, type: 'recruit', data: { type: 'fist' }, img: 'images/fist.png', verbs: ['hire_recruit'] }),
@@ -144,14 +146,45 @@ export const CARD_BEHAVIORS = {
                if (cardEl && cardEl.parentElement && cardEl.parentElement.classList.contains('ring-wrap')) {
                  const wrap = cardEl.parentElement;
                  try {
-                   wrap.classList.add('cooldown-active');
-                   wrap.style.setProperty('--p', '1');
+                   startCountdown(wrap, {
+                     startMs: item.cooldownStartMs,
+                     endMs: item.cooldownEndMs,
+                     mode: 'cooldown',
+                     showBadge: false,
+                     onTick: (_p, remaining) => {
+                       const sec = Math.max(0, Math.ceil(remaining / 1000));
+                       if (item && item._dynEl) { try { item._dynEl.textContent = `Recovers in ${sec}s`; } catch(e){} }
+                     },
+                     onDone: () => {
+                       try {
+                         wrap.classList.remove('cooldown-active');
+                         wrap.style.removeProperty('--p');
+                         const banner = cardEl.querySelector && cardEl.querySelector('.world-card-center-badge.badge-recover');
+                         if (banner) { try { banner.remove(); } catch(e){} }
+                       } catch(e){}
+                       item.cooldownUntil = 0;
+                       item.cooldownStartMs = 0;
+                       item.cooldownEndMs = 0;
+                       game.updateCardDynamic(item);
+                     }
+                   });
                  } catch(e){}
                }
-               if (typeof game._ensureCooldownAnimator === 'function') {
-                 try { game._ensureCooldownAnimator(); } catch(e){}
-               }
                if (typeof baseAct.effect === 'function') baseAct.effect(game, gg);
+               // Spawn a heat card that expires soon
+               try {
+                 const discArr = (game.state.table && game.state.table.cards) || [];
+                 const h = makeCard('heat');
+                 const nowMs2 = Date.now();
+                 h.heatStartMs = nowMs2;
+                 h.heatEndMs = nowMs2 + 20000; // 20s real-time
+                 discArr.push(h);
+                 if (typeof game.ensureCardNode === 'function') {
+                   const hidx = discArr.indexOf(h);
+                   game.ensureCardNode(h, hidx);
+                 }
+                 // ring animation is activated when node is ensured
+               } catch(e){}
              }
            }
          };
@@ -341,10 +374,10 @@ export function renderWorldCard(game, item) {
       // no badge; static state
       } else if (item.cooldownUntil && now < item.cooldownUntil) {
       const remain = item.cooldownUntil - now;
-      // Mark cooldown active and compute ring percent if total known
+      // Mark cooldown active and compute remaining fraction for ring
       wrap.classList.add('cooldown-active');
       if (typeof item.cooldownTotal === 'number' && item.cooldownTotal > 0) {
-        const p = Math.min(1, Math.max(0, 1 - (remain / item.cooldownTotal)));
+        const p = Math.min(1, Math.max(0, (remain / item.cooldownTotal)));
         try { wrap.style.setProperty('--p', String(p)); } catch(e){}
       }
         // Center recovery badge (shared styles)
