@@ -24,5 +24,3 @@ This file tracks near-term tasks to align the prototype with the intended design
 - Buy business fronts, create illegal businesses behind.
 
 - Save/load the actions progress - it's currently possible to start an action on one save, load during the action, and get the effects on another save.
-
-- Remove/rename the pattern "const discArr = (game.state.table && game.state.table.cards) || [];" - both the name "discovery" is irrelevant, and the defensive programming is over the top here, validating things that are inherently true. I prefer the code to fail explicitly if those assertions fail. Same for "typeof game.removeCardByUid === 'function'" - there is no possible flow where a function disappears from the code - and if it wasn't added in the first place, we need to notice it immediately via explicit errors.

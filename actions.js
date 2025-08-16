@@ -77,18 +77,12 @@ export const ACTIONS = [
     prereq: (game) => (game.state.businesses - game.state.illicit) > 0,
     effect: (game, g) => {
       const s = game.state;
-      if (typeof game.showIllicitBusinessSelection === 'function') {
-        game.showIllicitBusinessSelection(choice => {
-          s.illicitCounts[choice] += 1;
-          s.illicit += 1;
-          g.personalHeat = (g.personalHeat || 0) + 1;
-          game.updateUI();
-        });
-      } else {
-        s.illicitCounts.counterfeiting += 1;
+      game.showIllicitBusinessSelection(choice => {
+        s.illicitCounts[choice] += 1;
         s.illicit += 1;
         g.personalHeat = (g.personalHeat || 0) + 1;
-      }
+        game.updateUI();
+      });
     } },
   { id: 'actHireGangster', label: 'Hire Gangster (Face)', stat: 'face', base: 3000,
     cost: (game) => {
@@ -109,20 +103,13 @@ export const ACTIONS = [
   { id: 'actProcureEquipment', label: 'Procure Equipment (Brain)', stat: 'brain', base: 3000,
     cost: { money: 200 },
     effect: (game) => {
-      if (typeof game.showEquipmentSelection === 'function') {
-        game.showEquipmentSelection(type => {
-          const item = { id: game.state.nextEquipId++, type };
-          if (!Array.isArray(game.state.inventory)) game.state.inventory = [];
-          game.state.inventory.push(item);
-          game.updateUI();
-          game.renderCards();
-        });
-      } else {
-        // Fallback: add a pistol if modal not available
-        const item = { id: game.state.nextEquipId++, type: 'pistol' };
+      game.showEquipmentSelection(type => {
+        const item = { id: game.state.nextEquipId++, type };
         if (!Array.isArray(game.state.inventory)) game.state.inventory = [];
         game.state.inventory.push(item);
-      }
+        game.updateUI();
+        game.renderCards();
+      });
     } },
   { id: 'actPayCops', label: 'Pay Cops -$500', stat: 'brain', base: 3000,
     cost: { money: 500 },
@@ -145,7 +132,6 @@ export const ACTIONS = [
       if (game.state.disagreeableOwners > 0) game.state.disagreeableOwners -= 1;
       game.state.fear = (game.state.fear || 0) + 1;
       g.personalHeat = (g.personalHeat || 0) + 1;
-      // Spawn a brief heat card using the onCreate hook (one line)
-      if (typeof game.spawnTableCard === 'function') game.spawnTableCard('heat');
+      game.spawnTableCard('heat');
     } },
 ];
