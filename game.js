@@ -708,18 +708,17 @@ export class Game {
       wrap = rendered.wrap;
       const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
-      if (behavior && typeof behavior.onDrop === 'function') {
-        card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
-        card.addEventListener('dragleave', () => card.classList.remove('highlight'));
-        card.addEventListener('drop', ev => {
-          ev.preventDefault(); card.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          behavior.onDrop(this, item, g, card);
-        });
-      }
+      card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
+      card.addEventListener('dragleave', () => card.classList.remove('highlight'));
+      card.addEventListener('drop', ev => {
+        ev.preventDefault(); card.classList.remove('highlight');
+        const idStr = ev.dataTransfer.getData('text/plain');
+        const gid = parseInt(idStr, 10);
+        const g = this.state.gangsters.find(x => x.id === gid);
+        if (!g || g.busy) return;
+        const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
+        handler(g);
+      });
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
@@ -934,9 +933,11 @@ export class Game {
         wrap = rendered.wrap;
         const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
-      if (behavior && typeof behavior.onDrop === 'function') {
-        attachDrop(card, (g, _prog, cardEl) => behavior.onDrop(this, item, g, cardEl), card);
-      }
+      attachDrop(card, (g, _prog, cardEl) => {
+        if (!g || g.busy) return;
+        if (behavior && typeof behavior.onDrop === 'function') return behavior.onDrop(this, item, g, cardEl);
+        return this._handleGenericOnDrop(item, g, cardEl);
+      }, card);
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
@@ -1360,6 +1361,48 @@ export class Game {
   }
 
 }
+// Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
+Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
+  // Today we don’t have full multi-card stacks wired. We scaffold: choose an action from available ACTIONS by target type/verbs.
+  const verbs = Array.isArray(targetItem.verbs) ? targetItem.verbs : [];
+  const candidates = [];
+  // Map simple verbs to action ids
+  const verbToAction = {
+    extort_or_raid: ['actExtort', 'actRaid'],
+    launder: ['actLaunder'],
+    procure_equipment: ['actProcureEquipment'],
+    promo: ['actPromo'],
+    pay_cops: ['actPayCops'],
+    donate: ['actDonate'],
+    hire_recruit: ['actHireGangster'],
+  };
+  verbs.forEach(v => { (verbToAction[v] || []).forEach(id => candidates.push(id)); });
+  // Fallback by target type when verbs are absent
+  if (!candidates.length) {
+    if (targetItem.type === 'business') candidates.push('actExtort', 'actRaid');
+    if (targetItem.type === 'bookmaker') candidates.push('actLaunder');
+    if (targetItem.type === 'cop') candidates.push('actPayCops');
+    if (targetItem.type === 'priest') candidates.push('actDonate');
+    if (targetItem.type === 'recruit') candidates.push('actHireGangster');
+  }
+  const baseActions = (ACTIONS || []).filter(a => candidates.includes(a.id));
+  if (!baseActions.length) return;
+  // If one candidate → execute; if multiple → chooser
+  const runAction = (baseAct) => {
+    const dur = this.durationWithStat(baseAct.base, baseAct.stat, gangster);
+    this.executeAction(baseAct, gangster, cardEl, dur);
+  };
+  if (baseActions.length === 1) {
+    runAction(baseActions[0]);
+    return;
+  }
+  const options = baseActions.map(a => ({ id: a.id, label: a.label || a.id }));
+  this.showInlineActionChoice(cardEl, options, (choiceId) => {
+    const chosen = baseActions.find(a => a.id === choiceId);
+    if (!chosen) return;
+    runAction(chosen);
+  });
+};
 
 // Hook runner for card creation behaviors
 Game.prototype._applyOnCreate = function(item) {
