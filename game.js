@@ -727,7 +727,8 @@ export class Game {
       }
       card.addEventListener('click', () => this._showInfoPanel(buildInfo()));
       this._dom.cardByUid.set(item.uid, wrap);
-      // Activate timers for items created now
+      // Apply onCreate hook and then activate timers for items created now
+      this._applyOnCreate(item);
       this._activateTimersForItem(item, wrap);
     }
     // Update dynamic text if available
@@ -943,6 +944,9 @@ export class Game {
       }
       card.addEventListener('click', () => this._showInfoPanel(buildInfo()));
         this._dom.cardByUid.set(item.uid, wrap);
+        // Apply onCreate hook and then activate timers for items created now
+        this._applyOnCreate(item);
+        this._activateTimersForItem(item, wrap);
       }
       desiredNodes.push(wrap);
     });
@@ -1356,4 +1360,27 @@ export class Game {
   }
 
 }
+
+// Hook runner for card creation behaviors
+Game.prototype._applyOnCreate = function(item) {
+  try {
+    const behavior = (CARD_BEHAVIORS && item) ? CARD_BEHAVIORS[item.type] : null;
+    if (behavior && typeof behavior.onCreate === 'function') {
+      behavior.onCreate(this, item);
+    }
+  } catch(e){}
+};
+
+// Convenience spawner for table cards; returns the created card
+Game.prototype.spawnTableCard = function(idOrCard) {
+  const table = this.state.table;
+  if (!table || !Array.isArray(table.cards)) return null;
+  const card = (typeof idOrCard === 'string') ? makeCard(idOrCard) : (idOrCard || null);
+  if (!card) return null;
+  table.cards.push(card);
+  const idx = table.cards.length - 1;
+  this.ensureCardNode(card, idx);
+  this.updateUI();
+  return card;
+};
 

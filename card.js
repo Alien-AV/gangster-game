@@ -72,6 +72,16 @@ export function makeGangsterCard(g) {
 
 // Export unified type-driven behaviors used by the world renderer
 export const CARD_BEHAVIORS = {
+  heat: {
+    onCreate: function(game, item) {
+      // Initialize standard heat countdown if not already set
+      if (!item.heatEndMs) {
+        const nowMs = Date.now();
+        item.heatStartMs = nowMs;
+        item.heatEndMs = nowMs + 20000; // default 20s real-time
+      }
+    }
+  },
   business: {
     onDrop: function (game, item, gangster, cardEl) {
       const now = game.state.time || 0;
@@ -171,19 +181,18 @@ export const CARD_BEHAVIORS = {
                  } catch(e){}
                }
                if (typeof baseAct.effect === 'function') baseAct.effect(game, gg);
-               // Spawn a heat card that expires soon
+               // Spawn a heat card that expires soon (handled by heat.onCreate)
                try {
-                 const discArr = (game.state.table && game.state.table.cards) || [];
-                 const h = makeCard('heat');
-                 const nowMs2 = Date.now();
-                 h.heatStartMs = nowMs2;
-                 h.heatEndMs = nowMs2 + 20000; // 20s real-time
-                 discArr.push(h);
-                 if (typeof game.ensureCardNode === 'function') {
-                   const hidx = discArr.indexOf(h);
-                   game.ensureCardNode(h, hidx);
+                 if (typeof game.spawnTableCard === 'function') game.spawnTableCard('heat');
+                 else {
+                   const discArr = (game.state.table && game.state.table.cards) || [];
+                   const h = makeCard('heat');
+                   discArr.push(h);
+                   if (typeof game.ensureCardNode === 'function') {
+                     const hidx = discArr.indexOf(h);
+                     game.ensureCardNode(h, hidx);
+                   }
                  }
-                 // ring animation is activated when node is ensured
                } catch(e){}
              }
            }
@@ -296,42 +305,82 @@ export const CARD_BEHAVIORS = {
   },
   owner: {
     onDrop: function (game, item, gangster, cardEl) {
-      const face = game.effectiveStat(gangster, 'face');
-      const fist = game.effectiveStat(gangster, 'fist');
-      const useStat = (face >= fist) ? 'face' : 'fist';
       const baseMs = 3500;
-      const act = {
-        id: 'actConvinceOrThreaten', label: useStat === 'face' ? 'Convince Owner (Face)' : 'Threaten Owner (Fist)', stat: useStat, base: baseMs,
-        cost: useStat === 'face' ? { money: 500 } : undefined,
-        effect: (gme, gg) => {
-          const discArr = (gme.state.table && gme.state.table.cards) || [];
-          const idx = discArr.indexOf(item);
-          let xb = discArr.find(x => x.id === 'extorted_business');
-          if (!xb) {
-            xb = makeCard('extorted_business');
-            xb.data = xb.data || {}; xb.data.count = 1;
-            if (idx >= 0) discArr.splice(idx, 1); // remove owner
-            discArr.push(xb);
-            if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
-            if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
-          } else {
-            xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-            if (idx >= 0) {
-              discArr.splice(idx, 1);
-              if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+      const canThreaten = game.effectiveStat(gangster, 'fist') >= 3;
+      const options = [
+        { id: 'convince_owner', label: 'Convince Owner (Face)' },
+        { id: 'threaten_owner', label: canThreaten ? 'Threaten Owner (Fist)' : 'Threaten Owner (Fist, Requires Fist 3)', disabled: !canThreaten },
+      ];
+      game.showInlineActionChoice(cardEl, options, (choiceId) => {
+        if (choiceId === 'convince_owner') {
+          const act = {
+            id: 'actConvinceOwner', label: 'Convince Owner (Face)', stat: 'face', base: baseMs,
+            cost: { money: 500 },
+            effect: (gme, gg) => {
+              const discArr = (gme.state.table && gme.state.table.cards) || [];
+              const idx = discArr.indexOf(item);
+              let xb = discArr.find(x => x.id === 'extorted_business');
+              if (!xb) {
+                xb = makeCard('extorted_business');
+                xb.data = xb.data || {}; xb.data.count = 1;
+                if (idx >= 0) discArr.splice(idx, 1);
+                discArr.push(xb);
+                if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              } else {
+                xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                if (idx >= 0) {
+                  discArr.splice(idx, 1);
+                  if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              }
+              if (xb && typeof game.updateCardDynamic === 'function') {
+                try { game.updateCardDynamic(xb); } catch(e){}
+              }
+              if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
+              gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
             }
-            if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
-          }
-          if (xb && typeof game.updateCardDynamic === 'function') {
-            try { game.updateCardDynamic(xb); } catch(e){}
-          }
-          if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
-          gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
+          };
+          const dur = game.durationWithStat(act.base, act.stat, gangster);
+          game.executeAction(act, gangster, cardEl, dur);
         }
-      };
-      if (useStat === 'fist' && fist < 3) { game._cardMsg('Requires Fist 3'); return; }
-      const dur = game.durationWithStat(act.base, act.stat, gangster);
-      game.executeAction(act, gangster, cardEl, dur);
+        if (choiceId === 'threaten_owner') {
+          if (!canThreaten) { game._cardMsg('Requires Fist 3'); return; }
+          const act = {
+            id: 'actThreatenOwner', label: 'Threaten Owner (Fist)', stat: 'fist', base: baseMs,
+            effect: (gme, gg) => {
+              const discArr = (gme.state.table && gme.state.table.cards) || [];
+              const idx = discArr.indexOf(item);
+              let xb = discArr.find(x => x.id === 'extorted_business');
+              if (!xb) {
+                xb = makeCard('extorted_business');
+                xb.data = xb.data || {}; xb.data.count = 1;
+                if (idx >= 0) discArr.splice(idx, 1);
+                discArr.push(xb);
+                if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              } else {
+                xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                if (idx >= 0) {
+                  discArr.splice(idx, 1);
+                  if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              }
+              if (xb && typeof game.updateCardDynamic === 'function') {
+                try { game.updateCardDynamic(xb); } catch(e){}
+              }
+              if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
+              gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
+              // Spawn heat for intimidate path
+              if (typeof gme.spawnTableCard === 'function') gme.spawnTableCard('heat');
+            }
+          };
+          const dur = game.durationWithStat(act.base, act.stat, gangster);
+          game.executeAction(act, gangster, cardEl, dur);
+        }
+      });
     }
   }
 };

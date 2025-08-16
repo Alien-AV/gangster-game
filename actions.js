@@ -145,5 +145,7 @@ export const ACTIONS = [
       if (game.state.disagreeableOwners > 0) game.state.disagreeableOwners -= 1;
       game.state.fear = (game.state.fear || 0) + 1;
       g.personalHeat = (g.personalHeat || 0) + 1;
+      // Spawn a brief heat card using the onCreate hook (one line)
+      if (typeof game.spawnTableCard === 'function') game.spawnTableCard('heat');
     } },
 ];
