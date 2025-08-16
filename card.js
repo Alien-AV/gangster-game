@@ -1,4 +1,5 @@
 import { ACTIONS } from './actions.js';
+import { startCountdown } from './progress-ring.js';
 
 // Card model
 export class Card {
@@ -29,6 +30,7 @@ export const CARD_REGISTRY = {
   newspaper: () => new Card({ id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'business', img: 'images/newspaper.jpg', verbs: ['promo'] }),
   bookmaker: () => new Card({ id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', img: 'images/bookmaker.jpg', verbs: ['launder'] }),
   extorted_business: () => new Card({ id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', data: { count: 0 }, verbs: [] }),
+  heat: () => new Card({ id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', verbs: [] }),
   disagreeable_owner: () => new Card({ id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', reusable: false, type: 'owner', verbs: ['pressure_owner'] }),
   recruit_face: () => new Card({ id: 'recruit_face', name: 'Recruit: Face', desc: 'A smooth talker looking for work.', reusable: false, type: 'recruit', data: { type: 'face' }, img: 'images/face.png', verbs: ['hire_recruit'] }),
   recruit_fist: () => new Card({ id: 'recruit_fist', name: 'Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, type: 'recruit', data: { type: 'fist' }, img: 'images/fist.png', verbs: ['hire_recruit'] }),
@@ -70,6 +72,16 @@ export function makeGangsterCard(g) {
 
 // Export unified type-driven behaviors used by the world renderer
 export const CARD_BEHAVIORS = {
+  heat: {
+    onCreate: function(game, item) {
+      // Initialize standard heat countdown if not already set
+      if (!item.heatEndMs) {
+        const nowMs = Date.now();
+        item.heatStartMs = nowMs;
+        item.heatEndMs = nowMs + 20000; // default 20s real-time
+      }
+    }
+  },
   business: {
     onDrop: function (game, item, gangster, cardEl) {
       const now = game.state.time || 0;
@@ -144,14 +156,44 @@ export const CARD_BEHAVIORS = {
                if (cardEl && cardEl.parentElement && cardEl.parentElement.classList.contains('ring-wrap')) {
                  const wrap = cardEl.parentElement;
                  try {
-                   wrap.classList.add('cooldown-active');
-                   wrap.style.setProperty('--p', '1');
+                   startCountdown(wrap, {
+                     startMs: item.cooldownStartMs,
+                     endMs: item.cooldownEndMs,
+                     mode: 'cooldown',
+                     showBadge: false,
+                     onTick: (_p, remaining) => {
+                       const sec = Math.max(0, Math.ceil(remaining / 1000));
+                       if (item && item._dynEl) { try { item._dynEl.textContent = `Recovers in ${sec}s`; } catch(e){} }
+                     },
+                     onDone: () => {
+                       try {
+                         wrap.classList.remove('cooldown-active');
+                         wrap.style.removeProperty('--p');
+                         const banner = cardEl.querySelector && cardEl.querySelector('.world-card-center-badge.badge-recover');
+                         if (banner) { try { banner.remove(); } catch(e){} }
+                       } catch(e){}
+                       item.cooldownUntil = 0;
+                       item.cooldownStartMs = 0;
+                       item.cooldownEndMs = 0;
+                       game.updateCardDynamic(item);
+                     }
+                   });
                  } catch(e){}
                }
-               if (typeof game._ensureCooldownAnimator === 'function') {
-                 try { game._ensureCooldownAnimator(); } catch(e){}
-               }
                if (typeof baseAct.effect === 'function') baseAct.effect(game, gg);
+               // Spawn a heat card that expires soon (handled by heat.onCreate)
+               try {
+                 if (typeof game.spawnTableCard === 'function') game.spawnTableCard('heat');
+                 else {
+                   const discArr = (game.state.table && game.state.table.cards) || [];
+                   const h = makeCard('heat');
+                   discArr.push(h);
+                   if (typeof game.ensureCardNode === 'function') {
+                     const hidx = discArr.indexOf(h);
+                     game.ensureCardNode(h, hidx);
+                   }
+                 }
+               } catch(e){}
              }
            }
          };
@@ -263,42 +305,82 @@ export const CARD_BEHAVIORS = {
   },
   owner: {
     onDrop: function (game, item, gangster, cardEl) {
-      const face = game.effectiveStat(gangster, 'face');
-      const fist = game.effectiveStat(gangster, 'fist');
-      const useStat = (face >= fist) ? 'face' : 'fist';
       const baseMs = 3500;
-      const act = {
-        id: 'actConvinceOrThreaten', label: useStat === 'face' ? 'Convince Owner (Face)' : 'Threaten Owner (Fist)', stat: useStat, base: baseMs,
-        cost: useStat === 'face' ? { money: 500 } : undefined,
-        effect: (gme, gg) => {
-          const discArr = (gme.state.table && gme.state.table.cards) || [];
-          const idx = discArr.indexOf(item);
-          let xb = discArr.find(x => x.id === 'extorted_business');
-          if (!xb) {
-            xb = makeCard('extorted_business');
-            xb.data = xb.data || {}; xb.data.count = 1;
-            if (idx >= 0) discArr.splice(idx, 1); // remove owner
-            discArr.push(xb);
-            if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
-            if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
-          } else {
-            xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-            if (idx >= 0) {
-              discArr.splice(idx, 1);
-              if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+      const canThreaten = game.effectiveStat(gangster, 'fist') >= 3;
+      const options = [
+        { id: 'convince_owner', label: 'Convince Owner (Face)' },
+        { id: 'threaten_owner', label: canThreaten ? 'Threaten Owner (Fist)' : 'Threaten Owner (Fist, Requires Fist 3)', disabled: !canThreaten },
+      ];
+      game.showInlineActionChoice(cardEl, options, (choiceId) => {
+        if (choiceId === 'convince_owner') {
+          const act = {
+            id: 'actConvinceOwner', label: 'Convince Owner (Face)', stat: 'face', base: baseMs,
+            cost: { money: 500 },
+            effect: (gme, gg) => {
+              const discArr = (gme.state.table && gme.state.table.cards) || [];
+              const idx = discArr.indexOf(item);
+              let xb = discArr.find(x => x.id === 'extorted_business');
+              if (!xb) {
+                xb = makeCard('extorted_business');
+                xb.data = xb.data || {}; xb.data.count = 1;
+                if (idx >= 0) discArr.splice(idx, 1);
+                discArr.push(xb);
+                if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              } else {
+                xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                if (idx >= 0) {
+                  discArr.splice(idx, 1);
+                  if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              }
+              if (xb && typeof game.updateCardDynamic === 'function') {
+                try { game.updateCardDynamic(xb); } catch(e){}
+              }
+              if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
+              gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
             }
-            if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
-          }
-          if (xb && typeof game.updateCardDynamic === 'function') {
-            try { game.updateCardDynamic(xb); } catch(e){}
-          }
-          if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
-          gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
+          };
+          const dur = game.durationWithStat(act.base, act.stat, gangster);
+          game.executeAction(act, gangster, cardEl, dur);
         }
-      };
-      if (useStat === 'fist' && fist < 3) { game._cardMsg('Requires Fist 3'); return; }
-      const dur = game.durationWithStat(act.base, act.stat, gangster);
-      game.executeAction(act, gangster, cardEl, dur);
+        if (choiceId === 'threaten_owner') {
+          if (!canThreaten) { game._cardMsg('Requires Fist 3'); return; }
+          const act = {
+            id: 'actThreatenOwner', label: 'Threaten Owner (Fist)', stat: 'fist', base: baseMs,
+            effect: (gme, gg) => {
+              const discArr = (gme.state.table && gme.state.table.cards) || [];
+              const idx = discArr.indexOf(item);
+              let xb = discArr.find(x => x.id === 'extorted_business');
+              if (!xb) {
+                xb = makeCard('extorted_business');
+                xb.data = xb.data || {}; xb.data.count = 1;
+                if (idx >= 0) discArr.splice(idx, 1);
+                discArr.push(xb);
+                if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              } else {
+                xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+                if (idx >= 0) {
+                  discArr.splice(idx, 1);
+                  if (item && item.uid && typeof gme.removeCardByUid === 'function') { try { gme.removeCardByUid(item.uid); } catch(e){} }
+                }
+                if (typeof gme.ensureCardNode === 'function') { try { const nidx = discArr.indexOf(xb); gme.ensureCardNode(xb, nidx); } catch(e){} }
+              }
+              if (xb && typeof game.updateCardDynamic === 'function') {
+                try { game.updateCardDynamic(xb); } catch(e){}
+              }
+              if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
+              gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
+              // Spawn heat for intimidate path
+              if (typeof gme.spawnTableCard === 'function') gme.spawnTableCard('heat');
+            }
+          };
+          const dur = game.durationWithStat(act.base, act.stat, gangster);
+          game.executeAction(act, gangster, cardEl, dur);
+        }
+      });
     }
   }
 };
@@ -341,10 +423,10 @@ export function renderWorldCard(game, item) {
       // no badge; static state
       } else if (item.cooldownUntil && now < item.cooldownUntil) {
       const remain = item.cooldownUntil - now;
-      // Mark cooldown active and compute ring percent if total known
+      // Mark cooldown active and compute remaining fraction for ring
       wrap.classList.add('cooldown-active');
       if (typeof item.cooldownTotal === 'number' && item.cooldownTotal > 0) {
-        const p = Math.min(1, Math.max(0, 1 - (remain / item.cooldownTotal)));
+        const p = Math.min(1, Math.max(0, (remain / item.cooldownTotal)));
         try { wrap.style.setProperty('--p', String(p)); } catch(e){}
       }
         // Center recovery badge (shared styles)
