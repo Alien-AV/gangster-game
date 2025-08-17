@@ -3,6 +3,7 @@ import { ACTIONS } from './actions.js';
 import { makeCard, makeGangsterCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
+import { RecipeEngine } from './recipe.js';
 
 // behaviors and renderer moved to card.js
 
@@ -81,6 +82,15 @@ export class Game {
 
     // Initialize world table / deck system
     this.initTable();
+    // Initialize recipe engine with simple single-card mappings (scaffolding)
+    this._recipes = new RecipeEngine();
+    // Business + gangster → Extort or Raid
+    this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
+    // Specific single-target cases
+    this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
+    this._recipes.addRecipe(['cop','gangster'], ['actPayCops']);
+    this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
+    this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
     // DOM caches for reconciliation and initial world paint
     this._dom = { cardByUid: new Map(), gangsterById: new Map(), exploreWrap: null };
     this.reconcileWorld && this.reconcileWorld();
@@ -1363,29 +1373,10 @@ export class Game {
 }
 // Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
 Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
-  // Today we don’t have full multi-card stacks wired. We scaffold: choose an action from available ACTIONS by target type/verbs.
-  const verbs = Array.isArray(targetItem.verbs) ? targetItem.verbs : [];
-  const candidates = [];
-  // Map simple verbs to action ids
-  const verbToAction = {
-    extort_or_raid: ['actExtort', 'actRaid'],
-    launder: ['actLaunder'],
-    procure_equipment: ['actProcureEquipment'],
-    promo: ['actPromo'],
-    pay_cops: ['actPayCops'],
-    donate: ['actDonate'],
-    hire_recruit: ['actHireGangster'],
-  };
-  verbs.forEach(v => { (verbToAction[v] || []).forEach(id => candidates.push(id)); });
-  // Fallback by target type when verbs are absent
-  if (!candidates.length) {
-    if (targetItem.type === 'business') candidates.push('actExtort', 'actRaid');
-    if (targetItem.type === 'bookmaker') candidates.push('actLaunder');
-    if (targetItem.type === 'cop') candidates.push('actPayCops');
-    if (targetItem.type === 'priest') candidates.push('actDonate');
-    if (targetItem.type === 'recruit') candidates.push('actHireGangster');
-  }
-  const baseActions = (ACTIONS || []).filter(a => candidates.includes(a.id));
+  // Scaffolding for recipe usage: match by types present in the interaction
+  const stackTypes = [targetItem.type, 'gangster'];
+  const actionIds = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, gangster });
+  const baseActions = (ACTIONS || []).filter(a => actionIds.includes(a.id));
   if (!baseActions.length) return;
   // If one candidate → execute; if multiple → chooser
   const runAction = (baseAct) => {
