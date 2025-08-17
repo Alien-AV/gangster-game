@@ -1,9 +1,9 @@
 // JavaScript for Gangster Game moved from index.html
 import { ACTIONS } from './actions.js';
-import { makeCard, makeGangsterCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
+import { makeCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
-import { RecipeEngine } from './recipe.js';
+import { RecipeEngine, registerDefaultRecipes } from './recipe.js';
 
 // behaviors and renderer moved to card.js
 
@@ -84,13 +84,13 @@ export class Game {
     this.initTable();
     // Initialize recipe engine with simple single-card mappings (scaffolding)
     this._recipes = new RecipeEngine();
-    // Business + gangster → Extort or Raid
+    // Default recipes
     this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
-    // Specific single-target cases
     this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
     this._recipes.addRecipe(['cop','gangster'], ['actPayCops']);
     this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
     this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
+    registerDefaultRecipes(this._recipes);
     // DOM caches for reconciliation and initial world paint
     this._dom = { cardByUid: new Map(), gangsterById: new Map(), exploreWrap: null };
     this.reconcileWorld && this.reconcileWorld();
@@ -598,43 +598,34 @@ export class Game {
 
   _ensureExploreWrap() {
     if (this._dom.exploreWrap) return this._dom.exploreWrap;
-    const wrap = document.createElement('div'); wrap.className = 'ring-wrap';
-    const exploreCard = document.createElement('div'); exploreCard.className = 'card world-card';
-    exploreCard.innerHTML = `
-      <div class="world-card-title">Neighborhood</div>
-      <div class="world-card-art">
-        <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
-        <div class="world-card-artEmoji hidden">🏙️</div>
-      </div>
-      <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
-    `;
-    exploreCard.removeAttribute('title');
-    const img = exploreCard.querySelector('.world-card-artImg');
-    const emojiEl = exploreCard.querySelector('.world-card-artEmoji');
-    if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
+    // Spawn a proper 'neighborhood' card using the unified infra
+    const wrap = document.createElement('div');
+    wrap.className = 'ring-wrap';
+    const card = makeCard('neighborhood');
+    // Ensure a temporary UID for a non-table managed card, store wrap for placement
+    card.uid = card.uid || 'c_' + Math.random().toString(36).slice(2);
+    const rendered = renderWorldCard(this, card);
+    wrap.appendChild(rendered.card);
+    // Drop behavior routed through generic handler
     const ndeck = (this._decks || {}).neighborhood; const disabled = !ndeck || !ndeck.hasMore();
+    const cardEl = rendered.card;
     if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
-      exploreCard.addEventListener('mouseenter', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
-      exploreCard.addEventListener('mouseleave', () => this._hideInfoPanel());
+      cardEl.addEventListener('mouseenter', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: card.desc, hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
+      cardEl.addEventListener('mouseleave', () => this._hideInfoPanel());
     }
-    exploreCard.addEventListener('click', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
-    exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
-    exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
-    exploreCard.addEventListener('drop', ev => {
+    cardEl.addEventListener('click', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: card.desc, hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
+    cardEl.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); cardEl.classList.add('highlight'); });
+    cardEl.addEventListener('dragleave', () => cardEl.classList.remove('highlight'));
+    cardEl.addEventListener('drop', ev => {
       if (disabled) return;
-      ev.preventDefault();
-      exploreCard.classList.remove('highlight');
+      ev.preventDefault(); cardEl.classList.remove('highlight');
       const idStr = ev.dataTransfer.getData('text/plain');
       const gid = parseInt(idStr, 10);
       const g = this.state.gangsters.find(x => x.id === gid);
       if (!g || g.busy) return;
-      const act = (ACTIONS || []).find(a => a.id === 'actExploreNeighborhood');
-      if (!act) return;
-      const dur = this.durationWithStat(act.base, act.stat, g);
-      const ok = this.executeAction(act, g, exploreCard, dur);
-      if (!ok) this._cardMsg('Cannot explore.');
+      // Use recipe generic handler
+      this._handleGenericOnDrop(card, g, cardEl);
     });
-    wrap.appendChild(exploreCard);
     this._dom.exploreWrap = wrap;
     return wrap;
   }
@@ -649,7 +640,7 @@ export class Game {
     const gc = document.createElement('div');
     gc.className = 'card world-card';
     gc.dataset.gid = String(g.id);
-    const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
+    const title = g.name || (g.type ? g.type.toUpperCase() : 'GANGSTER');
     const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
     const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
     const gDesc = (
@@ -660,9 +651,9 @@ export class Game {
       ''
     );
     gc.innerHTML = `
-      <div class="world-card-title">${gCard.name}</div>
+      <div class="world-card-title">${title}</div>
       <div class="world-card-art">
-        ${artImg ? `<img class=\"world-card-artImg\" src=\"${artImg}\" alt=\"${gCard.name}\">` : ''}
+        ${artImg ? `<img class=\"world-card-artImg\" src=\"${artImg}\" alt=\"${gc.name}\">` : ''}
         <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
       </div>
       <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
@@ -685,7 +676,7 @@ export class Game {
       }
     });
     const showGangInfo = () => this._showInfoPanel({
-      title: gCard.name,
+      title,
       stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
       desc: gDesc,
       hint: g.busy ? 'Busy' : 'Drag onto table cards',
@@ -804,7 +795,7 @@ export class Game {
       const gc = document.createElement('div');
         gc.className = 'card world-card';
       gc.dataset.gid = String(g.id);
-      const gCard = makeGangsterCard({ ...g, stats: { face: this.effectiveStat(g,'face'), fist: this.effectiveStat(g,'fist'), brain: this.effectiveStat(g,'brain') } });
+      const title = g.name || (g.type ? g.type.toUpperCase() : 'GANGSTER');
       const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
         const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
       const gDesc = (
@@ -815,9 +806,9 @@ export class Game {
         ''
       );
       gc.innerHTML = `
-        <div class="world-card-title">${gCard.name}</div>
+        <div class="world-card-title">${title}</div>
         <div class="world-card-art">
-          ${artImg ? `<img class="world-card-artImg" src="${artImg}" alt="${gCard.name}">` : ''}
+          ${artImg ? `<img class="world-card-artImg" src="${artImg}" alt="${gc.name}">` : ''}
           <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
         </div>
         <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
@@ -840,7 +831,7 @@ export class Game {
         }
       });
         const showGangInfo = () => this._showInfoPanel({
-          title: gCard.name,
+          title,
           stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
           desc: gDesc,
           hint: g.busy ? 'Busy' : 'Drag onto table cards',
@@ -1375,7 +1366,38 @@ export class Game {
 Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
   // Scaffolding for recipe usage: match by types present in the interaction
   const stackTypes = [targetItem.type, 'gangster'];
-  const actionIds = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, gangster });
+  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, gangster });
+  // Support special ops from recipes: spawnCardId, consumeTarget
+  const ops = actionOrOps.filter(x => typeof x === 'object');
+  const actionIds = actionOrOps.filter(x => typeof x === 'string');
+  // Apply ops first
+  if (ops.length) {
+    const table = this.state.table;
+    const tableCards = table && table.cards ? table.cards : [];
+    for (const op of ops) {
+      if (op.spawnCardId) {
+        // Special-case gangster spawns: create entity directly, not a table card
+        if (typeof op.spawnCardId === 'string' && op.spawnCardId.startsWith('gangster_')) {
+          const type = op.spawnCardId.replace('gangster_', '') || 'face';
+          const s = this.state;
+          const newG = { id: s.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: this.defaultStatsForType(type) };
+          s.gangsters.push(newG);
+          this.ensureGangsterNode(newG);
+        } else {
+          this.spawnTableCard(op.spawnCardId);
+        }
+      }
+      if (op.consumeTarget) {
+        const idx = tableCards.indexOf(targetItem);
+        if (idx >= 0) {
+          tableCards.splice(idx, 1);
+          if (targetItem.uid) this.removeCardByUid(targetItem.uid);
+        }
+      }
+    }
+    // After ops, we’re done for this interaction
+    return;
+  }
   const baseActions = (ACTIONS || []).filter(a => actionIds.includes(a.id));
   if (!baseActions.length) return;
   // If one candidate → execute; if multiple → chooser

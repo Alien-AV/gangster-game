@@ -33,3 +33,15 @@ export class RecipeEngine {
     return results.filter((id, i, a) => a.indexOf(id) === i);
   }
 }
+
+// Default recipe registrations helper
+export function registerDefaultRecipes(recipes) {
+  // Explore: neighborhood + gangster → actExploreNeighborhood
+  recipes.addRecipe(['neighborhood','gangster'], ['actExploreNeighborhood']);
+  // Recruit: recruit_* + gangster → spawn gangster_* and consume recruit
+  recipes.addRecipe(['recruit','gangster'], (ctx) => {
+    const t = (ctx && ctx.target && ctx.target.data && ctx.target.data.type) || 'face';
+    const spawnId = `gangster_${t}`;
+    return [{ spawnCardId: spawnId, consumeTarget: true }];
+  });
+}

@@ -51,6 +51,24 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
   - Actions are triggered by dropping gangsters onto interactive cards on the table (e.g., businesses, Priest, Corrupt Cop, Crooks, Bookmaker, Pawn Shop, Neighborhood).
   - When an action completes, results (money, respect, fear, etc.) apply and the gangster is unlocked.
 
+### Cards vs Recipes vs Actions (Architecture)
+
+- Cards
+  - Pure presentation/state. A card declares identity (`id`, `type`), display (title, desc, image), and optional `onCreate` to initialize runtime state (timers, counters) when a card is spawned.
+  - Cards do not encode interaction logic. They can expose hints/verbs for UX, but interactions are resolved by recipes.
+
+- Recipes
+  - Define which interactions are possible for a given stack of cards. Input is the set/sequence of card types/ids; output is one or more candidate actions (ids) or ops (e.g., spawn a card, consume a card).
+  - Many-to-many mapping: a single stack may yield multiple actions (chooser shown), or a single action (auto-run). Recipes do not perform effects themselves; they only select outcomes and provide context.
+
+- Actions
+  - Contain heavy contextual logic and side-effects. They mutate game state, set cooldowns/timers, spawn/consume cards, update counters, etc.
+  - Executed by the unified infra when selected by recipes. Effects may consult the provided context (game, target card, stack) as the system evolves.
+
+- Infra
+  - A generic onDrop handler gathers the current stack, queries the RecipeEngine, and either executes the single resulting action, shows a selection popup for multiple actions, or applies recipe ops (e.g., spawn/consume card).
+  - Progress/timers/visuals are handled by reusable modules (e.g., progress-ring) and card `onCreate` hooks; not inline per-feature.
+
 ### Drag-and-Drop Rules
 
 - Dragging disabled while the gangster is busy.
