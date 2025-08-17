@@ -4,20 +4,32 @@ export class RecipeEngine {
   constructor() {
     this.recipes = [];
   }
-  // pattern: array of types, e.g., ['business','gangster']
-  // action: function(game, context) -> { actionId, label, stat, base, cost?, effect? }
-  addRecipe(pattern, actionBuilder) {
+  // pattern: array of types, e.g., ['business','gangster'] or ids; outputs: one or more action ids
+  // addRecipe(pattern, outputs | builder)
+  addRecipe(pattern, outputs) {
     const key = this._keyFor(pattern);
-    this.recipes.push({ key, size: pattern.length, actionBuilder });
+    const entry = { key, size: pattern.length };
+    if (typeof outputs === 'function') entry.builder = outputs; else entry.outputs = Array.isArray(outputs) ? outputs.slice() : [outputs];
+    this.recipes.push(entry);
   }
   _keyFor(types) {
     return types.slice().sort().join('+');
   }
-  // Given an array of card types present in the stack, returns an action config or null
-  match(types, context) {
+  // Return array of candidate actions. Builder can dynamically return ACTION ids based on context
+  matchAll(types, context) {
     const key = this._keyFor(types);
-    const rec = this.recipes.find(r => r.key === key && r.size === types.length);
-    if (!rec) return null;
-    return rec.actionBuilder(context);
+    const matches = this.recipes.filter(r => r.key === key && r.size === types.length);
+    const results = [];
+    for (const rec of matches) {
+      if (rec.builder) {
+        const out = rec.builder(context);
+        if (Array.isArray(out)) results.push(...out);
+        else if (out) results.push(out);
+      } else if (rec.outputs) {
+        results.push(...rec.outputs);
+      }
+    }
+    // De-duplicate while preserving order
+    return results.filter((id, i, a) => a.indexOf(id) === i);
   }
 }

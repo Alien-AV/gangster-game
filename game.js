@@ -3,6 +3,7 @@ import { ACTIONS } from './actions.js';
 import { makeCard, makeGangsterCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
+import { RecipeEngine } from './recipe.js';
 
 // behaviors and renderer moved to card.js
 
@@ -81,6 +82,15 @@ export class Game {
 
     // Initialize world table / deck system
     this.initTable();
+    // Initialize recipe engine with simple single-card mappings (scaffolding)
+    this._recipes = new RecipeEngine();
+    // Business + gangster → Extort or Raid
+    this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
+    // Specific single-target cases
+    this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
+    this._recipes.addRecipe(['cop','gangster'], ['actPayCops']);
+    this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
+    this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
     // DOM caches for reconciliation and initial world paint
     this._dom = { cardByUid: new Map(), gangsterById: new Map(), exploreWrap: null };
     this.reconcileWorld && this.reconcileWorld();
@@ -708,18 +718,17 @@ export class Game {
       wrap = rendered.wrap;
       const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
-      if (behavior && typeof behavior.onDrop === 'function') {
-        card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
-        card.addEventListener('dragleave', () => card.classList.remove('highlight'));
-        card.addEventListener('drop', ev => {
-          ev.preventDefault(); card.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          behavior.onDrop(this, item, g, card);
-        });
-      }
+      card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
+      card.addEventListener('dragleave', () => card.classList.remove('highlight'));
+      card.addEventListener('drop', ev => {
+        ev.preventDefault(); card.classList.remove('highlight');
+        const idStr = ev.dataTransfer.getData('text/plain');
+        const gid = parseInt(idStr, 10);
+        const g = this.state.gangsters.find(x => x.id === gid);
+        if (!g || g.busy) return;
+        const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
+        handler(g);
+      });
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
@@ -934,9 +943,11 @@ export class Game {
         wrap = rendered.wrap;
         const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
-      if (behavior && typeof behavior.onDrop === 'function') {
-        attachDrop(card, (g, _prog, cardEl) => behavior.onDrop(this, item, g, cardEl), card);
-      }
+      attachDrop(card, (g, _prog, cardEl) => {
+        if (!g || g.busy) return;
+        if (behavior && typeof behavior.onDrop === 'function') return behavior.onDrop(this, item, g, cardEl);
+        return this._handleGenericOnDrop(item, g, cardEl);
+      }, card);
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
@@ -1360,6 +1371,29 @@ export class Game {
   }
 
 }
+// Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
+Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
+  // Scaffolding for recipe usage: match by types present in the interaction
+  const stackTypes = [targetItem.type, 'gangster'];
+  const actionIds = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, gangster });
+  const baseActions = (ACTIONS || []).filter(a => actionIds.includes(a.id));
+  if (!baseActions.length) return;
+  // If one candidate → execute; if multiple → chooser
+  const runAction = (baseAct) => {
+    const dur = this.durationWithStat(baseAct.base, baseAct.stat, gangster);
+    this.executeAction(baseAct, gangster, cardEl, dur);
+  };
+  if (baseActions.length === 1) {
+    runAction(baseActions[0]);
+    return;
+  }
+  const options = baseActions.map(a => ({ id: a.id, label: a.label || a.id }));
+  this.showInlineActionChoice(cardEl, options, (choiceId) => {
+    const chosen = baseActions.find(a => a.id === choiceId);
+    if (!chosen) return;
+    runAction(chosen);
+  });
+};
 
 // Hook runner for card creation behaviors
 Game.prototype._applyOnCreate = function(item) {
