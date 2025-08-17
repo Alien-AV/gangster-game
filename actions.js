@@ -92,24 +92,22 @@ export const ACTIONS = [
       return true;
     },
     effect: (game) => {
-      game.showGangsterTypeSelection(choice => {
-        const g = { id: game.state.nextGangId++, type: choice, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(choice) };
-        game.state.gangsters.push(g);
-        game.updateUI();
-        game.renderCards();
-      });
+      // Legacy modal removed; default to Face until explicit choices are reintroduced via UI
+      const type = 'face';
+      const g = { id: game.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
+      game.state.gangsters.push(g);
+      game.updateUI();
     } },
   // Procure Equipment: lets player choose an equipment card to add to inventory
   { id: 'actProcureEquipment', label: 'Procure Equipment (Brain)', stat: 'brain', base: 3000,
     cost: { money: 200 },
     effect: (game) => {
-      game.showEquipmentSelection(type => {
-        const item = { id: game.state.nextEquipId++, type };
-        if (!Array.isArray(game.state.inventory)) game.state.inventory = [];
-        game.state.inventory.push(item);
-        game.updateUI();
-        game.renderCards();
-      });
+      if (!Array.isArray(game.state.inventory)) game.state.inventory = [];
+      const nextId = (game.state.nextEquipId || 1);
+      const item = { id: nextId, type: 'pistol' };
+      game.state.nextEquipId = nextId + 1;
+      game.state.inventory.push(item);
+      game.updateUI();
     } },
   { id: 'actPayCops', label: 'Pay Cops -$500', stat: 'brain', base: 3000,
     cost: { money: 500 },

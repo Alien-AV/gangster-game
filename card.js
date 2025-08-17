@@ -20,21 +20,25 @@ export class Card {
 export const CARD_REGISTRY = {
   corrupt_cop: () => new Card({ id: 'corrupt_cop', name: 'Local Corrupt Cop', desc: 'A familiar face on the beat. Can arrange favors for a price.', reusable: true, type: 'cop', img: 'images/cop.png', verbs: ['pay_cops'] }),
   priest: () => new Card({ id: 'priest', name: 'Priest at the Church', desc: 'Donations improve your reputation in the neighborhood.', reusable: true, type: 'priest', img: 'images/priest.jpg', verbs: ['donate'] }),
-  small_crooks: () => new Card({ id: 'small_crooks', name: 'Small-time Crooks', desc: 'They’re trouble. Choose whether to point ’em somewhere… or put ’em down yourself.', reusable: true, type: 'crooks', img: 'images/crooks.jpg', verbs: ['recruit_enforcer'] }),
-  enforcers: () => new Card({ id: 'enforcers', name: 'Enforcers', desc: 'Hired muscle - when you just need some extra hands.', reusable: true, type: 'enforcer', data: { count: 0 }, verbs: [] }),
+  small_crooks: () => new Card({ id: 'small_crooks', name: 'Small-time Crooks', desc: 'They’re trouble. Choose whether to point ’em somewhere… or put ’em down yourself.', reusable: true, type: 'crooks', img: 'images/crooks.png', verbs: ['recruit_enforcer'] }),
+  enforcers: () => new Card({ id: 'enforcers', name: 'Enforcers', desc: 'Hired muscle - when you just need some extra hands.', reusable: true, type: 'enforcer', img: 'images/enforcers.png', data: { count: 0 }, verbs: [] }),
   hot_dog_stand: () => new Card({ id: 'hot_dog_stand', name: 'Hot-dog Stand', desc: 'A flimsy front ripe for a shake-down.', reusable: true, type: 'business', img: 'images/hotdog.jpg', verbs: ['extort_or_raid'] }),
   bakery: () => new Card({ id: 'bakery', name: 'Corner Bakery', desc: 'Busy mornings. Might pay for protection.', reusable: false, type: 'business', img: 'images/bakery.png', verbs: ['extort_or_raid'] }),
   diner: () => new Card({ id: 'diner', name: 'Mom-and-Pop Diner', desc: 'Cash business with regulars.', reusable: false, type: 'business', img: 'images/diner.jpg', verbs: ['extort_or_raid'] }),
   laundromat: () => new Card({ id: 'laundromat', name: 'Neighborhood Laundromat', desc: 'Steady quarters, soft targets.', reusable: false, type: 'business', img: 'images/laundromat.jpg', verbs: ['extort_or_raid'] }),
-  pawn_shop: () => new Card({ id: 'pawn_shop', name: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false, type: 'business', verbs: ['procure_equipment'] }),
+  pawn_shop: () => new Card({ id: 'pawn_shop', name: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false, type: 'business', img: 'images/pawnshop.png', verbs: ['procure_equipment'] }),
   newspaper: () => new Card({ id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'business', img: 'images/newspaper.jpg', verbs: ['promo'] }),
   bookmaker: () => new Card({ id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', img: 'images/bookmaker.jpg', verbs: ['launder'] }),
-  extorted_business: () => new Card({ id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', data: { count: 0 }, verbs: [] }),
+  extorted_business: () => new Card({ id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', img: 'images/extorted-business.png', data: { count: 0 }, verbs: [] }),
   heat: () => new Card({ id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', verbs: [] }),
-  disagreeable_owner: () => new Card({ id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', reusable: false, type: 'owner', verbs: ['pressure_owner'] }),
+  neighborhood: () => new Card({ id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', verbs: [] }),
+  disagreeable_owner: () => new Card({ id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', img: 'images/disagreeable-owner.png', reusable: false, type: 'owner', verbs: ['pressure_owner'] }),
   recruit_face: () => new Card({ id: 'recruit_face', name: 'Recruit: Face', desc: 'A smooth talker looking for work.', reusable: false, type: 'recruit', data: { type: 'face' }, img: 'images/face.png', verbs: ['hire_recruit'] }),
   recruit_fist: () => new Card({ id: 'recruit_fist', name: 'Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, type: 'recruit', data: { type: 'fist' }, img: 'images/fist.png', verbs: ['hire_recruit'] }),
   recruit_brain: () => new Card({ id: 'recruit_brain', name: 'Recruit: Brain', desc: 'A planner who knows the angles.', reusable: false, type: 'recruit', data: { type: 'brain' }, img: 'images/brain.png', verbs: ['hire_recruit'] }),
+  gangster_face: () => new Card({ id: 'gangster_face', name: 'Gangster: Face', desc: '', reusable: false, type: 'gangster', data: { spawnType: 'face' } }),
+  gangster_fist: () => new Card({ id: 'gangster_fist', name: 'Gangster: Fist', desc: '', reusable: false, type: 'gangster', data: { spawnType: 'fist' } }),
+  gangster_brain: () => new Card({ id: 'gangster_brain', name: 'Gangster: Brain', desc: '', reusable: false, type: 'gangster', data: { spawnType: 'brain' } }),
   city_entrance: () => new Card({ id: 'city_entrance', name: 'City Entrance', desc: 'A path into the wider city opens. New opportunities await.', reusable: false, type: 'milestone', img: 'images/city.jpg', verbs: [] }),
 };
 
@@ -59,19 +63,29 @@ export function computeCardDynamic(game, item) {
   return '';
 }
 
-// Create a Card facade for a gangster entity
-export function makeGangsterCard(g) {
-  const { id, type, name, stats = {} } = g || {};
-  const title = name || (type ? type.toUpperCase() : 'GANGSTER');
-  const desc = `F:${stats.fist ?? 0} Fa:${stats.face ?? 0} Br:${stats.brain ?? 0}`;
-  // Map gangster type to default images
-  const imgMap = { boss: 'boss.png', face: 'face.png', fist: 'fist.png', brain: 'brain.png' };
-  const img = imgMap[type] || undefined;
-  return new Card({ id: `gangster_${id}`, name: title, desc, reusable: true, type: 'gangster', data: { gid: id, type }, img, verbs: [] });
-}
-
 // Export unified type-driven behaviors used by the world renderer
 export const CARD_BEHAVIORS = {
+  gangster: {
+    onCreate: function(game, item) {
+      // item is a card facade with data.gid/type if built from entity
+      // For spawned gangster_* cards, create a new entity if missing
+      if (!item.data || !item.data.gid) {
+        const type = item.id.replace('gangster_', '') || 'face';
+        const s = game.state;
+        const newG = { id: s.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
+        s.gangsters.push(newG);
+        // Ensure UI node for the new gangster
+        game.ensureGangsterNode(newG);
+        // Consume/remove this temporary spawn card from the table immediately
+        try {
+          const tableCards = game.state.table.cards;
+          const idx = tableCards.indexOf(item);
+          if (idx >= 0) tableCards.splice(idx, 1);
+          if (item.uid) game.removeCardByUid(item.uid);
+        } catch(e) {}
+      }
+    }
+  },
   heat: {
     onCreate: function(game, item) {
       // Initialize standard heat countdown if not already set
@@ -229,61 +243,7 @@ export const CARD_BEHAVIORS = {
       });
     }
   },
-  priest: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const baseAct = (ACTIONS || []).find(a => a.id === 'actDonate');
-      if (!baseAct) return;
-      const dur = game.durationWithStat(baseAct.base, baseAct.stat, gangster);
-      game.executeAction(baseAct, gangster, cardEl, dur);
-    }
-  },
-  cop: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const baseAct = (ACTIONS || []).find(a => a.id === 'actPayCops');
-      if (!baseAct) return;
-      const dur = game.durationWithStat(baseAct.base, baseAct.stat, gangster);
-      game.executeAction(baseAct, gangster, cardEl, dur);
-    }
-  },
-  recruit: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const baseAct = (ACTIONS || []).find(a => a.id === 'actHireGangster');
-      if (!baseAct) return;
-      const price = game.gangsterCost();
-      if (game.totalMoney() < price) { game._cardMsg(`Need $${price} to hire.`); return; }
-      const chosen = (item.data && item.data.type) || 'face';
-      const act = {
-        ...baseAct,
-        label: `Hire ${chosen.charAt(0).toUpperCase() + chosen.slice(1)}`,
-        effect: (gme) => {
-          const s = gme.state;
-          const newG = { id: s.nextGangId++, type: chosen, name: undefined, busy: false, personalHeat: 0, stats: gme.defaultStatsForType(chosen) };
-          s.gangsters.push(newG);
-          item.used = true;
-          gme.updateUI();
-          gme.ensureGangsterNode(newG);
-        }
-      };
-      const dur = game.durationWithStat(act.base, act.stat, gangster);
-      game.executeAction(act, gangster, cardEl, dur);
-    }
-  },
-  bookmaker: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const baseAct = (ACTIONS || []).find(a => a.id === 'actLaunder');
-      if (!baseAct) return;
-      const dur = game.durationWithStat(baseAct.base, baseAct.stat, gangster);
-      game.executeAction(baseAct, gangster, cardEl, dur);
-    }
-  },
-  pawn_shop: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const baseAct = (ACTIONS || []).find(a => a.id === 'actProcureEquipment');
-      if (!baseAct) return;
-      const dur = game.durationWithStat(baseAct.base, baseAct.stat, gangster);
-      game.executeAction(baseAct, gangster, cardEl, dur);
-    }
-  },
+  // Simple single-action cases now handled by unified infra (recipes + generic onDrop)
   owner: {
     onDrop: function (game, item, gangster, cardEl) {
       const baseMs = 3500;
