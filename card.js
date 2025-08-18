@@ -68,29 +68,7 @@ export function computeCardDynamic(game, item) {
   return '';
 }
 
-// Export unified type-driven behaviors used by the world renderer
 export const CARD_BEHAVIORS = {
-  gangster: {
-    onCreate: function(game, item) {
-      // item is a card facade with data.gid/type if built from entity
-      // For spawned gangster_* cards, create a new entity if missing
-      if (!item.data || !item.data.gid) {
-        const type = item.id.replace('gangster_', '') || 'face';
-        const s = game.state;
-        const newG = { id: s.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
-        s.gangsters.push(newG);
-        // Ensure UI node for the new gangster
-        game.ensureGangsterNode(newG);
-        // Consume/remove this temporary spawn card from the table immediately
-        try {
-          const tableCards = game.state.table.cards;
-          const idx = tableCards.indexOf(item);
-          if (idx >= 0) tableCards.splice(idx, 1);
-          if (item.uid) game.removeCardByUid(item.uid);
-        } catch(e) {}
-      }
-    }
-  },
   heat: {
     onCreate: function(game, item) {
       // Initialize standard heat countdown if not already set
@@ -200,7 +178,6 @@ export const CARD_BEHAVIORS = {
                  } catch(e){}
                }
                if (typeof baseAct.effect === 'function') baseAct.effect(game, gg);
-               // Spawn a heat card that expires soon (handled by heat.onCreate)
                game.spawnTableCard('heat');
              }
            }
