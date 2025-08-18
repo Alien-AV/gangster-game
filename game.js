@@ -634,65 +634,66 @@ export class Game {
     const container = this._worldContainer();
     if (!container) return null;
     let wrap = this._dom.gangsterById.get(g.id);
-    if (wrap) return wrap;
-    wrap = document.createElement('div');
-    wrap.className = 'ring-wrap';
-    const gc = document.createElement('div');
-    gc.className = 'card world-card';
-    gc.dataset.gid = String(g.id);
-    const title = g.name || (g.type ? g.type.toUpperCase() : 'GANGSTER');
-    const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
-    const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
-    const gDesc = (
-      g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
-      g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
-      g.type === 'fist' ? 'Bruiser. Raids and intimidates when needed.' :
-      g.type === 'brain' ? 'A planner who knows the angles.' :
-      ''
-    );
-    gc.innerHTML = `
-      <div class="world-card-title">${title}</div>
-      <div class="world-card-art">
-        ${artImg ? `<img class=\"world-card-artImg\" src=\"${artImg}\" alt=\"${gc.name}\">` : ''}
-        <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
-      </div>
-      <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
-    `;
-    gc.removeAttribute('title');
-    if (artImg) {
-      const img = gc.querySelector('.world-card-artImg');
-      const emojiEl = gc.querySelector('.world-card-artEmoji');
-      if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
-    }
-    gc.addEventListener('dragstart', ev => {
-      if (g.busy) { ev.preventDefault(); return; }
-      ev.dataTransfer.setData('text/plain', String(g.id));
-      ev.dataTransfer.effectAllowed = 'move';
-    });
-    gc.addEventListener('mousedown', (ev) => {
-      const target = ev.target;
-      if (target && target.closest && target.closest('.world-card-art')) {
-        gc.setAttribute('draggable', g.busy ? 'false' : 'true');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'ring-wrap';
+      const gc = document.createElement('div');
+      gc.className = 'card world-card';
+      gc.dataset.gid = String(g.id);
+      const title = g.name || (g.type ? g.type.toUpperCase() : 'GANGSTER');
+      const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
+      const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
+      const gDesc = (
+        g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
+        g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
+        g.type === 'fist' ? 'Bruiser. Raids and intimidates when needed.' :
+        g.type === 'brain' ? 'A planner who knows the angles.' :
+        ''
+      );
+      gc.innerHTML = `
+        <div class="world-card-title">${title}</div>
+        <div class="world-card-art">
+          ${artImg ? `<img class=\"world-card-artImg\" src=\"${artImg}\" alt=\"${gc.name}\">` : ''}
+          <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
+        </div>
+        <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
+      `;
+      gc.removeAttribute('title');
+      if (artImg) {
+        const img = gc.querySelector('.world-card-artImg');
+        const emojiEl = gc.querySelector('.world-card-artEmoji');
+        if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
       }
-    });
-    const showGangInfo = () => this._showInfoPanel({
-      title,
-      stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
-      desc: gDesc,
-      hint: g.busy ? 'Busy' : 'Drag onto table cards',
-    });
-    if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
-      gc.addEventListener('mouseenter', showGangInfo);
-      gc.addEventListener('mouseleave', () => this._hideInfoPanel());
+      gc.addEventListener('dragstart', ev => {
+        if (g.busy) { ev.preventDefault(); return; }
+        ev.dataTransfer.setData('text/plain', String(g.id));
+        ev.dataTransfer.effectAllowed = 'move';
+      });
+      gc.addEventListener('mousedown', (ev) => {
+        const target = ev.target;
+        if (target && target.closest && target.closest('.world-card-art')) {
+          gc.setAttribute('draggable', g.busy ? 'false' : 'true');
+        }
+      });
+      const showGangInfo = () => this._showInfoPanel({
+        title,
+        stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
+        desc: gDesc,
+        hint: g.busy ? 'Busy' : 'Drag onto table cards',
+      });
+      if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+        gc.addEventListener('mouseenter', showGangInfo);
+        gc.addEventListener('mouseleave', () => this._hideInfoPanel());
+      }
+      gc.addEventListener('click', showGangInfo);
+      if (g.busy) gc.classList.add('busy');
+      wrap.appendChild(gc);
+      this._dom.gangsterById.set(g.id, wrap);
+      // Insert before explore + table cards
+      const offset = (this.state.gangsters || []).findIndex(x => x.id === g.id);
+      const node = container.childNodes[offset] || null;
+      container.insertBefore(wrap, node);
     }
-    gc.addEventListener('click', showGangInfo);
-    if (g.busy) gc.classList.add('busy');
-    wrap.appendChild(gc);
-    this._dom.gangsterById.set(g.id, wrap);
-    // Insert before explore + table cards
-    const offset = (this.state.gangsters || []).findIndex(x => x.id === g.id);
-    const node = container.childNodes[offset] || null;
-    container.insertBefore(wrap, node);
     return wrap;
   }
 
@@ -788,69 +789,8 @@ export class Game {
     const gangsterIds = new Set();
     (this.state.gangsters || []).forEach(g => {
       gangsterIds.add(g.id);
-      let wrap = this._dom.gangsterById.get(g.id);
-      if (!wrap) {
-        wrap = document.createElement('div');
-      wrap.className = 'ring-wrap';
-      const gc = document.createElement('div');
-        gc.className = 'card world-card';
-      gc.dataset.gid = String(g.id);
-      const title = g.name || (g.type ? g.type.toUpperCase() : 'GANGSTER');
-      const artEmoji = g.type === 'boss' ? '👑' : (g.type === 'face' ? '🗣️' : (g.type === 'fist' ? '🥊' : '🧠'));
-        const artImg = g.type === 'boss' ? 'images/boss.png' : (g.type === 'face' ? 'images/face.png' : (g.type === 'fist' ? 'images/fist.png' : (g.type === 'brain' ? 'images/brain.png' : null)));
-      const gDesc = (
-        g.type === 'boss' ? 'Crew leader. Calls the shots and keeps heat manageable.' :
-        g.type === 'face' ? 'Smooth talker. Negotiates, distracts, and greases palms.' :
-        g.type === 'fist' ? 'Bruiser. Raids and intimidates when needed.' :
-        g.type === 'brain' ? 'A planner who knows the angles.' :
-        ''
-      );
-      gc.innerHTML = `
-        <div class="world-card-title">${title}</div>
-        <div class="world-card-art">
-          ${artImg ? `<img class="world-card-artImg" src="${artImg}" alt="${gc.name}">` : ''}
-          <div class="world-card-artEmoji${artImg ? ' hidden' : ''}">${artEmoji}</div>
-        </div>
-        <div class="world-card-desc"><p class="world-card-descText">${gDesc || '&nbsp;'}</p></div>
-      `;
-      gc.removeAttribute('title');
-      if (artImg) {
-        const img = gc.querySelector('.world-card-artImg');
-        const emojiEl = gc.querySelector('.world-card-artEmoji');
-        if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
-      }
-      gc.addEventListener('dragstart', ev => {
-        if (g.busy) { ev.preventDefault(); return; }
-        ev.dataTransfer.setData('text/plain', String(g.id));
-        ev.dataTransfer.effectAllowed = 'move';
-      });
-      gc.addEventListener('mousedown', (ev) => {
-        const target = ev.target;
-        if (target && target.closest && target.closest('.world-card-art')) {
-          gc.setAttribute('draggable', g.busy ? 'false' : 'true');
-        }
-      });
-        const showGangInfo = () => this._showInfoPanel({
-          title,
-          stats: `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`,
-          desc: gDesc,
-          hint: g.busy ? 'Busy' : 'Drag onto table cards',
-        });
-        if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
-          gc.addEventListener('mouseenter', showGangInfo);
-        gc.addEventListener('mouseleave', () => this._hideInfoPanel());
-      }
-        gc.addEventListener('click', showGangInfo);
-        if (g.busy) gc.classList.add('busy'); else gc.classList.remove('busy');
-      wrap.appendChild(gc);
-        this._dom.gangsterById.set(g.id, wrap);
-      } else {
-        const gc = wrap.querySelector('.world-card');
-        if (gc) {
-          if (g.busy) gc.classList.add('busy'); else gc.classList.remove('busy');
-        }
-      }
-      desiredNodes.push(this._dom.gangsterById.get(g.id));
+      const wrap = this.ensureGangsterNode(g);
+      desiredNodes.push(wrap);
     });
     for (const [gid, wrap] of Array.from(this._dom.gangsterById.entries())) {
       if (!gangsterIds.has(gid)) {
