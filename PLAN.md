@@ -1,5 +1,23 @@
 # Short-term Plan
 
+- card render rework and unification project
+  - Goals
+    - Unify card rendering into a single function that builds common HTML and conditionally adds specifics based on the card definition.
+    - Eliminate duplicated rendering code between `renderWorldCard` and `ensureGangsterNode`.
+    - Move hints, descriptions, stats, and drag behavior declarations into `CARD_DEFS`.
+    - Cards declare `handlers` (e.g., `onCreate`, `onExpire`) by name; actual functions live in `card.js` in a shared handlers map.
+  - Steps
+    1) Add complete data to `CARD_DEFS` for all cards, including gangsters and boss: images, descriptions, hints, stats, draggable flags, and handler pointers. (IN PROGRESS)
+    2) Update `renderWorldCard` to read from `CARD_DEFS` and render:
+       - Base title/art/desc
+       - Optional stats block if `stats` present
+       - Optional badges/timers based on type/state
+       - Apply `draggable` uniformly if declared
+    3) Replace the gangster-specific HTML in `ensureGangsterNode` with a call to the unified renderer and type hooks; keep only data-binding (dataset gid) and gangster-only event wiring if still needed.
+    4) Remove hints from `getCardInfo`; read hints directly from `CARD_DEFS`.
+    5) Replace `CARD_BEHAVIORS` per-type rendering tweaks with small renderer hooks or per-type sections in the unified renderer when necessary.
+    6) Delete any remaining duplicate code paths; ensure tests and lint pass.
+
 This file tracks near-term tasks to align the prototype with the intended design. It explains what we are about to build, why, and serves as the single source of truth for updating docs and implementation in lockstep.
 
 ## Upcoming changes

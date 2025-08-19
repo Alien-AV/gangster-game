@@ -3,7 +3,7 @@ import { startCountdown } from './progress-ring.js';
 
 // Card model
 export class Card {
-  constructor({ id, name, desc = '', reusable = true, type = 'generic', data = {}, img = undefined, verbs = [] }) {
+  constructor({ id, name, desc = '', reusable = true, type = 'generic', data = {}, img = undefined, verbs = [], draggable = false }) {
     this.id = id;
     this.name = name || id;
     this.desc = desc;
@@ -13,33 +13,35 @@ export class Card {
     this.used = false; // runtime flag when consumed (for non-reusable)
     this.img = img; // optional image filename for art
     this.verbs = Array.isArray(verbs) ? verbs : [];
+    this.draggable = !!draggable;
   }
 }
 
 // Declarative card definitions
 export const CARD_DEFS = [
-  { id: 'corrupt_cop', name: 'Local Corrupt Cop', desc: 'A familiar face on the beat. Can arrange favors for a price.', reusable: true, type: 'cop', img: 'images/cop.png', verbs: ['pay_cops'] },
-  { id: 'priest', name: 'Priest at the Church', desc: 'Donations improve your reputation in the neighborhood.', reusable: true, type: 'priest', img: 'images/priest.jpg', verbs: ['donate'] },
-  { id: 'small_crooks', name: 'Small-time Crooks', desc: 'They’re trouble. Choose whether to point ’em somewhere… or put ’em down yourself.', reusable: true, type: 'crooks', img: 'images/crooks.png', verbs: ['recruit_enforcer'] },
-  { id: 'enforcers', name: 'Enforcers', desc: 'Hired muscle - when you just need some extra hands.', reusable: true, type: 'enforcer', img: 'images/enforcers.png', data: { count: 0 }, verbs: [] },
-  { id: 'hot_dog_stand', name: 'Hot-dog Stand', desc: 'A flimsy front ripe for a shake-down.', reusable: true, type: 'business', img: 'images/hotdog.jpg', verbs: ['extort_or_raid'] },
-  { id: 'bakery', name: 'Corner Bakery', desc: 'Busy mornings. Might pay for protection.', reusable: false, type: 'business', img: 'images/bakery.png', verbs: ['extort_or_raid'] },
-  { id: 'diner', name: 'Mom-and-Pop Diner', desc: 'Cash business with regulars.', reusable: false, type: 'business', img: 'images/diner.jpg', verbs: ['extort_or_raid'] },
-  { id: 'laundromat', name: 'Neighborhood Laundromat', desc: 'Steady quarters, soft targets.', reusable: false, type: 'business', img: 'images/laundromat.jpg', verbs: ['extort_or_raid'] },
-  { id: 'pawn_shop', name: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false, type: 'business', img: 'images/pawnshop.png', verbs: ['procure_equipment'] },
-  { id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'business', img: 'images/newspaper.jpg', verbs: ['promo'] },
-  { id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', img: 'images/bookmaker.jpg', verbs: ['launder'] },
-  { id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', img: 'images/extorted-business.png', data: { count: 0 }, verbs: [] },
-  { id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', verbs: [] },
-  { id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', verbs: [] },
-  { id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', reusable: false, type: 'owner', img: 'images/disagreeable-owner.png', verbs: ['pressure_owner'] },
-  { id: 'recruit_face', name: 'Recruit: Face', desc: 'A smooth talker looking for work.', reusable: false, type: 'recruit', data: { type: 'face' }, img: 'images/face.png', verbs: ['hire_recruit'] },
-  { id: 'recruit_fist', name: 'Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, type: 'recruit', data: { type: 'fist' }, img: 'images/fist.png', verbs: ['hire_recruit'] },
-  { id: 'recruit_brain', name: 'Recruit: Brain', desc: 'A planner who knows the angles.', reusable: false, type: 'recruit', data: { type: 'brain' }, img: 'images/brain.png', verbs: ['hire_recruit'] },
-  { id: 'gangster_face', name: 'Gangster: Face', desc: '', reusable: false, type: 'gangster', data: { spawnType: 'face' } },
-  { id: 'gangster_fist', name: 'Gangster: Fist', desc: '', reusable: false, type: 'gangster', data: { spawnType: 'fist' } },
-  { id: 'gangster_brain', name: 'Gangster: Brain', desc: '', reusable: false, type: 'gangster', data: { spawnType: 'brain' } },
-  { id: 'city_entrance', name: 'City Entrance', desc: 'A path into the wider city opens. New opportunities await.', reusable: false, type: 'milestone', img: 'images/city.jpg', verbs: [] },
+  { id: 'corrupt_cop', name: 'Local Corrupt Cop', desc: 'A familiar face on the beat. Can arrange favors for a price.', reusable: true, type: 'cop', img: 'images/cop.png', verbs: ['pay_cops'], hint: 'Bribe to lower heat.' },
+  { id: 'priest', name: 'Priest at the Church', desc: 'Donations improve your reputation in the neighborhood.', reusable: true, type: 'priest', img: 'images/priest.jpg', verbs: ['donate'], hint: 'Donate to gain respect and reduce heat.' },
+  { id: 'small_crooks', name: 'Small-time Crooks', desc: 'They’re trouble. Choose whether to point ’em somewhere… or put ’em down yourself.', reusable: true, type: 'crooks', img: 'images/crooks.png', verbs: ['recruit_enforcer'], hint: 'Recruit or beat up.' },
+  { id: 'enforcers', name: 'Enforcers', desc: 'Hired muscle - when you just need some extra hands.', reusable: true, type: 'enforcer', img: 'images/enforcers.png', data: { count: 0 }, hint: 'Adds manpower.' },
+  { id: 'hot_dog_stand', name: 'Hot-dog Stand', desc: 'A flimsy front ripe for a shake-down.', reusable: true, type: 'business', img: 'images/hotdog.jpg', verbs: ['extort_or_raid'], hint: 'Extort for steady money or raid for a burst.' },
+  { id: 'bakery', name: 'Corner Bakery', desc: 'Busy mornings. Might pay for protection.', reusable: false, type: 'business', img: 'images/bakery.png', verbs: ['extort_or_raid'], hint: 'Extort or raid.' },
+  { id: 'diner', name: 'Mom-and-Pop Diner', desc: 'Cash business with regulars.', reusable: false, type: 'business', img: 'images/diner.jpg', verbs: ['extort_or_raid'], hint: 'Extort or raid.' },
+  { id: 'laundromat', name: 'Neighborhood Laundromat', desc: 'Steady quarters, soft targets.', reusable: false, type: 'business', img: 'images/laundromat.jpg', verbs: ['extort_or_raid'], hint: 'Extort or raid.' },
+  { id: 'pawn_shop', name: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false, type: 'business', img: 'images/pawnshop.png', verbs: ['procure_equipment'], hint: 'Procure equipment.' },
+  { id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'business', img: 'images/newspaper.jpg', verbs: ['promo'], hint: 'Run promotions.' },
+  { id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', img: 'images/bookmaker.jpg', verbs: ['launder'], hint: 'Launder dirty money.' },
+  { id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', img: 'images/extorted-business.png', data: { count: 0 }, hint: 'Aggregated protection payouts.' },
+  { id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', hint: 'Expires over time; avoid getting arrested.' },
+  { id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', hint: 'Drop a gangster to explore.' },
+  { id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', reusable: false, type: 'owner', img: 'images/disagreeable-owner.png', hint: 'Convince or threaten.' },
+  { id: 'recruit_face', name: 'Recruit: Face', desc: 'A smooth talker looking for work.', reusable: false, type: 'recruit', data: { type: 'face' }, img: 'images/face.png', hint: 'Hire to add a Face.' },
+  { id: 'recruit_fist', name: 'Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, type: 'recruit', data: { type: 'fist' }, img: 'images/fist.png', hint: 'Hire to add a Fist.' },
+  { id: 'recruit_brain', name: 'Recruit: Brain', desc: 'A planner who knows the angles.', reusable: false, type: 'recruit', data: { type: 'brain' }, img: 'images/brain.png', hint: 'Hire to add a Brain.' },
+  { id: 'gangster_face', name: 'Face', desc: 'Smooth talker. Negotiates, distracts, and greases palms.', reusable: true, type: 'gangster', img: 'images/face.png', stats: { face: 3, fist: 1, brain: 1, meat: 1 }, draggable: true, hint: 'Drag onto table cards.' },
+  { id: 'gangster_fist', name: 'Fist', desc: 'Bruiser. Raids and intimidates when needed.', reusable: true, type: 'gangster', img: 'images/fist.png', stats: { face: 1, fist: 3, brain: 1, meat: 1 }, draggable: true, hint: 'Drag onto table cards.' },
+  { id: 'gangster_brain', name: 'Brain', desc: 'A planner who knows the angles.', reusable: true, type: 'gangster', img: 'images/brain.png', stats: { face: 1, fist: 1, brain: 3, meat: 1 }, draggable: true, hint: 'Drag onto table cards.' },
+  { id: 'boss', name: 'Boss', desc: 'Crew leader. Calls the shots and keeps heat manageable.', reusable: true, type: 'gangster', img: 'images/boss.png', stats: { face: 2, fist: 2, brain: 2, meat: 1 }, draggable: true, hint: 'Drag onto table cards.' },
+  { id: 'city_entrance', name: 'City Entrance', desc: 'A path into the wider city opens. New opportunities await.', reusable: false, type: 'milestone', img: 'images/city.jpg', hint: 'Progress further into the city.' },
 ];
 
 const CARD_DEF_BY_ID = (() => {
@@ -368,23 +370,15 @@ export function renderWorldCard(game, item) {
 
 // Build info panel content from a declarative source
 export function getCardInfo(game, item) {
-  const title = item.name || item.title || item.id;
-  // Flavor
-  let desc = item.desc || '';
-  // Hint
-  let hint = '';
-  const verbs = Array.isArray(item.verbs) ? item.verbs : [];
-  if (item.type === 'recruit') {
-    const price = (typeof game.gangsterCost === 'function') ? game.gangsterCost() : 200;
-    hint = `Hire for $${price}. Bring new blood into the crew.`;
-  } else if (verbs.includes('launder')) hint = 'Launder $1000 into clean money — you will lose some on the way.';
-  else if (verbs.includes('procure_equipment')) hint = 'Pick up gear to tip the odds in your favor.';
-  else if (verbs.includes('promo')) hint = 'Grease the press to paint you in a good light — costs dirty cash, builds respect.';
-  else if (item.type === 'business') hint = 'Raid for a quick influx of cash — or extort for steady protection payments.';
-  else if (item.type === 'crooks') hint = 'Beat up local hooligans to earn respect and fear — or recruit them as enforcers.';
-  else if (item.type === 'cop') hint = 'Bribe the local cop to deflect the attention of authorities.';
-  else if (item.type === 'owner') hint = 'Sway the owner with a $500 donation — or break a few windows to intimidate.';
-  // Dynamic line
+  const def = (typeof item.id === 'string') ? CARD_DEF_BY_ID.get(item.id) : null;
+  const title = (item && item.name) || (def && def.name) || item.title || item.id;
+  const desc = (item && item.desc) || (def && def.desc) || '';
+  let statsLine = '';
+  if (item && item.type === 'gangster' && item.data && typeof item.data.gid === 'number') {
+    const g = (game.state.gangsters || []).find(x => x.id === item.data.gid);
+    if (g && g.stats) statsLine = `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`;
+  }
+  const hint = def && def.hint ? def.hint : '';
   const dynamic = computeCardDynamic(game, item);
-  return { title, desc, hint, dynamic };
+  return { title, desc, hint, dynamic, stats: statsLine };
 }
