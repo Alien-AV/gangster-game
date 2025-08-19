@@ -634,37 +634,18 @@ export class Game {
     const container = this._worldContainer();
     if (!container) return null;
     let wrap = this._dom.gangsterById.get(g.id);
-    if (!wrap) {
-      wrap = document.createElement('div');
-      wrap.className = 'ring-wrap';
-      const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
-      const model = makeCard(defId);
-      model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
-      const rendered = renderWorldCard(this, model);
-      const gc = rendered.card;
-      gc.dataset.gid = String(g.id);
-      // Draggable behavior (gangsters are draggable)
-      gc.addEventListener('dragstart', ev => {
-        if (g.busy) { ev.preventDefault(); return; }
-        ev.dataTransfer.setData('text/plain', String(g.id));
-        ev.dataTransfer.effectAllowed = 'move';
-      });
-      gc.addEventListener('mousedown', (ev) => {
-        const target = ev.target;
-        if (target && target.closest && target.closest('.world-card-art')) {
-          gc.setAttribute('draggable', g.busy ? 'false' : 'true');
-        }
-      });
-      // Generic info panel binder
-      this._bindInfoPanel(gc, () => getCardInfo(this, model));
-      if (g.busy) gc.classList.add('busy');
-      wrap.appendChild(gc);
-      this._dom.gangsterById.set(g.id, wrap);
-      // Insert before explore + table cards
-      const offset = (this.state.gangsters || []).findIndex(x => x.id === g.id);
-      const node = container.childNodes[offset] || null;
-      container.insertBefore(wrap, node);
+    if (wrap) return wrap;
+    const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
+    const model = makeCard(defId);
+    model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
+    // Ensure via unified path
+    wrap = this.ensureCardNode(model, undefined);
+    const cardEl = wrap.querySelector && wrap.querySelector('.world-card');
+    if (cardEl) {
+      cardEl.dataset.gid = String(g.id);
+      if (g.busy) cardEl.classList.add('busy');
     }
+    this._dom.gangsterById.set(g.id, wrap);
     return wrap;
   }
 
@@ -681,20 +662,31 @@ export class Game {
       wrap = rendered.wrap;
       const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
-      card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
-      card.addEventListener('dragleave', () => card.classList.remove('highlight'));
-      card.addEventListener('drop', ev => {
-        ev.preventDefault(); card.classList.remove('highlight');
-        const idStr = ev.dataTransfer.getData('text/plain');
-        const gid = parseInt(idStr, 10);
-        const g = this.state.gangsters.find(x => x.id === gid);
-        if (!g || g.busy) return;
-        // Prefer specific handler when present, else use generic recipe-driven handler
-        const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
-        handler(g);
-      });
+      // Attach drop only for non-gangster cards
+      if (item.type !== 'gangster') {
+        card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
+        card.addEventListener('dragleave', () => card.classList.remove('highlight'));
+        card.addEventListener('drop', ev => {
+          ev.preventDefault(); card.classList.remove('highlight');
+          const idStr = ev.dataTransfer.getData('text/plain');
+          const gid = parseInt(idStr, 10);
+          const g = this.state.gangsters.find(x => x.id === gid);
+          if (!g || g.busy) return;
+          const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
+          handler(g);
+        });
+      }
       const buildInfo = () => getCardInfo(this, item);
       this._bindInfoPanel(card, buildInfo);
+      // Apply generic draggable when declared
+      const isBusyFn = () => {
+        if (item.type === 'gangster' && item.data && typeof item.data.gid === 'number') {
+          const g = (this.state.gangsters || []).find(x => x.id === item.data.gid);
+          return !!(g && g.busy);
+        }
+        return false;
+      };
+      this._applyDraggable(card, item, isBusyFn);
       this._dom.cardByUid.set(item.uid, wrap);
       // Apply onCreate hook and then activate timers for items created now
       this._applyOnCreate(item);
@@ -712,7 +704,10 @@ export class Game {
     const container = this._worldContainer();
     if (!container) return wrap;
     this._ensureExploreWrap();
-    if (typeof index === 'number') {
+    if (item.type === 'gangster') {
+      // No special section: append naturally
+      if (wrap.parentElement !== container) container.appendChild(wrap);
+    } else if (typeof index === 'number') {
       const offset = (this.state.gangsters || []).length + 1; // +1 explore
       const desiredPosition = offset + index;
       const current = container.childNodes[desiredPosition];
@@ -1278,6 +1273,22 @@ Game.prototype._bindInfoPanel = function(cardEl, buildInfoFn) {
     cardEl.addEventListener('mouseleave', () => this._hideInfoPanel());
   }
   cardEl.addEventListener('click', show);
+};
+
+// Generic draggable applier
+Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
+  if (!cardEl || !itemLike || !itemLike.draggable) return;
+  const getGid = () => (itemLike.data && typeof itemLike.data.gid === 'number') ? String(itemLike.data.gid) : null;
+  const isBusy = () => (typeof isBusyFn === 'function') ? !!isBusyFn() : false;
+  // Make the whole card draggable (we guard in dragstart if busy)
+  cardEl.setAttribute('draggable', 'true');
+  cardEl.addEventListener('dragstart', (ev) => {
+    if (isBusy()) { ev.preventDefault(); return; }
+    const gid = getGid();
+    if (!gid) { ev.preventDefault(); return; }
+    ev.dataTransfer.setData('text/plain', gid);
+    ev.dataTransfer.effectAllowed = 'move';
+  });
 };
 
 // Generic onDrop handler that uses ACTIONS and recipes as a single source of truth

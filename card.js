@@ -3,7 +3,7 @@ import { startCountdown } from './progress-ring.js';
 
 // Card model
 export class Card {
-  constructor({ id, name, desc = '', reusable = true, type = 'generic', data = {}, img = undefined, verbs = [] }) {
+  constructor({ id, name, desc = '', reusable = true, type = 'generic', data = {}, img = undefined, verbs = [], draggable = false }) {
     this.id = id;
     this.name = name || id;
     this.desc = desc;
@@ -13,6 +13,7 @@ export class Card {
     this.used = false; // runtime flag when consumed (for non-reusable)
     this.img = img; // optional image filename for art
     this.verbs = Array.isArray(verbs) ? verbs : [];
+    this.draggable = !!draggable;
   }
 }
 
