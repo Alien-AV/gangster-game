@@ -21,9 +21,6 @@ export class Game {
       fear: 0,
       respect: 0,
       businesses: 0,
-      unlockedEnforcer: false,
-      unlockedGangster: false,
-      unlockedBusiness: false,
       illicitCounts: { counterfeiting: 0, drugs: 0, gambling: 0, fencing: 0 },
       illicit: 0,
       illicitProgress: 0,
@@ -92,7 +89,7 @@ export class Game {
     this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
     registerDefaultRecipes(this._recipes);
     // DOM caches for reconciliation and initial world paint
-    this._dom = { cardByUid: new Map(), gangsterById: new Map(), exploreWrap: null };
+    this._dom = { cardByUid: new Map(), exploreWrap: null };
     this.reconcileWorld && this.reconcileWorld();
 
     // Global drag state to prevent world re-render flicker while hovering over droppables
@@ -141,9 +138,6 @@ export class Game {
       fear: s.fear,
       respect: s.respect,
       businesses: s.businesses,
-      unlockedEnforcer: s.unlockedEnforcer,
-      unlockedGangster: s.unlockedGangster,
-      unlockedBusiness: s.unlockedBusiness,
       illicitCounts: s.illicitCounts,
       illicit: s.illicit,
       illicitProgress: s.illicitProgress,
@@ -633,19 +627,21 @@ export class Game {
   ensureGangsterNode(g) {
     const container = this._worldContainer();
     if (!container) return null;
-    let wrap = this._dom.gangsterById.get(g.id);
+    const uid = 'g_' + String(g.id);
+    let wrap = this._dom.cardByUid.get(uid);
     if (wrap) return wrap;
     const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
     const model = makeCard(defId);
     model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
     // Ensure via unified path
+    model.uid = uid;
     wrap = this.ensureCardNode(model, undefined);
     const cardEl = wrap.querySelector && wrap.querySelector('.world-card');
     if (cardEl) {
-      cardEl.dataset.gid = String(g.id);
+      cardEl.dataset.uid = model.uid;
       if (g.busy) cardEl.classList.add('busy');
     }
-    this._dom.gangsterById.set(g.id, wrap);
+    this._dom.cardByUid.set(uid, wrap);
     return wrap;
   }
 
@@ -749,18 +745,10 @@ export class Game {
     const desiredNodes = [];
 
     // 1) Reconcile gangster cards
-    const gangsterIds = new Set();
     (this.state.gangsters || []).forEach(g => {
-      gangsterIds.add(g.id);
       const wrap = this.ensureGangsterNode(g);
       desiredNodes.push(wrap);
     });
-    for (const [gid, wrap] of Array.from(this._dom.gangsterById.entries())) {
-      if (!gangsterIds.has(gid)) {
-        try { wrap.remove(); } catch(e){}
-        this._dom.gangsterById.delete(gid);
-      }
-    }
 
     // 2) Ensure Neighborhood explore card exists and updated
     const ndeck = (this._decks || {}).neighborhood;
@@ -997,7 +985,7 @@ export class Game {
     // Suspend world re-render so progress elements persist during work
     this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
     // Ensure the busy state applies even if the progress container is not the gangster card
-    this.runProgress(progEl || document.querySelector('.world-card[data-gid="' + String(g.id) + '"]'), durMs, () => {
+    this.runProgress(progEl || document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]'), durMs, () => {
       try {
         onDone && onDone();
       } finally {
@@ -1014,7 +1002,7 @@ export class Game {
 
   _markGangsterBusy(g, isBusy) {
     try {
-      const card = document.querySelector('.world-card[data-gid="' + String(g.id) + '"]');
+      const card = document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]');
       if (!card) return;
       if (isBusy) {
         card.classList.add('busy');

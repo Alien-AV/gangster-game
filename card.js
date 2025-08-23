@@ -374,8 +374,9 @@ export function getCardInfo(game, item) {
   const title = (item && item.name) || (def && def.name) || item.title || item.id;
   const desc = (item && item.desc) || (def && def.desc) || '';
   let statsLine = '';
-  if (item && item.type === 'gangster' && item.data && typeof item.data.gid === 'number') {
-    const g = (game.state.gangsters || []).find(x => x.id === item.data.gid);
+  if (item && item.type === 'gangster' && item.uid && item.uid.startsWith('g_')) {
+    const gid = parseInt(item.uid.slice(2), 10);
+    const g = (game.state.gangsters || []).find(x => x.id === gid);
     if (g && g.stats) statsLine = `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`;
   }
   const hint = def && def.hint ? def.hint : '';
