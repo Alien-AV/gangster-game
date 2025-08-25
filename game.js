@@ -21,9 +21,6 @@ export class Game {
       fear: 0,
       respect: 0,
       businesses: 0,
-      unlockedEnforcer: false,
-      unlockedGangster: false,
-      unlockedBusiness: false,
       illicitCounts: { counterfeiting: 0, drugs: 0, gambling: 0, fencing: 0 },
       illicit: 0,
       illicitProgress: 0,
@@ -92,7 +89,7 @@ export class Game {
     this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
     registerDefaultRecipes(this._recipes);
     // DOM caches for reconciliation and initial world paint
-    this._dom = { cardByUid: new Map(), gangsterById: new Map(), exploreWrap: null };
+    this._dom = { cardByUid: new Map(), exploreWrap: null };
     this.reconcileWorld && this.reconcileWorld();
 
     // Global drag state to prevent world re-render flicker while hovering over droppables
@@ -141,9 +138,6 @@ export class Game {
       fear: s.fear,
       respect: s.respect,
       businesses: s.businesses,
-      unlockedEnforcer: s.unlockedEnforcer,
-      unlockedGangster: s.unlockedGangster,
-      unlockedBusiness: s.unlockedBusiness,
       illicitCounts: s.illicitCounts,
       illicit: s.illicit,
       illicitProgress: s.illicitProgress,
@@ -577,15 +571,11 @@ export class Game {
         this._decks.neighborhood = d;
       } else {
         this._decks.neighborhood = new Deck({
-          // Guaranteed groups at the start: first the three recruits together, second the local crooks
-          start: [ ['recruit_face', 'recruit_fist', 'recruit_brain'], 'small_crooks' ],
-          // Shuffled middle content (exclude small_crooks to avoid duplicate instances)
-          pool: [
-            'corrupt_cop', 'priest',
-            'hot_dog_stand', 'bakery', 'diner', 'laundromat', 'pawn_shop', 'newspaper', 'bookmaker',
-          ],
-          // Guaranteed end
-          end: ['city_entrance'],
+          // First explore reveals all three stacks as a group
+          start: [ ['recruits', 'targets', 'opportunities'] ],
+          pool: [],
+          // Next explore reveals the city entrance
+          end: [ 'city_entrance' ],
         });
       }
     }
@@ -631,22 +621,22 @@ export class Game {
   }
 
   ensureGangsterNode(g) {
-    const container = this._worldContainer();
-    if (!container) return null;
-    let wrap = this._dom.gangsterById.get(g.id);
-    if (wrap) return wrap;
+    // Deprecated: kept temporarily for back-compat; use ensureCardNode with uid 'g_<gid>' instead
+    const uid = 'g_' + String(g.id);
     const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
     const model = makeCard(defId);
     model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
-    // Ensure via unified path
-    wrap = this.ensureCardNode(model, undefined);
-    const cardEl = wrap.querySelector && wrap.querySelector('.world-card');
-    if (cardEl) {
-      cardEl.dataset.gid = String(g.id);
-      if (g.busy) cardEl.classList.add('busy');
-    }
-    this._dom.gangsterById.set(g.id, wrap);
-    return wrap;
+    model.uid = uid;
+    return this.ensureCardNode(model, undefined);
+  }
+
+  spawnTableCard(idOrCard) {
+    const table = this.state.table;
+    if (!table || !Array.isArray(table.cards)) return null;
+    const card = (typeof idOrCard === 'string') ? makeCard(idOrCard) : idOrCard;
+    table.cards.push(card);
+    this.ensureCardNode(card, table.cards.length - 1);
+    return card;
   }
 
   replaceCard(oldItem, newItem, index) {
@@ -749,18 +739,15 @@ export class Game {
     const desiredNodes = [];
 
     // 1) Reconcile gangster cards
-    const gangsterIds = new Set();
     (this.state.gangsters || []).forEach(g => {
-      gangsterIds.add(g.id);
-      const wrap = this.ensureGangsterNode(g);
+      const uid = 'g_' + String(g.id);
+      const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
+      const model = makeCard(defId);
+      model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
+      model.uid = uid;
+      const wrap = this.ensureCardNode(model, undefined);
       desiredNodes.push(wrap);
     });
-    for (const [gid, wrap] of Array.from(this._dom.gangsterById.entries())) {
-      if (!gangsterIds.has(gid)) {
-        try { wrap.remove(); } catch(e){}
-        this._dom.gangsterById.delete(gid);
-      }
-    }
 
     // 2) Ensure Neighborhood explore card exists and updated
     const ndeck = (this._decks || {}).neighborhood;
@@ -795,7 +782,7 @@ export class Game {
       const gid = parseInt(idStr, 10);
       const g = this.state.gangsters.find(x => x.id === gid);
       if (!g || g.busy) return;
-      const act = (ACTIONS || []).find(a => a.id === 'actExploreNeighborhood');
+      const act = (ACTIONS || []).find(a => a.id === 'actExploreDeck');
       if (!act) return;
       const dur = this.durationWithStat(act.base, act.stat, g);
       const ok = this.executeAction(act, g, exploreCard, dur);
@@ -997,7 +984,7 @@ export class Game {
     // Suspend world re-render so progress elements persist during work
     this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
     // Ensure the busy state applies even if the progress container is not the gangster card
-    this.runProgress(progEl || document.querySelector('.world-card[data-gid="' + String(g.id) + '"]'), durMs, () => {
+    this.runProgress(progEl || document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]'), durMs, () => {
       try {
         onDone && onDone();
       } finally {
@@ -1014,7 +1001,7 @@ export class Game {
 
   _markGangsterBusy(g, isBusy) {
     try {
-      const card = document.querySelector('.world-card[data-gid="' + String(g.id) + '"]');
+      const card = document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]');
       if (!card) return;
       if (isBusy) {
         card.classList.add('busy');
@@ -1119,8 +1106,10 @@ export class Game {
 
     // Start timed work and apply effect
     return this._startCardWork(g, progEl, durMs, () => {
+      const ctx = this._pendingAction || {};
+      this._pendingAction = null;
       if (action && typeof action.effect === 'function') {
-        action.effect(this, g);
+        action.effect(this, g, ctx.targetEl, ctx.targetItem);
       }
     });
   }
@@ -1175,12 +1164,12 @@ export class Game {
             wrap.classList.remove('cooldown-active');
             wrap.style.removeProperty('--p');
             const card = wrap.querySelector && wrap.querySelector('.world-card');
-            const banner = card ? card.querySelector('.world-card-center-badge.badge-recover') : null;
-            if (banner) { try { banner.remove(); } catch(e){} }
+              const banner = card ? card.querySelector('.world-card-center-badge.badge-recover') : null;
+              if (banner) { try { banner.remove(); } catch(e){} }
           } catch(e) {}
-          item.cooldownUntil = 0;
-          item.cooldownStartMs = 0;
-          item.cooldownEndMs = 0;
+            item.cooldownUntil = 0;
+            item.cooldownStartMs = 0;
+            item.cooldownEndMs = 0;
           this.updateCardDynamic(item);
         }
       });
@@ -1208,8 +1197,8 @@ export class Game {
             this._cardMsg('You got arrested');
           }
         });
+        }
       }
-    }
   }
 
   // Called to refresh only dynamic lines on cards without rebuilding the whole world
@@ -1305,16 +1294,7 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
     const tableCards = table && table.cards ? table.cards : [];
     for (const op of ops) {
       if (op.spawnCardId) {
-        // Special-case gangster spawns: create entity directly, not a table card
-        if (typeof op.spawnCardId === 'string' && op.spawnCardId.startsWith('gangster_')) {
-          const type = op.spawnCardId.replace('gangster_', '') || 'face';
-          const s = this.state;
-          const newG = { id: s.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: this.defaultStatsForType(type) };
-          s.gangsters.push(newG);
-          this.ensureGangsterNode(newG);
-        } else {
-          this.spawnTableCard(op.spawnCardId);
-        }
+        this.spawnTableCard(op.spawnCardId);
       }
       if (op.consumeTarget) {
         const idx = tableCards.indexOf(targetItem);
@@ -1332,7 +1312,10 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
   // If one candidate → execute; if multiple → chooser
   const runAction = (baseAct) => {
     const dur = this.durationWithStat(baseAct.base, baseAct.stat, gangster);
-    this.executeAction(baseAct, gangster, cardEl, dur);
+    // Stash context for actions that need the drop target/item (e.g., explore deck)
+    this._pendingAction = { targetEl: cardEl, targetItem };
+    const ok = this.executeAction(baseAct, gangster, cardEl, dur);
+    if (!ok) this._pendingAction = null;
   };
   if (baseActions.length === 1) {
     runAction(baseActions[0]);

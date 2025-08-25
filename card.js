@@ -1,5 +1,5 @@
 import { ACTIONS } from './actions.js';
-import { startCountdown } from './progress-ring.js';
+import { startCountdown, clearRing } from './progress-ring.js';
 
 // Card model
 export class Card {
@@ -32,7 +32,10 @@ export const CARD_DEFS = [
   { id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', img: 'images/bookmaker.jpg', verbs: ['launder'], hint: 'Launder dirty money.' },
   { id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', img: 'images/extorted-business.png', data: { count: 0 }, hint: 'Aggregated protection payouts.' },
   { id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', hint: 'Expires over time; avoid getting arrested.' },
-  { id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', hint: 'Drop a gangster to explore.' },
+  { id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', hint: 'Drop a gangster to explore.', data: { exploreIds: ['recruits','targets','opportunities'] } },
+  { id: 'recruits', name: 'Recruits', desc: 'Potential talent waiting to be found.', reusable: true, type: 'neighborhood', img: 'images/face.png', hint: 'Drop a gangster to find recruits.', data: { exploreIds: ['recruit_face','recruit_fist','recruit_brain'] } },
+  { id: 'targets', name: 'Targets', desc: 'Locations ripe for protection or raids.', reusable: true, type: 'neighborhood', img: 'images/laundromat.jpg', hint: 'Drop a gangster to find targets.', data: { exploreIds: ['hot_dog_stand','bakery','diner','laundromat'] } },
+  { id: 'opportunities', name: 'Opportunities', desc: 'Useful connections and services.', reusable: true, type: 'neighborhood', img: 'images/priest.jpg', hint: 'Drop a gangster to find opportunities.', data: { exploreIds: ['corrupt_cop','priest','bookmaker','pawn_shop','newspaper'] } },
   { id: 'disagreeable_owner', name: 'Disagreeable Owner', desc: 'A stubborn shopkeeper. A kind word—or a broken window—might change their mind.', reusable: false, type: 'owner', img: 'images/disagreeable-owner.png', hint: 'Convince or threaten.' },
   { id: 'recruit_face', name: 'Recruit: Face', desc: 'A smooth talker looking for work.', reusable: false, type: 'recruit', data: { type: 'face' }, img: 'images/face.png', hint: 'Hire to add a Face.' },
   { id: 'recruit_fist', name: 'Recruit: Fist', desc: 'A bruiser ready to prove himself.', reusable: false, type: 'recruit', data: { type: 'fist' }, img: 'images/fist.png', hint: 'Hire to add a Fist.' },
@@ -79,6 +82,63 @@ export const CARD_BEHAVIORS = {
         item.heatStartMs = nowMs;
         item.heatEndMs = nowMs + 20000; // default 20s real-time
       }
+    },
+    onDrop: function(game, item, gangster, cardEl) {
+      // Deflect Heat: short action that resets countdown to start and shows working badge
+      const actionMs = 5000;
+      const wrap = item._ringWrapEl || (cardEl && cardEl.parentElement);
+      // Show deflecting badge and change ring color to alarming
+      if (wrap) {
+        try { wrap.classList.add('heat-active'); wrap.classList.add('deflecting'); } catch(e){}
+        const card = wrap.querySelector && wrap.querySelector('.world-card');
+        if (card) {
+          let badge = card.querySelector('.world-card-center-badge.badge-deflect');
+          if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'world-card-center-badge badge-deflect';
+            badge.textContent = 'Deflecting Heat';
+            card.appendChild(badge);
+          }
+        }
+        // Stop any existing heat countdown visuals immediately
+        try { clearRing(wrap, 'heat'); } catch(e){}
+      }
+      // Start timed work (marks gangster busy via existing infra)
+      const act = { id: 'actDeflectHeat', label: 'Deflect Heat', stat: 'brain', base: actionMs };
+      const dur = game.durationWithStat(act.base, act.stat, gangster);
+      game.executeAction(act, gangster, cardEl, dur);
+      // Reset timer on completion
+      setTimeout(() => {
+        const now = Date.now();
+        item.heatStartMs = now;
+        item.heatEndMs = now + 20000;
+        // Restart countdown fresh
+        if (wrap) {
+          try { wrap.classList.add('heat-active'); } catch(e){}
+          startCountdown(wrap, {
+            startMs: item.heatStartMs,
+            endMs: item.heatEndMs,
+            mode: 'heat',
+            showBadge: true,
+            onDone: () => {
+              const disc = (game.state.table && game.state.table.cards) || [];
+              const idx = disc.indexOf(item);
+              if (idx >= 0) disc.splice(idx, 1);
+              if (item.uid) { try { game.removeCardByUid(item.uid); } catch(e){} }
+              game._cardMsg('You got arrested');
+            }
+          });
+        } else {
+          game._activateTimersForItem(item, wrap);
+        }
+        // Clear badge
+        if (wrap) {
+          const card = wrap.querySelector && wrap.querySelector('.world-card');
+          const badge = card && card.querySelector ? card.querySelector('.world-card-center-badge.badge-deflect') : null;
+          if (badge) { try { badge.remove(); } catch(e){} }
+          try { wrap.classList.remove('deflecting'); } catch(e){}
+        }
+      }, dur);
     }
   },
   business: {
@@ -265,44 +325,44 @@ export const CARD_BEHAVIORS = {
               }
               if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
               gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
-            }
-          };
-          const dur = game.durationWithStat(act.base, act.stat, gangster);
-          game.executeAction(act, gangster, cardEl, dur);
         }
+      };
+      const dur = game.durationWithStat(act.base, act.stat, gangster);
+      game.executeAction(act, gangster, cardEl, dur);
+    }
         if (choiceId === 'threaten_owner') {
           if (!canThreaten) { game._cardMsg('Requires Fist 3'); return; }
-          const act = {
+      const act = {
             id: 'actThreatenOwner', label: 'Threaten Owner (Fist)', stat: 'fist', base: baseMs,
-            effect: (gme, gg) => {
+        effect: (gme, gg) => {
               const tableCards = gme.state.table.cards;
               const idx = tableCards.indexOf(item);
               let xb = tableCards.find(x => x.id === 'extorted_business');
-              if (!xb) {
-                xb = makeCard('extorted_business');
-                xb.data = xb.data || {}; xb.data.count = 1;
+          if (!xb) {
+            xb = makeCard('extorted_business');
+            xb.data = xb.data || {}; xb.data.count = 1;
                 if (idx >= 0) tableCards.splice(idx, 1);
                 tableCards.push(xb);
                 if (item && item.uid) { gme.removeCardByUid(item.uid); }
                 { const nidx = tableCards.indexOf(xb); gme.ensureCardNode(xb, nidx); }
-              } else {
-                xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-                if (idx >= 0) {
+          } else {
+            xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+            if (idx >= 0) {
                   tableCards.splice(idx, 1);
                   if (item && item.uid) { gme.removeCardByUid(item.uid); }
-                }
+            }
                 { const nidx = tableCards.indexOf(xb); gme.ensureCardNode(xb, nidx); }
-              }
+          }
               if (xb) {
                 game.updateCardDynamic(xb);
-              }
-              if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
-              gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
+          }
+          if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
+          gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
               gme.spawnTableCard('heat');
-            }
-          };
-          const dur = game.durationWithStat(act.base, act.stat, gangster);
-          game.executeAction(act, gangster, cardEl, dur);
+        }
+      };
+      const dur = game.durationWithStat(act.base, act.stat, gangster);
+      game.executeAction(act, gangster, cardEl, dur);
         }
       });
     }
@@ -315,6 +375,8 @@ export function renderWorldCard(game, item) {
   wrap.className = 'ring-wrap';
   const c = document.createElement('div');
   c.className = 'card world-card' + (item.type === 'recruit' ? ' recruit' : '');
+  if (item.uid) c.dataset.uid = item.uid;
+  try { if (item && item.id) c.dataset.cardId = item.id; } catch(e){}
   const title = item.name || item.title || item.id;
   const imgSrc = item.img || (item.type === 'recruit' ? ('images/' + ((item.data && item.data.type) + '.png')) : (item.type === 'cop' ? 'images/cop.png' : undefined));
   const artEmoji = '🃏';
@@ -334,6 +396,12 @@ export function renderWorldCard(game, item) {
       <p class="world-card-descDyn"></p>
     </div>
   `;
+  // Expose explore ids for deck-like cards on the DOM for handlers that only have the element
+  try {
+    if (item && item.data && Array.isArray(item.data.exploreIds)) {
+      c.dataset.exploreIds = item.data.exploreIds.join(',');
+    }
+  } catch(e){}
   const imgEl = c.querySelector('.world-card-artImg');
   const emojiEl = c.querySelector('.world-card-artEmoji');
   if (imgEl) imgEl.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); imgEl.remove(); });
@@ -374,8 +442,9 @@ export function getCardInfo(game, item) {
   const title = (item && item.name) || (def && def.name) || item.title || item.id;
   const desc = (item && item.desc) || (def && def.desc) || '';
   let statsLine = '';
-  if (item && item.type === 'gangster' && item.data && typeof item.data.gid === 'number') {
-    const g = (game.state.gangsters || []).find(x => x.id === item.data.gid);
+  if (item && item.type === 'gangster' && item.uid && item.uid.startsWith('g_')) {
+    const gid = parseInt(item.uid.slice(2), 10);
+    const g = (game.state.gangsters || []).find(x => x.id === gid);
     if (g && g.stats) statsLine = `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`;
   }
   const hint = def && def.hint ? def.hint : '';

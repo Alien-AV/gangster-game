@@ -168,7 +168,9 @@
         .ring-wrap .world-card{ position: relative; z-index: 1; }
         .ring-wrap.ring-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#b49a63 calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
         .ring-wrap.cooldown-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#cc5d5d calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
-        .ring-wrap.heat-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#ffd54f calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
+        .ring-wrap.heat-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#ff5252 calc(var(--p,0)*1turn), #2a2a2f 0); pointer-events:none; z-index: 0; }
+        .ring-wrap.deflecting::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#ff5555 calc(var(--p,0) * 1turn), #333 0); pointer-events:none; z-index: 0; }
+        .world-card-center-badge.badge-deflect { background:#3b1a1a; color:#ffdada; border-color:#5a2a2a; }
         .ring-wrap.cooldown-active .world-card{ filter: saturate(0.5) brightness(0.9); }
         .world-card-recovery-banner{ position:absolute; top:50%; left:50%; transform: translate(-50%, -50%); background:#331d1d; color:#ffb3b3; border:1px solid #663333; padding:6px 12px; border-radius:12px; font-size:13px; z-index:2; }
         /* Dim busy gangster cards */

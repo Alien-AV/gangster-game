@@ -1,12 +1,27 @@
+import { Deck } from './deck.js';
 // Declarative action registry for card UI
 // Each action: { id, label, stat, base, handler(game, gangster, progressEl, durationMs) }
 
 export const ACTIONS = [
-  // Explore Neighborhood: draws world cards from the Neighborhood deck
-  { id: 'actExploreNeighborhood', label: 'Explore Neighborhood (Brain)', stat: 'brain', base: 3500,
-    effect: (game, g) => {
-      game.drawFromDeck('neighborhood');
-      // small personal heat for poking around
+  // Unified Explore for any deck-like card: expects item.data.exploreIds
+  { id: 'actExploreDeck', label: 'Explore (Brain)', stat: 'brain', base: 3500,
+    effect: (game, g, targetEl) => {
+      // Identify which deck to draw from (card id on the DOM), then use deck system
+      const wrap = targetEl && targetEl.closest ? targetEl.closest('.ring-wrap') : null;
+      const cardEl = wrap ? wrap.querySelector('.world-card') : targetEl;
+      if (!cardEl || !cardEl.dataset || !cardEl.dataset.cardId) return;
+      // Use deck model: ensure deck exists with start/pool/end seeded from the deck card
+      const deckId = cardEl.dataset.cardId;
+      game._decks = game._decks || {};
+      if (!game._decks[deckId]) {
+        const idsStr = cardEl.dataset.exploreIds || '';
+        const pool = idsStr.split(',').map(s => s.trim()).filter(Boolean);
+        // Neighborhood retains a final city_entrance in end per initTable; others empty end
+        const end = (deckId === 'neighborhood') ? ['city_entrance'] : [];
+        game._decks[deckId] = new Deck({ start: [], pool, end });
+      }
+      // Draw one group (one or more ids), respecting start → pool(shuffled) → end, and exhaustion
+      game.drawFromDeck(deckId);
       if (g) g.personalHeat = (g.personalHeat || 0) + 1;
       game.updateUI();
     }
