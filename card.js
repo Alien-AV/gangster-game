@@ -1,5 +1,5 @@
 import { ACTIONS } from './actions.js';
-import { startCountdown } from './progress-ring.js';
+import { startCountdown, clearRing } from './progress-ring.js';
 
 // Card model
 export class Card {
@@ -101,7 +101,7 @@ export const CARD_BEHAVIORS = {
           }
         }
         // Stop any existing heat countdown visuals immediately
-        try { wrap.style.removeProperty('--p'); } catch(e){}
+        try { clearRing(wrap, 'heat'); } catch(e){}
       }
       // Start timed work (marks gangster busy via existing infra)
       const act = { id: 'actDeflectHeat', label: 'Deflect Heat', stat: 'brain', base: actionMs };
@@ -115,7 +115,6 @@ export const CARD_BEHAVIORS = {
         // Restart countdown fresh
         if (wrap) {
           try { wrap.classList.add('heat-active'); } catch(e){}
-          try { wrap.style.setProperty('--p', '0'); } catch(e){}
           startCountdown(wrap, {
             startMs: item.heatStartMs,
             endMs: item.heatEndMs,
