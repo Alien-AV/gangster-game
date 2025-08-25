@@ -36,8 +36,11 @@ export class RecipeEngine {
 
 // Default recipe registrations helper
 export function registerDefaultRecipes(recipes) {
-  // Explore: neighborhood + gangster → actExploreNeighborhood
-  recipes.addRecipe(['neighborhood','gangster'], ['actExploreNeighborhood']);
+  // Explore: any deck-like card + gangster → unified explore action
+  recipes.addRecipe(['neighborhood','gangster'], ['actExploreDeck']);
+  recipes.addRecipe(['recruits','gangster'], ['actExploreDeck']);
+  recipes.addRecipe(['targets','gangster'], ['actExploreDeck']);
+  recipes.addRecipe(['opportunities','gangster'], ['actExploreDeck']);
   // Recruit: recruit_* + gangster → spawn gangster_* and consume recruit
   recipes.addRecipe(['recruit','gangster'], (ctx) => {
     const t = (ctx && ctx.target && ctx.target.data && ctx.target.data.type) || 'face';

@@ -35,7 +35,7 @@ This prototype explores a lightweight mafia management loop. Actions unlock prog
 
 We are transitioning the interaction model to a card-driven UI inspired by Cultist Simulator/Stacklands.
 
-### Core Concepts
+### Core Concepts (Current)
 
 - **Gangster Cards**
   - Each gangster is represented as a draggable card.
@@ -49,6 +49,11 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 
 - **Table Cards (Interactive Targets)**
   - Actions are triggered by dropping gangsters onto interactive cards on the table (e.g., businesses, Priest, Corrupt Cop, Crooks, Bookmaker, Pawn Shop, Neighborhood).
+  - Neighborhood reveals three stack cards: `Recruits`, `Targets`, and `Opportunities`. Dropping a gangster on each reveals a curated set:
+    - Recruits: recruit_face, recruit_fist, recruit_brain
+    - Targets: hot_dog_stand, bakery, diner, laundromat
+    - Opportunities: corrupt_cop, priest, bookmaker, pawn_shop, newspaper
+  - `City Entrance` remains as progression at the end of neighborhood.
   - When an action completes, results (money, respect, fear, etc.) apply and the gangster is unlocked.
 
 ### Cards vs Recipes vs Actions (Architecture)
