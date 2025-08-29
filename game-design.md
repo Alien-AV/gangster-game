@@ -49,6 +49,9 @@ We are transitioning the interaction model to a card-driven UI inspired by Culti
 
 - **Table Cards (Interactive Targets)**
   - Actions are triggered by dropping gangsters onto interactive cards on the table (e.g., businesses, Priest, Corrupt Cop, Crooks, Bookmaker, Pawn Shop, Neighborhood).
+  - Distinction: Businesses vs Services
+    - Businesses: extort/raid targets with risk, heat and cooldowns (e.g., bakery, diner, laundromat, hot-dog stand).
+    - Services: provide one-off effects and are not extort/raid targets; interactions are recipe-mapped (e.g., bookmaker → launder, newspaper → promotions, pawn shop → procure equipment).
   - Neighborhood reveals three stack cards: `Recruits`, `Targets`, and `Opportunities`. Dropping a gangster on each reveals a curated set:
     - Recruits: recruit_face, recruit_fist, recruit_brain
     - Targets: hot_dog_stand, bakery, diner, laundromat

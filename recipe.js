@@ -41,11 +41,12 @@ export function registerDefaultRecipes(recipes) {
   recipes.addRecipe(['recruits','gangster'], ['actExploreDeck']);
   recipes.addRecipe(['targets','gangster'], ['actExploreDeck']);
   recipes.addRecipe(['opportunities','gangster'], ['actExploreDeck']);
-  // Recruit: recruit_* + gangster → spawn gangster_* and consume recruit
+  // Business interactions via chooser
+  recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
+  // Recruit: recruit_* + gangster → spawn gangster of specific subtype and consume recruit
   recipes.addRecipe(['recruit','gangster'], (ctx) => {
     const t = (ctx && ctx.target && ctx.target.data && ctx.target.data.type) || 'face';
-    const spawnId = `gangster_${t}`;
-    return [{ spawnCardId: spawnId, consumeTarget: true }];
+    return [{ spawnGangsterType: t, consumeTarget: true }];
   });
   // Corrupt Cop + gangster → forge fake alibi (costs money)
   recipes.addRecipe(['cop','gangster'], ['actForgeAlibi']);
@@ -54,5 +55,14 @@ export function registerDefaultRecipes(recipes) {
     const t = ctx && ctx.target; const s = ctx && ctx.gangster; // not used; context provided for parity
     // Represent as an op that the engine will apply: consume target and a source marker
     return [{ consumeTarget: true, consumeSource: true }];
+  });
+  // Services map directly to single actions
+  recipes.addRecipe(['service','gangster'], (ctx) => {
+    const target = ctx && ctx.target;
+    if (!target) return [];
+    if (target.id === 'bookmaker') return ['actLaunder'];
+    if (target.id === 'newspaper') return ['actPromo'];
+    if (target.id === 'pawn_shop') return ['actProcureEquipment'];
+    return [];
   });
 }

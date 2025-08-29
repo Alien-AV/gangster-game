@@ -1,4 +1,5 @@
 import { Deck } from './deck.js';
+import { startCountdown } from './progress-ring.js';
 // Declarative action registry for card UI
 // Each action: { id, label, stat, base, handler(game, gangster, progressEl, durationMs) }
 
@@ -74,19 +75,79 @@ export const ACTIONS = [
       g.personalHeat = (g.personalHeat || 0) + 1;
     } },
   { id: 'actRaid', label: 'Raid Business (Fist)', stat: 'fist', base: 3500,
-    effect: (game, g) => {
+    effect: (game, g, targetEl, targetItem) => {
       game.state.dirtyMoney += 1500;
       game.state.heat += 2;
-      g.personalHeat = (g.personalHeat || 0) + 2;
+      if (g) g.personalHeat = (g.personalHeat || 0) + 2;
+      if (targetItem && targetEl) {
+        const wrap = targetEl.closest && targetEl.closest('.ring-wrap');
+        const nowSec = (game.state.time || 0);
+        const nowMs = Date.now();
+        targetItem.cooldownTotal = 60;
+        targetItem.cooldownUntil = nowSec + targetItem.cooldownTotal;
+        targetItem.cooldownStartMs = nowMs;
+        targetItem.cooldownEndMs = nowMs + targetItem.cooldownTotal * 1000;
+        if (wrap) {
+          try {
+            startCountdown(wrap, {
+              startMs: targetItem.cooldownStartMs,
+              endMs: targetItem.cooldownEndMs,
+              mode: 'cooldown',
+              showBadge: false,
+              onTick: (_p, remaining) => {
+                const sec = Math.max(0, Math.ceil(remaining / 1000));
+                if (targetItem && targetItem._dynEl) { try { targetItem._dynEl.textContent = `Recovers in ${sec}s`; } catch(e){} }
+              },
+              onDone: () => {
+                try {
+                  wrap.classList.remove('cooldown-active');
+                  wrap.style.removeProperty('--p');
+                  const banner = targetEl.querySelector && targetEl.querySelector('.world-card-center-badge.badge-recover');
+                  if (banner) { try { banner.remove(); } catch(e){} }
+                } catch(e){}
+                targetItem.cooldownUntil = 0;
+                targetItem.cooldownStartMs = 0;
+                targetItem.cooldownEndMs = 0;
+                game.updateCardDynamic(targetItem);
+              }
+            });
+          } catch(e){}
+        }
+      }
+      game.spawnTableCard('heat');
     } },
   { id: 'actExtort', label: 'Extort (Face)', stat: 'face', base: 4000,
-    effect: (game, g) => {
-      if (Math.random() < game.DISAGREEABLE_CHANCE) {
-        game.state.disagreeableOwners += 1;
+    effect: (game, g, targetEl, targetItem) => {
+      const tableCards = game.state.table.cards;
+      const idx = tableCards.indexOf(targetItem);
+      game._extortAttemptCount = (game._extortAttemptCount || 0) + 1;
+      const forceFail = (game._extortAttemptCount === 2);
+      if (g) g.personalHeat = (g.personalHeat || 0) + 1;
+      if (forceFail) {
+        const owner = { id: 'disagreeable_owner', name: 'Disagreeable Owner', type: 'owner', reusable: false, img: 'images/disagreeable-owner.png' };
+        if (idx >= 0) tableCards.splice(idx, 1);
+        tableCards.push(owner);
+        if (targetItem && targetItem.uid) game.removeCardByUid(targetItem.uid);
+        { const nidx = tableCards.indexOf(owner); game.ensureCardNode(owner, nidx); }
+        game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
       } else {
+        let xb = tableCards.find(x => x.id === 'extorted_business');
+        if (!xb) {
+          xb = { id: 'extorted_business', name: 'Extorted Businesses', type: 'extorted_business', reusable: true, data: { count: 1 }, img: 'images/extorted-business.png' };
+          if (idx >= 0) tableCards.splice(idx, 1);
+          tableCards.push(xb);
+          if (targetItem && targetItem.uid) game.removeCardByUid(targetItem.uid);
+          { const nidx = tableCards.indexOf(xb); game.ensureCardNode(xb, nidx); }
+        } else {
+          xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
+          if (idx >= 0) {
+            tableCards.splice(idx, 1);
+            if (targetItem && targetItem.uid) game.removeCardByUid(targetItem.uid);
+          }
+          { const nidx = tableCards.indexOf(xb); game.ensureCardNode(xb, nidx); }
+        }
         game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
       }
-      g.personalHeat = (g.personalHeat || 0) + 1;
     } },
   { id: 'actBuildIllicit', label: 'Build Illicit (Brain)', stat: 'brain', base: 4000,
     prereq: (game) => (game.state.businesses - game.state.illicit) > 0,

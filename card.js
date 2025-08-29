@@ -27,9 +27,9 @@ export const CARD_DEFS = [
   { id: 'bakery', name: 'Corner Bakery', desc: 'Busy mornings. Might pay for protection.', reusable: false, type: 'business', img: 'images/bakery.png', verbs: ['extort_or_raid'], hint: 'Extort or raid.' },
   { id: 'diner', name: 'Mom-and-Pop Diner', desc: 'Cash business with regulars.', reusable: false, type: 'business', img: 'images/diner.jpg', verbs: ['extort_or_raid'], hint: 'Extort or raid.' },
   { id: 'laundromat', name: 'Neighborhood Laundromat', desc: 'Steady quarters, soft targets.', reusable: false, type: 'business', img: 'images/laundromat.jpg', verbs: ['extort_or_raid'], hint: 'Extort or raid.' },
-  { id: 'pawn_shop', name: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false, type: 'business', img: 'images/pawnshop.png', verbs: ['procure_equipment'], hint: 'Procure equipment.' },
-  { id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'business', img: 'images/newspaper.jpg', verbs: ['promo'], hint: 'Run promotions.' },
-  { id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'business', img: 'images/bookmaker.jpg', verbs: ['launder'], hint: 'Launder dirty money.' },
+  { id: 'pawn_shop', name: 'Pawn Shop', desc: 'Source for gear—if you grease the wheels.', reusable: false, type: 'service', img: 'images/pawnshop.png', hint: 'Procure equipment.' },
+  { id: 'newspaper', name: 'Local Newspaper', desc: 'Buy ads to boost your reputation.', reusable: false, type: 'service', img: 'images/newspaper.jpg', hint: 'Run promotions.' },
+  { id: 'bookmaker', name: 'Bookmaker', desc: 'Launder money via gambling operations.', reusable: true, type: 'service', img: 'images/bookmaker.jpg', hint: 'Launder dirty money.' },
   { id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', img: 'images/extorted-business.png', data: { count: 0 }, hint: 'Aggregated protection payouts.' },
   { id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', hint: 'Expires over time; avoid getting arrested.' },
   { id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', hint: 'Drop a gangster to explore.', data: { exploreIds: ['recruits','targets','opportunities'] } },
@@ -146,108 +146,8 @@ export const CARD_BEHAVIORS = {
     onDrop: function (game, item, gangster, cardEl) {
       const now = game.state.time || 0;
       if (item.cooldownUntil && now < item.cooldownUntil) { game._cardMsg('Business is recovering after a raid.'); return; }
-      // If business has specific verbs, run them exclusively
-      const verbs = Array.isArray(item.verbs) ? item.verbs : [];
-      if (verbs.includes('launder')) {
-        const a = (ACTIONS || []).find(x => x.id === 'actLaunder'); if (!a) return;
-        const dur = game.durationWithStat(a.base, a.stat, gangster); game.executeAction(a, gangster, cardEl, dur); return;
-      }
-      if (verbs.includes('procure_equipment')) {
-        const a = (ACTIONS || []).find(x => x.id === 'actProcureEquipment'); if (!a) return;
-        const dur = game.durationWithStat(a.base, a.stat, gangster); game.executeAction(a, gangster, cardEl, dur); return;
-      }
-      if (verbs.includes('promo')) {
-        const a = (ACTIONS || []).find(x => x.id === 'actPromo'); if (!a) return;
-        const dur = game.durationWithStat(a.base, a.stat, gangster); game.executeAction(a, gangster, cardEl, dur); return;
-      }
-      // Default business behavior: extort or raid
-      const options = [{ id: 'actExtort', label: 'Extort' }, { id: 'actRaid', label: 'Raid' }];
-      game.showInlineActionChoice(cardEl, options, (choiceId) => {
-        const baseAct = (ACTIONS || []).find(a => a.id === choiceId);
-        if (!baseAct) return;
-        const act = {
-          ...baseAct,
-          effect: (gme, gg) => {
-            if (choiceId === 'actExtort') {
-              game._extortAttemptCount = (game._extortAttemptCount || 0) + 1;
-              const forceFail = (game._extortAttemptCount === 2);
-              if (gg) gg.personalHeat = (gg.personalHeat || 0) + 1;
-              const tableCards = game.state.table.cards;
-              const idx = tableCards.indexOf(item);
-              if (forceFail) {
-                const owner = makeCard('disagreeable_owner');
-                if (idx >= 0) tableCards.splice(idx, 1); // remove business
-                tableCards.push(owner);
-                // Ensure DOM reflects removal and new card
-                if (item && item.uid) { game.removeCardByUid(item.uid); }
-                { const nidx = tableCards.indexOf(owner); game.ensureCardNode(owner, nidx); }
-                game.state.disagreeableOwners = (game.state.disagreeableOwners || 0) + 1;
-              } else {
-                let xb = tableCards.find(x => x.id === 'extorted_business');
-                if (!xb) {
-                  xb = makeCard('extorted_business');
-                  xb.data = xb.data || {}; xb.data.count = 1;
-                  if (idx >= 0) tableCards.splice(idx, 1); // remove business
-                  tableCards.push(xb);
-                  // Ensure DOM removal and creation
-                  if (item && item.uid) { game.removeCardByUid(item.uid); }
-                  { const nidx = tableCards.indexOf(xb); game.ensureCardNode(xb, nidx); }
-                } else {
-                  xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-                  if (idx >= 0) {
-                    tableCards.splice(idx, 1); // remove business from data
-                    // Remove business node from DOM
-                    if (item && item.uid) { game.removeCardByUid(item.uid); }
-                  }
-                  // Ensure extorted aggregate exists, then update its dynamic counter
-                  { const nidx = tableCards.indexOf(xb); game.ensureCardNode(xb, nidx); }
-                }
-                game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
-              }
-            }
-            if (choiceId === 'actRaid') {
-               // Set cooldown (seconds) and start animator on wrapper
-               const nowSec = (game.state.time || 0);
-               const nowMs = Date.now();
-               item.cooldownTotal = 60;
-               item.cooldownUntil = nowSec + item.cooldownTotal;
-               item.cooldownStartMs = nowMs;
-               item.cooldownEndMs = nowMs + item.cooldownTotal * 1000;
-               if (cardEl && cardEl.parentElement && cardEl.parentElement.classList.contains('ring-wrap')) {
-                 const wrap = cardEl.parentElement;
-                 try {
-                   startCountdown(wrap, {
-                     startMs: item.cooldownStartMs,
-                     endMs: item.cooldownEndMs,
-                     mode: 'cooldown',
-                     showBadge: false,
-                     onTick: (_p, remaining) => {
-                       const sec = Math.max(0, Math.ceil(remaining / 1000));
-                       if (item && item._dynEl) { try { item._dynEl.textContent = `Recovers in ${sec}s`; } catch(e){} }
-                     },
-                     onDone: () => {
-                       try {
-                         wrap.classList.remove('cooldown-active');
-                         wrap.style.removeProperty('--p');
-                         const banner = cardEl.querySelector && cardEl.querySelector('.world-card-center-badge.badge-recover');
-                         if (banner) { try { banner.remove(); } catch(e){} }
-                       } catch(e){}
-                       item.cooldownUntil = 0;
-                       item.cooldownStartMs = 0;
-                       item.cooldownEndMs = 0;
-                       game.updateCardDynamic(item);
-                     }
-                   });
-                 } catch(e){}
-               }
-               if (typeof baseAct.effect === 'function') baseAct.effect(game, gg);
-               game.spawnTableCard('heat');
-             }
-           }
-         };
-         const dur = game.durationWithStat(act.base, act.stat, gangster);
-         game.executeAction(act, gangster, cardEl, dur);
-      });
+      // Otherwise, delegate to recipe-driven generic handler (e.g., Extort/Raid)
+      game._handleGenericOnDrop(item, gangster, cardEl);
     }
   },
   crooks: {
