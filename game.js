@@ -658,8 +658,16 @@ export class Game {
         card.addEventListener('dragleave', () => card.classList.remove('highlight'));
         card.addEventListener('drop', ev => {
           ev.preventDefault(); card.classList.remove('highlight');
-          const idStr = ev.dataTransfer.getData('text/plain');
-          const gid = parseInt(idStr, 10);
+          const payload = ev.dataTransfer.getData('text/plain');
+          if (payload && payload.startsWith('uid:')) {
+            const uid = payload.slice(4);
+            const tableCards = (this.state.table && this.state.table.cards) || [];
+            const sourceItem = tableCards.find(x => x && x.uid === uid);
+            if (!sourceItem) return;
+            this._handleCardOnCardDrop(item, sourceItem, card);
+            return;
+          }
+          const gid = parseInt(payload, 10);
           const g = this.state.gangsters.find(x => x.id === gid);
           if (!g || g.busy) return;
           const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
@@ -1274,8 +1282,13 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
   cardEl.addEventListener('dragstart', (ev) => {
     if (isBusy()) { ev.preventDefault(); return; }
     const gid = getGid();
-    if (!gid) { ev.preventDefault(); return; }
-    ev.dataTransfer.setData('text/plain', gid);
+    if (gid) {
+      ev.dataTransfer.setData('text/plain', gid);
+    } else if (itemLike && itemLike.uid) {
+      ev.dataTransfer.setData('text/plain', 'uid:' + itemLike.uid);
+    } else {
+      ev.preventDefault(); return;
+    }
     ev.dataTransfer.effectAllowed = 'move';
   });
 };
@@ -1327,6 +1340,36 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
     if (!chosen) return;
     runAction(chosen);
   });
+};
+
+// Card-on-card recipe application
+Game.prototype._handleCardOnCardDrop = function(targetItem, sourceItem, cardEl) {
+  // Match by types of both cards
+  const types = [targetItem.type, sourceItem.type];
+  const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
+  const ops = actionOrOps.filter(x => typeof x === 'object');
+  const actionIds = actionOrOps.filter(x => typeof x === 'string');
+  const table = this.state.table; const tableCards = table && table.cards ? table.cards : [];
+  if (ops.length) {
+    for (const op of ops) {
+      if (op.spawnCardId) this.spawnTableCard(op.spawnCardId);
+      if (op.consumeTarget) {
+        const idx = tableCards.indexOf(targetItem);
+        if (idx >= 0) { tableCards.splice(idx, 1); if (targetItem.uid) this.removeCardByUid(targetItem.uid); }
+      }
+      if (op.consumeSource) {
+        const sidx = tableCards.indexOf(sourceItem);
+        if (sidx >= 0) { tableCards.splice(sidx, 1); if (sourceItem.uid) this.removeCardByUid(sourceItem.uid); }
+      }
+    }
+    this.updateUI();
+    return;
+  }
+  if (actionIds.length) {
+    // No gangster context; treat as instant ops or future card-on-card actions
+    // For now, do nothing if only actions present
+    return;
+  }
 };
 
 // Hook runner for card creation behaviors

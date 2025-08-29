@@ -140,6 +140,12 @@ export const ACTIONS = [
       game.state.respect += 1;
       if (game.state.heat > 0) game.state.heat -= 1;
     } },
+  { id: 'actForgeAlibi', label: 'Forge Fake Alibi (Brain)', stat: 'brain', base: 3500,
+    cost: { money: 500 },
+    effect: (game) => {
+      game.spawnTableCard('fake_alibi');
+      game.updateUI();
+    } },
   { id: 'actIntimidate', label: 'Intimidate (Fist)', stat: 'fist', base: 3000,
     effect: (game, g) => {
       if (game.state.disagreeableOwners > 0) game.state.disagreeableOwners -= 1;
