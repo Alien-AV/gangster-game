@@ -47,4 +47,12 @@ export function registerDefaultRecipes(recipes) {
     const spawnId = `gangster_${t}`;
     return [{ spawnCardId: spawnId, consumeTarget: true }];
   });
+  // Corrupt Cop + gangster → forge fake alibi (costs money)
+  recipes.addRecipe(['cop','gangster'], ['actForgeAlibi']);
+  // Fake alibi + heat → consume both (safe clear)
+  recipes.addRecipe(['paperwork','heat'], (ctx) => {
+    const t = ctx && ctx.target; const s = ctx && ctx.gangster; // not used; context provided for parity
+    // Represent as an op that the engine will apply: consume target and a source marker
+    return [{ consumeTarget: true, consumeSource: true }];
+  });
 }
