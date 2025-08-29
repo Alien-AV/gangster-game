@@ -3,6 +3,7 @@ import { ACTIONS } from './actions.js';
 import { makeCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
+import { clearRing } from './progress-ring.js';
 import { RecipeEngine, registerDefaultRecipes } from './recipe.js';
 
 // behaviors and renderer moved to card.js
@@ -1306,12 +1307,24 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
     const table = this.state.table;
     const tableCards = table && table.cards ? table.cards : [];
     for (const op of ops) {
-      if (op.spawnCardId) {
+      if (op.spawnGangsterType) {
+        const type = op.spawnGangsterType;
+        const stats = this.defaultStatsForType ? this.defaultStatsForType(type) : (type === 'face' ? { face: 3, fist: 1, brain: 1, meat: 1 } : type === 'fist' ? { face: 1, fist: 3, brain: 1, meat: 1 } : { face: 1, fist: 1, brain: 3, meat: 1 });
+        const g = { id: this.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats };
+        this.state.gangsters.push(g);
+        this.reconcileWorld();
+        this.updateUI();
+      } else if (op.spawnCardId) {
         this.spawnTableCard(op.spawnCardId);
       }
       if (op.consumeTarget) {
         const idx = tableCards.indexOf(targetItem);
         if (idx >= 0) {
+          // Stop any heat countdown on the target before removal
+          if (targetItem && targetItem.type === 'heat') {
+            const wrap = this._dom.cardByUid.get(targetItem.uid);
+            if (wrap) { try { clearRing(wrap, 'heat'); } catch(e){} }
+          }
           tableCards.splice(idx, 1);
           if (targetItem.uid) this.removeCardByUid(targetItem.uid);
         }
@@ -1355,11 +1368,25 @@ Game.prototype._handleCardOnCardDrop = function(targetItem, sourceItem, cardEl) 
       if (op.spawnCardId) this.spawnTableCard(op.spawnCardId);
       if (op.consumeTarget) {
         const idx = tableCards.indexOf(targetItem);
-        if (idx >= 0) { tableCards.splice(idx, 1); if (targetItem.uid) this.removeCardByUid(targetItem.uid); }
+        if (idx >= 0) {
+          if (targetItem && targetItem.type === 'heat') {
+            const tw = this._dom.cardByUid.get(targetItem.uid);
+            if (tw) { try { clearRing(tw, 'heat'); } catch(e){} }
+          }
+          tableCards.splice(idx, 1);
+          if (targetItem.uid) this.removeCardByUid(targetItem.uid);
+        }
       }
       if (op.consumeSource) {
         const sidx = tableCards.indexOf(sourceItem);
-        if (sidx >= 0) { tableCards.splice(sidx, 1); if (sourceItem.uid) this.removeCardByUid(sourceItem.uid); }
+        if (sidx >= 0) {
+          if (sourceItem && sourceItem.type === 'heat') {
+            const sw = this._dom.cardByUid.get(sourceItem.uid);
+            if (sw) { try { clearRing(sw, 'heat'); } catch(e){} }
+          }
+          tableCards.splice(sidx, 1);
+          if (sourceItem.uid) this.removeCardByUid(sourceItem.uid);
+        }
       }
     }
     this.updateUI();
