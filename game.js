@@ -85,7 +85,7 @@ export class Game {
     // Default recipes
     this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
     this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
-    this._recipes.addRecipe(['cop','gangster'], ['actPayCops']);
+    // Removed legacy pay cops action
     this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
     this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
     registerDefaultRecipes(this._recipes);
@@ -1050,6 +1050,42 @@ export class Game {
     return Math.max(500, Math.floor(baseMs / scale));
   }
 
+  // Uniform requirements checker for actions
+  // Supports:
+  // - function(game, gangster, ctx) → boolean | string (reason)
+  // - object { stat: 'fist'|'face'|'brain'|'meat', min: number }
+  // - array of the above (all must pass)
+  checkRequirements(action, gangster, ctx) {
+    const req = action && action.requires;
+    if (!req) return { ok: true };
+    const evalOne = (r) => {
+      if (!r) return { ok: true };
+      if (typeof r === 'function') {
+        const out = r(this, gangster, ctx);
+        if (out === true) return { ok: true };
+        if (out === false) return { ok: false, reason: 'Requirements not met' };
+        if (typeof out === 'string') return { ok: false, reason: out };
+        return { ok: !!out };
+      }
+      if (typeof r === 'object') {
+        if (r.stat && typeof r.min === 'number') {
+          const val = this.effectiveStat(gangster, r.stat) || 0;
+          if (val >= r.min) return { ok: true };
+          return { ok: false, reason: `${r.stat[0].toUpperCase()}${r.stat.slice(1)} ${r.min} required` };
+        }
+      }
+      return { ok: true };
+    };
+    if (Array.isArray(req)) {
+      for (const r of req) {
+        const res = evalOne(r);
+        if (!res.ok) return res;
+      }
+      return { ok: true };
+    }
+    return evalOne(req);
+  }
+
   tick() {
     const s = this.state;
     s.time += 1;
@@ -1092,14 +1128,21 @@ export class Game {
       if (!ok) return false;
     }
 
+    // Stat/other requirements
+    if (action && action.requires) {
+      const ctx = this._pendingAction && this._pendingAction.targetItem ? this._pendingAction.targetItem : null;
+      const res = this.checkRequirements(action, g, ctx);
+      if (!res.ok) { this._cardMsg(res.reason || 'Requirements not met'); return false; }
+    }
+
     // Costs
     if (action && action.cost) {
       if (typeof action.cost === 'function') {
         const ok = action.cost(this, g);
-        if (!ok) return false;
+        if (!ok) { this._cardMsg('Not enough money'); return false; }
       } else if (typeof action.cost === 'object') {
         if (action.cost.money) {
-          if (this.totalMoney() < action.cost.money) return false;
+          if (this.totalMoney() < action.cost.money) { this._cardMsg('Not enough money'); return false; }
           this.spendMoney(action.cost.money);
         }
         if (action.cost.respect) {
@@ -1235,8 +1278,11 @@ export class Game {
     (options || []).forEach(opt => {
       const b = document.createElement('button');
       b.textContent = opt.label || opt.id;
+      if (opt && opt.title) b.title = opt.title;
+      if (opt && opt.disabled) b.disabled = true;
       b.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (b.disabled) return;
         this._destroyInlineChoice();
         onChoose && onChoose(opt.id);
       });
@@ -1249,9 +1295,13 @@ export class Game {
       }
     };
     document.addEventListener('click', onDoc, { once: true });
-    // Attach to anchor card
-    anchorEl.style.position = anchorEl.style.position || 'relative';
-    anchorEl.appendChild(chooser);
+    // Position chooser centered over the anchor card using viewport coordinates
+    const rect = anchorEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    chooser.style.left = cx + 'px';
+    chooser.style.top = cy + 'px';
+    document.body.appendChild(chooser);
     this._activeInlineChoice = chooser;
   }
 
@@ -1347,7 +1397,12 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
     runAction(baseActions[0]);
     return;
   }
-  const options = baseActions.map(a => ({ id: a.id, label: a.label || a.id }));
+  const options = baseActions.map(a => {
+    const res = (typeof this.checkRequirements === 'function') ? this.checkRequirements(a, gangster, targetItem) : { ok: true };
+    const baseLabel = a.label || a.id;
+    const label = res && !res.ok && res.reason ? `${baseLabel} (${res.reason})` : baseLabel;
+    return { id: a.id, label, disabled: res && !res.ok, title: res && !res.ok ? res.reason : '' };
+  });
   this.showInlineActionChoice(cardEl, options, (choiceId) => {
     const chosen = baseActions.find(a => a.id === choiceId);
     if (!chosen) return;

@@ -68,13 +68,15 @@ export const ACTIONS = [
     },
     effect: (game) => { game.state.respect += 1; } },
   { id: 'actVigilante', label: 'Vigilante Patrol (Fist)', stat: 'fist', base: 3000,
+    requires: { stat: 'fist', min: 3 },
     effect: (game, g) => {
       game.state.respect += 1;
       game.state.fear = (game.state.fear || 0) + 1;
-      game.state.heat += 1;
-      g.personalHeat = (g.personalHeat || 0) + 1;
+      game.state.heat += 2;
+      g.personalHeat = (g.personalHeat || 0) + 2;
     } },
   { id: 'actRaid', label: 'Raid Business (Fist)', stat: 'fist', base: 3500,
+    requires: { stat: 'fist', min: 2 },
     effect: (game, g, targetEl, targetItem) => {
       game.state.dirtyMoney += 1500;
       game.state.heat += 2;
@@ -185,12 +187,6 @@ export const ACTIONS = [
       game.state.inventory.push(item);
       game.updateUI();
     } },
-  { id: 'actPayCops', label: 'Pay Cops -$500', stat: 'brain', base: 3000,
-    cost: { money: 500 },
-    effect: (game) => {
-      game.state.heat = Math.max(0, (game.state.heat || 0) - 1);
-      game.updateUI();
-    } },
   { id: 'actDonate', label: 'Donate to Soup Kitchen (Brain)', stat: 'brain', base: 4000,
     cost: (game) => {
       if ((game.state.cleanMoney || 0) < 400) return false;
@@ -201,7 +197,8 @@ export const ACTIONS = [
       game.state.respect += 1;
       if (game.state.heat > 0) game.state.heat -= 1;
     } },
-  { id: 'actForgeAlibi', label: 'Forge Fake Alibi (Brain)', stat: 'brain', base: 3500,
+  { id: 'actForgeAlibi', label: 'Buy Alibi (Brain)', stat: 'brain', base: 3500,
+    requires: { stat: 'face', min: 2 },
     cost: { money: 500 },
     effect: (game) => {
       game.spawnTableCard('fake_alibi');
