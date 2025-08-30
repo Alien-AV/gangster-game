@@ -296,7 +296,7 @@ export function renderWorldCard(game, item) {
       <p class="world-card-descDyn"></p>
     </div>
   `;
-  // If gangster, render stat badges
+  // If gangster, render stat badge
   if (item.type === 'gangster') {
     const stats = (() => {
       // Prefer runtime gangster stats if gid present
@@ -309,7 +309,7 @@ export function renderWorldCard(game, item) {
     badges.className = 'world-card-stats';
     const b = document.createElement('div');
     b.className = 'stat-badge';
-    b.textContent = `Fa ${stats.face}  •  Fi ${stats.fist}  •  Br ${stats.brain}  •  Mt ${stats.meat}`;
+    b.textContent = `Face ${stats.face}  Fist ${stats.fist}  Brain ${stats.brain}  Meat ${stats.meat}`;
     badges.appendChild(b);
     const artEl = c.querySelector('.world-card-art');
     if (artEl) artEl.appendChild(badges); else c.appendChild(badges);
@@ -327,31 +327,6 @@ export function renderWorldCard(game, item) {
   const dynEl = c.querySelector('.world-card-descDyn');
   if (dynEl) dynEl.textContent = computeCardDynamic(game, item);
   if (item.type === 'recruit' && imgEl) imgEl.style.filter = 'grayscale(1) contrast(0.95)';
-  // If gangster, render stat badges centered over the art area
-  if (item.type === 'gangster') {
-    const stats = (() => {
-      const gid = item && item.data && typeof item.data.gid === 'number' ? item.data.gid : null;
-      const g = gid != null ? (game.state.gangsters || []).find(x => x.id === gid) : null;
-      const st = (g && g.stats) ? g.stats : (item.stats || {});
-      return { face: st.face || 0, fist: st.fist || 0, brain: st.brain || 0, meat: st.meat != null ? st.meat : 1 };
-    })();
-    const artEl = c.querySelector('.world-card-art');
-    if (artEl) {
-      const badges = document.createElement('div');
-      badges.className = 'world-card-stats';
-      const make = (cls, label, val) => {
-        const b = document.createElement('div');
-        b.className = 'stat-badge ' + cls;
-        b.textContent = label + ' ' + String(val);
-        return b;
-      };
-      badges.appendChild(make('stat-face', 'Fa', stats.face));
-      badges.appendChild(make('stat-fist', 'Fi', stats.fist));
-      badges.appendChild(make('stat-brain', 'Br', stats.brain));
-      badges.appendChild(make('stat-meat', 'Mt', stats.meat));
-      artEl.appendChild(badges);
-    }
-  }
     if (item.type === 'business') {
     const now = game.state.time || 0;
     if (item.extorted) {

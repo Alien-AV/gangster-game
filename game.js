@@ -73,7 +73,6 @@ export class Game {
     this.interval = setInterval(() => this.tick(), 1000);
 
     // Queued selection managers to avoid overlapping popups
-    this._gangsterSelect = { queue: [], active: false };
     this._illicitSelect = { queue: [], active: false };
     this._equipSelect = { queue: [], active: false };
     this._actionSelect = { queue: [], active: false };
@@ -87,7 +86,7 @@ export class Game {
     this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
     // Removed legacy pay cops action
     this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
-    this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
+    this._recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
     registerDefaultRecipes(this._recipes);
     // DOM caches for reconciliation and initial world paint
     this._dom = { cardByUid: new Map(), exploreWrap: null };
@@ -425,43 +424,7 @@ export class Game {
     ]);
   }
 
-  showGangsterTypeSelection(callback) {
-    // Enqueue the request and process if idle
-    this._gangsterSelect.queue.push(callback);
-    if (!this._gangsterSelect.active) this._processGangsterSelection();
-  }
-
-  _processGangsterSelection() {
-    const mgr = this._gangsterSelect;
-    if (mgr.active) return;
-    const next = mgr.queue.shift();
-    if (!next) return;
-    mgr.active = true;
-    const container = document.getElementById('gangsterChoice');
-    const faceBtn = document.getElementById('chooseFace');
-    const fistBtn = document.getElementById('chooseFist');
-    const brainBtn = document.getElementById('chooseBrain');
-    const cleanup = () => {
-      container.classList.add('hidden');
-      faceBtn.removeEventListener('click', onFace);
-      fistBtn.removeEventListener('click', onFist);
-      brainBtn.removeEventListener('click', onBrain);
-      mgr.active = false;
-      if (mgr.queue.length) this._processGangsterSelection();
-    };
-    const onChoose = type => {
-      // Clean up modal and listeners BEFORE updating UI to prevent DOM churn issues
-      cleanup();
-      try { next(type); } finally { this.updateUI(); }
-    };
-    const onFace = () => onChoose('face');
-    const onFist = () => onChoose('fist');
-    const onBrain = () => onChoose('brain');
-    faceBtn.addEventListener('click', onFace);
-    fistBtn.addEventListener('click', onFist);
-    brainBtn.addEventListener('click', onBrain);
-    container.classList.remove('hidden');
-  }
+  // Removed legacy gangster selection UI
 
   showIllicitBusinessSelection(callback) {
     this._illicitSelect.queue.push(callback);
@@ -647,6 +610,22 @@ export class Game {
 
   ensureCardNode(item, index) {
     if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
+    // Auto-initialize gangster cards without a linked entity
+    try {
+      if (item.type === 'gangster') {
+        const hasGid = item.data && typeof item.data.gid === 'number';
+        if (!hasGid) {
+          let gtype = 'face';
+          if (item.id === 'boss') gtype = 'boss';
+          else if (typeof item.id === 'string' && item.id.indexOf('gangster_') === 0) {
+            gtype = item.id.slice('gangster_'.length) || 'face';
+          }
+          const g = { id: this.state.nextGangId++, type: gtype, name: gtype === 'boss' ? 'Boss' : undefined, busy: false, personalHeat: 0, stats: this.defaultStatsForType(gtype) };
+          this.state.gangsters.push(g);
+          item.data = Object.assign({}, item.data, { gid: g.id, type: gtype });
+        }
+      }
+    } catch(e){}
     let wrap = this._dom.cardByUid.get(item.uid);
     if (!wrap) {
       const rendered = renderWorldCard(this, item);
@@ -1156,12 +1135,12 @@ export class Game {
       }
     }
 
-    // Start timed work and apply effect
+    // Start timed work and apply effect (capture context now to avoid race with concurrent actions)
+    const capturedCtx = this._pendingAction || {};
+    this._pendingAction = null;
     return this._startCardWork(g, progEl, durMs, () => {
-      const ctx = this._pendingAction || {};
-      this._pendingAction = null;
       if (action && typeof action.effect === 'function') {
-        action.effect(this, g, ctx.targetEl, ctx.targetItem);
+        action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem);
       }
     });
   }
@@ -1366,6 +1345,11 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
         this.updateUI();
       } else if (op.spawnCardId) {
         this.spawnTableCard(op.spawnCardId);
+      }
+      if (op.delayMs && cardEl) {
+        // Show a short processing ring for ops with delay
+        const ms = Math.max(500, op.delayMs);
+        this.runProgress(cardEl, ms, () => {});
       }
       if (op.consumeTarget) {
         const idx = tableCards.indexOf(targetItem);

@@ -4,6 +4,20 @@ import { startCountdown } from './progress-ring.js';
 // Each action: { id, label, stat, base, handler(game, gangster, progressEl, durationMs) }
 
 export const ACTIONS = [
+  // Timed recruit from a recruit card
+  { id: 'actRecruitFromCard', label: 'Recruit (Face)', stat: 'face', base: 2500,
+    effect: (game, g, targetEl, targetItem) => {
+      const t = (targetItem && targetItem.data && targetItem.data.type) || 'face';
+      const table = game.state.table; const cards = table && table.cards ? table.cards : [];
+      // Consume the recruit card
+      const idx = cards.indexOf(targetItem);
+      if (idx >= 0) { cards.splice(idx, 1); if (targetItem && targetItem.uid) game.removeCardByUid(targetItem.uid); }
+      // Create a proper gangster entity so it has stats/drag-and-drop behavior
+      const newG = { id: game.state.nextGangId++, type: t, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(t) };
+      game.state.gangsters.push(newG);
+      game.reconcileWorld();
+      game.updateUI();
+    } },
   // Unified Explore for any deck-like card: expects item.data.exploreIds
   { id: 'actExploreDeck', label: 'Explore (Brain)', stat: 'brain', base: 3500,
     effect: (game, g, targetEl) => {
@@ -170,11 +184,12 @@ export const ACTIONS = [
       return true;
     },
     effect: (game) => {
-      // Legacy modal removed; default to Face until explicit choices are reintroduced via UI
-      const type = 'face';
-      const g = { id: game.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
-      game.state.gangsters.push(g);
-      game.updateUI();
+      // Delay finalizing hire: show a queued selection after the action completes
+      game.showGangsterTypeSelection(type => {
+        const g = { id: game.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
+        game.state.gangsters.push(g);
+        game.updateUI();
+      });
     } },
   // Procure Equipment: lets player choose an equipment card to add to inventory
   { id: 'actProcureEquipment', label: 'Procure Equipment (Brain)', stat: 'brain', base: 3000,
@@ -201,6 +216,7 @@ export const ACTIONS = [
     requires: { stat: 'face', min: 2 },
     cost: { money: 500 },
     effect: (game) => {
+      // Add a short processing delay by spawning the paperwork after action completes (effect already runs post-timer)
       game.spawnTableCard('fake_alibi');
       game.updateUI();
     } },
