@@ -43,19 +43,12 @@ export function registerDefaultRecipes(recipes) {
   recipes.addRecipe(['opportunities','gangster'], ['actExploreDeck']);
   // Business interactions via chooser
   recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
-  // Recruit: recruit_* + gangster → spawn gangster of specific subtype and consume recruit
-  recipes.addRecipe(['recruit','gangster'], (ctx) => {
-    const t = (ctx && ctx.target && ctx.target.data && ctx.target.data.type) || 'face';
-    return [{ spawnGangsterType: t, consumeTarget: true }];
-  });
+  // Recruit: recruit_* + gangster → timed action to recruit from card
+  recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
   // Corrupt Cop + gangster → forge fake alibi (costs money)
   recipes.addRecipe(['cop','gangster'], ['actForgeAlibi']);
-  // Fake alibi + heat → consume both (safe clear)
-  recipes.addRecipe(['paperwork','heat'], (ctx) => {
-    const t = ctx && ctx.target; const s = ctx && ctx.gangster; // not used; context provided for parity
-    // Represent as an op that the engine will apply: consume target and a source marker
-    return [{ consumeTarget: true, consumeSource: true }];
-  });
+  // Fake alibi + heat → delayed safe clear (short processing time)
+  recipes.addRecipe(['paperwork','heat'], () => [{ consumeTarget: true, consumeSource: true, delayMs: 2500 }]);
   // Services map directly to single actions
   recipes.addRecipe(['service','gangster'], (ctx) => {
     const target = ctx && ctx.target;

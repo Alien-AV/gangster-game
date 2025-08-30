@@ -73,7 +73,6 @@ export class Game {
     this.interval = setInterval(() => this.tick(), 1000);
 
     // Queued selection managers to avoid overlapping popups
-    this._gangsterSelect = { queue: [], active: false };
     this._illicitSelect = { queue: [], active: false };
     this._equipSelect = { queue: [], active: false };
     this._actionSelect = { queue: [], active: false };
@@ -85,9 +84,9 @@ export class Game {
     // Default recipes
     this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
     this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
-    this._recipes.addRecipe(['cop','gangster'], ['actPayCops']);
+    // Removed legacy pay cops action
     this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
-    this._recipes.addRecipe(['recruit','gangster'], ['actHireGangster']);
+    this._recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
     registerDefaultRecipes(this._recipes);
     // DOM caches for reconciliation and initial world paint
     this._dom = { cardByUid: new Map(), exploreWrap: null };
@@ -425,43 +424,7 @@ export class Game {
     ]);
   }
 
-  showGangsterTypeSelection(callback) {
-    // Enqueue the request and process if idle
-    this._gangsterSelect.queue.push(callback);
-    if (!this._gangsterSelect.active) this._processGangsterSelection();
-  }
-
-  _processGangsterSelection() {
-    const mgr = this._gangsterSelect;
-    if (mgr.active) return;
-    const next = mgr.queue.shift();
-    if (!next) return;
-    mgr.active = true;
-    const container = document.getElementById('gangsterChoice');
-    const faceBtn = document.getElementById('chooseFace');
-    const fistBtn = document.getElementById('chooseFist');
-    const brainBtn = document.getElementById('chooseBrain');
-    const cleanup = () => {
-      container.classList.add('hidden');
-      faceBtn.removeEventListener('click', onFace);
-      fistBtn.removeEventListener('click', onFist);
-      brainBtn.removeEventListener('click', onBrain);
-      mgr.active = false;
-      if (mgr.queue.length) this._processGangsterSelection();
-    };
-    const onChoose = type => {
-      // Clean up modal and listeners BEFORE updating UI to prevent DOM churn issues
-      cleanup();
-      try { next(type); } finally { this.updateUI(); }
-    };
-    const onFace = () => onChoose('face');
-    const onFist = () => onChoose('fist');
-    const onBrain = () => onChoose('brain');
-    faceBtn.addEventListener('click', onFace);
-    fistBtn.addEventListener('click', onFist);
-    brainBtn.addEventListener('click', onBrain);
-    container.classList.remove('hidden');
-  }
+  // Removed legacy gangster selection UI
 
   showIllicitBusinessSelection(callback) {
     this._illicitSelect.queue.push(callback);
@@ -647,6 +610,22 @@ export class Game {
 
   ensureCardNode(item, index) {
     if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
+    // Auto-initialize gangster cards without a linked entity
+    try {
+      if (item.type === 'gangster') {
+        const hasGid = item.data && typeof item.data.gid === 'number';
+        if (!hasGid) {
+          let gtype = 'face';
+          if (item.id === 'boss') gtype = 'boss';
+          else if (typeof item.id === 'string' && item.id.indexOf('gangster_') === 0) {
+            gtype = item.id.slice('gangster_'.length) || 'face';
+          }
+          const g = { id: this.state.nextGangId++, type: gtype, name: gtype === 'boss' ? 'Boss' : undefined, busy: false, personalHeat: 0, stats: this.defaultStatsForType(gtype) };
+          this.state.gangsters.push(g);
+          item.data = Object.assign({}, item.data, { gid: g.id, type: gtype });
+        }
+      }
+    } catch(e){}
     let wrap = this._dom.cardByUid.get(item.uid);
     if (!wrap) {
       const rendered = renderWorldCard(this, item);
@@ -1050,6 +1029,42 @@ export class Game {
     return Math.max(500, Math.floor(baseMs / scale));
   }
 
+  // Uniform requirements checker for actions
+  // Supports:
+  // - function(game, gangster, ctx) → boolean | string (reason)
+  // - object { stat: 'fist'|'face'|'brain'|'meat', min: number }
+  // - array of the above (all must pass)
+  checkRequirements(action, gangster, ctx) {
+    const req = action && action.requires;
+    if (!req) return { ok: true };
+    const evalOne = (r) => {
+      if (!r) return { ok: true };
+      if (typeof r === 'function') {
+        const out = r(this, gangster, ctx);
+        if (out === true) return { ok: true };
+        if (out === false) return { ok: false, reason: 'Requirements not met' };
+        if (typeof out === 'string') return { ok: false, reason: out };
+        return { ok: !!out };
+      }
+      if (typeof r === 'object') {
+        if (r.stat && typeof r.min === 'number') {
+          const val = this.effectiveStat(gangster, r.stat) || 0;
+          if (val >= r.min) return { ok: true };
+          return { ok: false, reason: `${r.stat[0].toUpperCase()}${r.stat.slice(1)} ${r.min} required` };
+        }
+      }
+      return { ok: true };
+    };
+    if (Array.isArray(req)) {
+      for (const r of req) {
+        const res = evalOne(r);
+        if (!res.ok) return res;
+      }
+      return { ok: true };
+    }
+    return evalOne(req);
+  }
+
   tick() {
     const s = this.state;
     s.time += 1;
@@ -1092,14 +1107,21 @@ export class Game {
       if (!ok) return false;
     }
 
+    // Stat/other requirements
+    if (action && action.requires) {
+      const ctx = this._pendingAction && this._pendingAction.targetItem ? this._pendingAction.targetItem : null;
+      const res = this.checkRequirements(action, g, ctx);
+      if (!res.ok) { this._cardMsg(res.reason || 'Requirements not met'); return false; }
+    }
+
     // Costs
     if (action && action.cost) {
       if (typeof action.cost === 'function') {
         const ok = action.cost(this, g);
-        if (!ok) return false;
+        if (!ok) { this._cardMsg('Not enough money'); return false; }
       } else if (typeof action.cost === 'object') {
         if (action.cost.money) {
-          if (this.totalMoney() < action.cost.money) return false;
+          if (this.totalMoney() < action.cost.money) { this._cardMsg('Not enough money'); return false; }
           this.spendMoney(action.cost.money);
         }
         if (action.cost.respect) {
@@ -1113,12 +1135,12 @@ export class Game {
       }
     }
 
-    // Start timed work and apply effect
+    // Start timed work and apply effect (capture context now to avoid race with concurrent actions)
+    const capturedCtx = this._pendingAction || {};
+    this._pendingAction = null;
     return this._startCardWork(g, progEl, durMs, () => {
-      const ctx = this._pendingAction || {};
-      this._pendingAction = null;
       if (action && typeof action.effect === 'function') {
-        action.effect(this, g, ctx.targetEl, ctx.targetItem);
+        action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem);
       }
     });
   }
@@ -1235,8 +1257,11 @@ export class Game {
     (options || []).forEach(opt => {
       const b = document.createElement('button');
       b.textContent = opt.label || opt.id;
+      if (opt && opt.title) b.title = opt.title;
+      if (opt && opt.disabled) b.disabled = true;
       b.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (b.disabled) return;
         this._destroyInlineChoice();
         onChoose && onChoose(opt.id);
       });
@@ -1249,9 +1274,13 @@ export class Game {
       }
     };
     document.addEventListener('click', onDoc, { once: true });
-    // Attach to anchor card
-    anchorEl.style.position = anchorEl.style.position || 'relative';
-    anchorEl.appendChild(chooser);
+    // Position chooser centered over the anchor card using viewport coordinates
+    const rect = anchorEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    chooser.style.left = cx + 'px';
+    chooser.style.top = cy + 'px';
+    document.body.appendChild(chooser);
     this._activeInlineChoice = chooser;
   }
 
@@ -1317,6 +1346,11 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
       } else if (op.spawnCardId) {
         this.spawnTableCard(op.spawnCardId);
       }
+      if (op.delayMs && cardEl) {
+        // Show a short processing ring for ops with delay
+        const ms = Math.max(500, op.delayMs);
+        this.runProgress(cardEl, ms, () => {});
+      }
       if (op.consumeTarget) {
         const idx = tableCards.indexOf(targetItem);
         if (idx >= 0) {
@@ -1347,7 +1381,12 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
     runAction(baseActions[0]);
     return;
   }
-  const options = baseActions.map(a => ({ id: a.id, label: a.label || a.id }));
+  const options = baseActions.map(a => {
+    const res = (typeof this.checkRequirements === 'function') ? this.checkRequirements(a, gangster, targetItem) : { ok: true };
+    const baseLabel = a.label || a.id;
+    const label = res && !res.ok && res.reason ? `${baseLabel} (${res.reason})` : baseLabel;
+    return { id: a.id, label, disabled: res && !res.ok, title: res && !res.ok ? res.reason : '' };
+  });
   this.showInlineActionChoice(cardEl, options, (choiceId) => {
     const chosen = baseActions.find(a => a.id === choiceId);
     if (!chosen) return;

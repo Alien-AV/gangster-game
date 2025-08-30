@@ -4,6 +4,20 @@ import { startCountdown } from './progress-ring.js';
 // Each action: { id, label, stat, base, handler(game, gangster, progressEl, durationMs) }
 
 export const ACTIONS = [
+  // Timed recruit from a recruit card
+  { id: 'actRecruitFromCard', label: 'Recruit (Face)', stat: 'face', base: 2500,
+    effect: (game, g, targetEl, targetItem) => {
+      const t = (targetItem && targetItem.data && targetItem.data.type) || 'face';
+      const table = game.state.table; const cards = table && table.cards ? table.cards : [];
+      // Consume the recruit card
+      const idx = cards.indexOf(targetItem);
+      if (idx >= 0) { cards.splice(idx, 1); if (targetItem && targetItem.uid) game.removeCardByUid(targetItem.uid); }
+      // Create a proper gangster entity so it has stats/drag-and-drop behavior
+      const newG = { id: game.state.nextGangId++, type: t, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(t) };
+      game.state.gangsters.push(newG);
+      game.reconcileWorld();
+      game.updateUI();
+    } },
   // Unified Explore for any deck-like card: expects item.data.exploreIds
   { id: 'actExploreDeck', label: 'Explore (Brain)', stat: 'brain', base: 3500,
     effect: (game, g, targetEl) => {
@@ -68,13 +82,15 @@ export const ACTIONS = [
     },
     effect: (game) => { game.state.respect += 1; } },
   { id: 'actVigilante', label: 'Vigilante Patrol (Fist)', stat: 'fist', base: 3000,
+    requires: { stat: 'fist', min: 3 },
     effect: (game, g) => {
       game.state.respect += 1;
       game.state.fear = (game.state.fear || 0) + 1;
-      game.state.heat += 1;
-      g.personalHeat = (g.personalHeat || 0) + 1;
+      game.state.heat += 2;
+      g.personalHeat = (g.personalHeat || 0) + 2;
     } },
   { id: 'actRaid', label: 'Raid Business (Fist)', stat: 'fist', base: 3500,
+    requires: { stat: 'fist', min: 2 },
     effect: (game, g, targetEl, targetItem) => {
       game.state.dirtyMoney += 1500;
       game.state.heat += 2;
@@ -168,11 +184,12 @@ export const ACTIONS = [
       return true;
     },
     effect: (game) => {
-      // Legacy modal removed; default to Face until explicit choices are reintroduced via UI
-      const type = 'face';
-      const g = { id: game.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
-      game.state.gangsters.push(g);
-      game.updateUI();
+      // Delay finalizing hire: show a queued selection after the action completes
+      game.showGangsterTypeSelection(type => {
+        const g = { id: game.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
+        game.state.gangsters.push(g);
+        game.updateUI();
+      });
     } },
   // Procure Equipment: lets player choose an equipment card to add to inventory
   { id: 'actProcureEquipment', label: 'Procure Equipment (Brain)', stat: 'brain', base: 3000,
@@ -185,12 +202,6 @@ export const ACTIONS = [
       game.state.inventory.push(item);
       game.updateUI();
     } },
-  { id: 'actPayCops', label: 'Pay Cops -$500', stat: 'brain', base: 3000,
-    cost: { money: 500 },
-    effect: (game) => {
-      game.state.heat = Math.max(0, (game.state.heat || 0) - 1);
-      game.updateUI();
-    } },
   { id: 'actDonate', label: 'Donate to Soup Kitchen (Brain)', stat: 'brain', base: 4000,
     cost: (game) => {
       if ((game.state.cleanMoney || 0) < 400) return false;
@@ -201,9 +212,11 @@ export const ACTIONS = [
       game.state.respect += 1;
       if (game.state.heat > 0) game.state.heat -= 1;
     } },
-  { id: 'actForgeAlibi', label: 'Forge Fake Alibi (Brain)', stat: 'brain', base: 3500,
+  { id: 'actForgeAlibi', label: 'Buy Alibi (Brain)', stat: 'brain', base: 3500,
+    requires: { stat: 'face', min: 2 },
     cost: { money: 500 },
     effect: (game) => {
+      // Add a short processing delay by spawning the paperwork after action completes (effect already runs post-timer)
       game.spawnTableCard('fake_alibi');
       game.updateUI();
     } },

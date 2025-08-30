@@ -164,6 +164,9 @@
         .world-card .progress .progress-bar { height:100%; background: var(--prog-bar); }
         .world-card-badge { position:absolute; top:6px; right:6px; font-size:12px; padding:2px 6px; border-radius:10px; background: rgba(0,0,0,0.5); }
         .world-card-badge.left{ left:6px; right:auto; }
+        /* Stat badges on gangster cards - subtle and centered over art */
+        .world-card-art .world-card-stats { position:absolute; left:50%; bottom:8px; transform: translateX(-50%); display:flex; gap:0; z-index:5; pointer-events:none; }
+        .world-card-stats .stat-badge { font-size:12px; padding:3px 10px; border-radius:999px; background: rgba(0,0,0,0.75); border:1px solid rgba(255,255,255,0.18); color:#e0e0e0; text-shadow:0 1px 0 #000; }
         .ring-wrap { position: relative; }
         .ring-wrap .world-card{ position: relative; z-index: 1; }
         .ring-wrap.ring-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#b49a63 calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
@@ -190,10 +193,10 @@
         }
         .world-card-center-badge.badge-busy { background: rgba(20,26,30,0.9); color:#e8f6ff; border-color: rgba(255,255,255,0.35); }
         .world-card-center-badge.badge-recover { background:#331d1d; color:#ffb3b3; border-color:#663333; }
-        /* Inline choice popup: grid layout with intrinsic columns */
-        .inline-choice { position:absolute; left:50%; transform: translate(-50%, -8px); bottom: calc(var(--card-desc-h) + 10px); background:#111; border:1px solid #444; border-radius:8px; padding:8px; display:grid; grid-template-columns: repeat(2, max-content); justify-content:center; align-items:center; gap:8px; z-index: 20; box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
-        .inline-choice .inline-choice-title { grid-column: 1 / -1; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px; font-size:12px; text-align:center; color: var(--card-ink); }
-        .inline-choice button { background:#222; color:var(--card-ink); border:1px solid #555; padding:8px 12px; border-radius:6px; font-size:13px; white-space: nowrap; width: auto; }
+        /* Inline choice popup: floating over card, vertical options */
+        .inline-choice { position: fixed; background:#111; border:1px solid #444; border-radius:8px; padding:8px; display:flex; flex-direction: column; justify-content:flex-start; align-items:stretch; gap:8px; z-index: 3000; box-shadow: 0 10px 24px rgba(0,0,0,0.45); max-width: 240px; transform: translate(-50%, -50%); }
+        .inline-choice .inline-choice-title { font-weight:800; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px; font-size:12px; text-align:center; color: var(--card-ink); }
+        .inline-choice button { background:#222; color:var(--card-ink); border:1px solid #555; padding:8px 12px; border-radius:6px; font-size:13px; white-space: nowrap; width: 100%; text-align:center; }
         .inline-choice button:hover { background:#2b2b2b; }
         .inline-choice.hidden { display:none; }
         @media (hover:hover) and (pointer:fine) { .popover { position: absolute; left: 50%; transform: translate(-50%, -8px); bottom: calc(var(--card-desc-h) + 8px); background: #111; color: var(--card-ink); border: 1px solid #333; border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.2; z-index: 10; max-width: 220px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); } .popover.hidden { display: none; } }
@@ -258,12 +261,7 @@
 
   <!-- Inline selection modals (kept) -->
 
-<div id="gangsterChoice" class="hidden">
-    <p>Select gangster type:</p>
-    <button id="chooseFace">Face</button>
-    <button id="chooseFist">Fist</button>
-    <button id="chooseBrain">Brain</button>
-</div>
+<!-- legacy gangster type chooser removed -->
 
 <div id="illicitChoice" class="hidden">
     <p>Select illicit business type:</p>
