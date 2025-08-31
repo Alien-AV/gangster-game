@@ -47,8 +47,8 @@ export function registerDefaultRecipes(recipes) {
   recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
   // Corrupt Cop + gangster → forge fake alibi (costs money)
   recipes.addRecipe(['cop','gangster'], ['actForgeAlibi']);
-  // Fake alibi + heat → delayed safe clear (short processing time)
-  recipes.addRecipe(['paperwork','heat'], () => [{ consumeTarget: true, consumeSource: true, delayMs: 2500 }]);
+  // Fake alibi + heat → timed action
+  recipes.addRecipe(['paperwork','heat'], ['actUseAlibi']);
   // Services map directly to single actions
   recipes.addRecipe(['service','gangster'], (ctx) => {
     const target = ctx && ctx.target;

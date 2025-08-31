@@ -1,5 +1,5 @@
 import { Deck } from './deck.js';
-import { startCountdown } from './progress-ring.js';
+import { startCountdown, clearRing } from './progress-ring.js';
 // Declarative action registry for card UI
 // Each action: { id, label, stat, base, handler(game, gangster, progressEl, durationMs) }
 
@@ -62,7 +62,7 @@ export const ACTIONS = [
       game.state.respect += 1;
       game.updateUI();
     } },
-  { id: 'actLaunder', label: 'Launder $1000 (Brain)', stat: 'brain', base: 4000,
+  { id: 'actLaunder', label: 'Launder $1000', base: 4000,
     cost: (game) => {
       if ((game.state.dirtyMoney || 0) < 1000) return false;
       game.state.dirtyMoney -= 1000;
@@ -74,14 +74,14 @@ export const ACTIONS = [
       game.state.cleanMoney += base + bonus;
       g.personalHeat = (g.personalHeat || 0) + 1;
     } },
-  { id: 'actPromo', label: 'Promotional Campaign (Face)', stat: 'face', base: 3000,
+  { id: 'actPromo', label: 'Promotional Campaign', base: 3000,
     cost: (game) => {
       if ((game.state.dirtyMoney || 0) < 500) return false;
       game.state.dirtyMoney -= 500;
       return true;
     },
     effect: (game) => { game.state.respect += 1; } },
-  { id: 'actVigilante', label: 'Vigilante Patrol (Fist)', stat: 'fist', base: 3000,
+  { id: 'actVigilante', label: 'Vigilante Patrol', base: 3000,
     requires: { stat: 'fist', min: 3 },
     effect: (game, g) => {
       game.state.respect += 1;
@@ -89,7 +89,7 @@ export const ACTIONS = [
       game.state.heat += 2;
       g.personalHeat = (g.personalHeat || 0) + 2;
     } },
-  { id: 'actRaid', label: 'Raid Business (Fist)', stat: 'fist', base: 3500,
+  { id: 'actRaid', label: 'Raid Business', base: 3500,
     requires: { stat: 'fist', min: 2 },
     effect: (game, g, targetEl, targetItem) => {
       game.state.dirtyMoney += 1500;
@@ -132,7 +132,7 @@ export const ACTIONS = [
       }
       game.spawnTableCard('heat');
     } },
-  { id: 'actExtort', label: 'Extort (Face)', stat: 'face', base: 4000,
+  { id: 'actExtort', label: 'Extort', base: 4000,
     effect: (game, g, targetEl, targetItem) => {
       const tableCards = game.state.table.cards;
       const idx = tableCards.indexOf(targetItem);
@@ -165,7 +165,7 @@ export const ACTIONS = [
         game.state.extortedBusinesses = (game.state.extortedBusinesses || 0) + 1;
       }
     } },
-  { id: 'actBuildIllicit', label: 'Build Illicit (Brain)', stat: 'brain', base: 4000,
+  { id: 'actBuildIllicit', label: 'Build Illicit', base: 4000,
     prereq: (game) => (game.state.businesses - game.state.illicit) > 0,
     effect: (game, g) => {
       const s = game.state;
@@ -176,23 +176,9 @@ export const ACTIONS = [
         game.updateUI();
       });
     } },
-  { id: 'actHireGangster', label: 'Hire Gangster (Face)', stat: 'face', base: 3000,
-    cost: (game) => {
-      const cost = game.gangsterCost ? game.gangsterCost() : 0;
-      if (game.totalMoney() < cost) return false;
-      game.spendMoney(cost);
-      return true;
-    },
-    effect: (game) => {
-      // Delay finalizing hire: show a queued selection after the action completes
-      game.showGangsterTypeSelection(type => {
-        const g = { id: game.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(type) };
-        game.state.gangsters.push(g);
-        game.updateUI();
-      });
-    } },
+  
   // Procure Equipment: lets player choose an equipment card to add to inventory
-  { id: 'actProcureEquipment', label: 'Procure Equipment (Brain)', stat: 'brain', base: 3000,
+  { id: 'actProcureEquipment', label: 'Procure Equipment', base: 3000,
     cost: { money: 200 },
     effect: (game) => {
       if (!Array.isArray(game.state.inventory)) game.state.inventory = [];
@@ -202,7 +188,7 @@ export const ACTIONS = [
       game.state.inventory.push(item);
       game.updateUI();
     } },
-  { id: 'actDonate', label: 'Donate to Soup Kitchen (Brain)', stat: 'brain', base: 4000,
+  { id: 'actDonate', label: 'Donate to Soup Kitchen', base: 4000,
     cost: (game) => {
       if ((game.state.cleanMoney || 0) < 400) return false;
       game.state.cleanMoney -= 400;
@@ -212,7 +198,7 @@ export const ACTIONS = [
       game.state.respect += 1;
       if (game.state.heat > 0) game.state.heat -= 1;
     } },
-  { id: 'actForgeAlibi', label: 'Buy Alibi (Brain)', stat: 'brain', base: 3500,
+  { id: 'actForgeAlibi', label: 'Buy Alibi', base: 3500,
     requires: { stat: 'face', min: 2 },
     cost: { money: 500 },
     effect: (game) => {
@@ -220,7 +206,22 @@ export const ACTIONS = [
       game.spawnTableCard('fake_alibi');
       game.updateUI();
     } },
-  { id: 'actIntimidate', label: 'Intimidate (Fist)', stat: 'fist', base: 3000,
+  // Timed use of a fake alibi on heat
+  { id: 'actUseAlibi', label: 'Use Alibi', base: 2500,
+    effect: (game, g, targetEl, targetItem) => {
+      const table = game.state.table; const cards = table && table.cards ? table.cards : [];
+      // Clear any heat countdown ring on the specific target heat card
+      const wrap = targetEl && targetEl.closest ? targetEl.closest('.ring-wrap') : null;
+      if (wrap) { try { clearRing(wrap, 'heat'); } catch(e){} }
+      // Remove the exact target heat card
+      const tidx = cards.indexOf(targetItem);
+      if (tidx >= 0) { const it = cards[tidx]; cards.splice(tidx, 1); if (it && it.uid) game.removeCardByUid(it.uid); }
+      // Remove one fake_alibi from table
+      const aidx = cards.findIndex(x => x && x.id === 'fake_alibi');
+      if (aidx >= 0) { const it2 = cards[aidx]; cards.splice(aidx, 1); if (it2 && it2.uid) game.removeCardByUid(it2.uid); }
+      game.updateUI();
+    } },
+  { id: 'actIntimidate', label: 'Intimidate', base: 3000,
     effect: (game, g) => {
       if (game.state.disagreeableOwners > 0) game.state.disagreeableOwners -= 1;
       game.state.fear = (game.state.fear || 0) + 1;

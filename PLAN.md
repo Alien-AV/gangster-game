@@ -42,3 +42,22 @@ This file tracks near-term tasks to align the prototype with the intended design
 - Buy business fronts, create illegal businesses behind.
 
 - Save/load the actions progress - it's currently possible to start an action on one save, load during the action, and get the effects on another save.
+
+
+## Abstraction, unification, consolidation
+
+Hood card has too much special treatment, like so:
+// 2) Ensure Neighborhood explore card exists and updated
+    const ndeck = (this._decks || {}).neighborhood;
+    const disabled = !ndeck || !ndeck.hasMore();
+    if (!this._dom.exploreWrap) {
+      const wrap = document.createElement('div'); wrap.className = 'ring-wrap';
+      const exploreCard = document.createElement('div'); exploreCard.className = 'card world-card';
+    exploreCard.innerHTML = `
+      <div class="world-card-title">Neighborhood</div>
+      <div class="world-card-art">
+          <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
+        <div class="world-card-artEmoji hidden">🏙️</div>
+      </div>
+      <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
+    `;
