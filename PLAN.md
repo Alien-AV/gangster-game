@@ -1,31 +1,4 @@
-# Short-term Plan
-
-- card render rework and unification project
-  - Goals
-    - Unify card rendering into a single function that builds common HTML and conditionally adds specifics based on the card definition.
-    - Eliminate duplicated rendering code between `renderWorldCard` and `ensureGangsterNode`. (DONE)
-    - Move hints, descriptions, stats, and drag behavior declarations into `CARD_DEFS`. (DONE)
-    - Cards declare `handlers` (e.g., `onCreate`, `onExpire`) by name; actual functions live in `card.js` in a shared handlers map. (PARTIAL: onCreate in place; others as needed)
-  - Steps
-    1) Add complete data to `CARD_DEFS` for all cards, including gangsters and boss: images, descriptions, hints, stats, draggable flags, and handler pointers. (DONE)
-    2) Update `renderWorldCard` to read from `CARD_DEFS` and render:
-       - Base title/art/desc
-       - Optional stats block if `stats` present
-       - Optional badges/timers based on type/state
-       - Apply `draggable` uniformly if declared
-    3) Replace the gangster-specific HTML in `ensureGangsterNode` with a call to the unified renderer and type hooks; keep only data-binding (dataset gid) and gangster-only event wiring if still needed. (DONE)
-    4) Remove hints from `getCardInfo`; read hints directly from `CARD_DEFS`. (DONE)
-    5) Replace `CARD_BEHAVIORS` per-type rendering tweaks with small renderer hooks or per-type sections in the unified renderer when necessary. (IN PROGRESS)
-    6) Delete any remaining duplicate code paths; ensure tests and lint pass. (IN PROGRESS)
-
-This file tracks near-term tasks to align the prototype with the intended design. It explains what we are about to build, why, and serves as the single source of truth for updating docs and implementation in lockstep.
-
 ## Upcoming changes
-
-- Rework heat mechanic (remove global heat counter)
-  - Replace the global heat/heatProgress with spawned Heat cards on the table.
-  - Each Heat card has a timer and a consequence on expiration (e.g., fines, crackdowns, loss of assets).
-  - Existing mitigation actions (Pay Cops, Donate, Intimidate) will interact with/disarm Heat cards.
 
 - Enforcer stack rework and assignment model
   - The `enforcers` table card is a stack; dragging from it extracts a single enforcer unit for assignment to a target card.
@@ -46,18 +19,39 @@ This file tracks near-term tasks to align the prototype with the intended design
 
 ## Abstraction, unification, consolidation
 
-Hood card has too much special treatment, like so:
-// 2) Ensure Neighborhood explore card exists and updated
-    const ndeck = (this._decks || {}).neighborhood;
-    const disabled = !ndeck || !ndeck.hasMore();
-    if (!this._dom.exploreWrap) {
-      const wrap = document.createElement('div'); wrap.className = 'ring-wrap';
-      const exploreCard = document.createElement('div'); exploreCard.className = 'card world-card';
-    exploreCard.innerHTML = `
-      <div class="world-card-title">Neighborhood</div>
-      <div class="world-card-art">
-          <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
-        <div class="world-card-artEmoji hidden">🏙️</div>
-      </div>
-      <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
-    `;
+ - Placeholder to keep track of discovered opportunities for refactoring.
+
+## Multi-card recipes and persistent stacks (proposal)
+
+Principles
+- Only stacks: all interactions are stack-based. Dropping a card on another only stacks it; no direct recipe execution from a drop path.
+- Equal cards: no target/source semantics. A stack is an unordered set of cards residing on a host card.
+- Visual stacking: stacked cards render as overlapped mini-cards (partially covering). Any stacked card can be dragged out to unstack (even from beneath others).
+
+Flow
+1) Player drops card A onto card B → A is added to B’s stack.
+2) On any stack change (add/remove), recipe engine matches against the set of member types/ids (host + all stacked cards).
+3) If multiple actions match, show chooser; if one, run; if none, do nothing.
+4) Actions run via the standard infra (`executeAction` + `runProgress`).
+5) After completion, infra consumes specific stack members per recipe’s consumption rule (no target/source; equal-card model).
+6) Persistent stacks: recipes may be marked persistent. After an action completes, re-match the current stack; if the recipe still matches, re-run through the same flow (no custom loop fields; reuse action base timing).
+
+Implementation steps
+1) Stack data + UI
+   - Add optional `stack: string[]` to table cards (persisted).
+   - Render overlapped mini-cards on host; support drag-out to unstack.
+2) Drop always stacks
+   - Change drop handlers to append to stack; remove immediate pairwise execution.
+3) Recipe engine
+   - Accept a multiset of member types/ids from host+stack; remove dragged-card special casing.
+   - Allow recipes to declare post-action consumption as a list of member selectors (type/id) to remove from the stack.
+4) Execution
+   - Hook stack matching into chooser/execution; after action, consume exact instances and update the stack.
+5) Persistence
+   - Save/load stacks alongside table cards; reconcile visuals on load.
+
+Open questions
+- Exact mini-card visuals and hit-targets for overlapped stacks.
+- Declarative syntax for consumption rules (types vs ids vs counts).
+
+ 
