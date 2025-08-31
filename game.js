@@ -76,6 +76,8 @@ export class Game {
     this._equipSelect = { queue: [], active: false };
     this._actionSelect = { queue: [], active: false };
 
+    // DOM caches for reconciliation and initial world paint
+    this._dom = { cardByUid: new Map() };
     // Initialize world table / deck system
     this.initTable();
     // Initialize recipe engine with simple single-card mappings (scaffolding)
@@ -86,8 +88,6 @@ export class Game {
     this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
     this._recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
     registerDefaultRecipes(this._recipes);
-    // DOM caches for reconciliation and initial world paint
-    this._dom = { cardByUid: new Map(), exploreWrap: null };
     this.reconcileWorld && this.reconcileWorld();
 
     // Global drag state to prevent world re-render flicker while hovering over droppables
@@ -184,12 +184,9 @@ export class Game {
     try {
       const data = JSON.parse(raw);
       console.debug('[LoadSlot] parsed data', data);
+      // Hard reset world/table/DOM before applying loaded state
+      this._resetWorld();
       Object.assign(this.state, data);
-      // Back-compat: migrate legacy 'territory' to 'extortedBusinesses'
-      if (this.state.extortedBusinesses == null && typeof data.territory === 'number') {
-        this.state.extortedBusinesses = data.territory;
-        delete this.state.territory;
-      }
       this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [] }));
       // Ensure Boss exists
       if (!this.state.gangsters.some(x => x.type === 'boss')) {
@@ -197,7 +194,6 @@ export class Game {
         this.state.gangsters.unshift(bossGang);
       }
       // Reset modal queues and refresh UI
-      this._gangsterSelect = { queue: [], active: false };
       this._illicitSelect = { queue: [], active: false };
       this._equipSelect = { queue: [], active: false };
       console.debug('[LoadSlot] state:', this.state);
@@ -222,19 +218,16 @@ export class Game {
     }
     try {
       const data = JSON.parse(raw);
+      // Hard reset world/table/DOM before applying loaded state
+      this._resetWorld();
       Object.assign(this.state, data);
       this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
     this.updateUI();
-    // Removed actions panel
-    // Ensure Boss exists as a normal gangster with special stats/name
-    if (!this.state.gangsters.some(g => g.type === 'boss')) {
-      const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
-      this.state.gangsters.unshift(bossGang);
-    }
     // Ensure table exists
+    this._decks = {};
     this.initTable();
   }
 
@@ -522,6 +515,8 @@ export class Game {
     if (!this.state.table || !Array.isArray(this.state.table.cards)) {
       this.state.table = { cards: [] };
     }
+    // Spawn the Neighborhood card at game start
+    this.spawnTableCard('neighborhood');
     // Build runtime deck objects (not saved directly)
     this._decks = this._decks || {};
     // Build decks from declarative card defs (any card with data.deck)
@@ -550,39 +545,19 @@ export class Game {
     return document.getElementById('worldArea');
   }
 
-  _ensureExploreWrap() {
-    if (this._dom.exploreWrap) return this._dom.exploreWrap;
-    // Spawn a proper 'neighborhood' card using the unified infra
-    const wrap = document.createElement('div');
-    wrap.className = 'ring-wrap';
-    const card = makeCard('neighborhood');
-    // Ensure a temporary UID for a non-table managed card, store wrap for placement
-    card.uid = card.uid || 'c_' + Math.random().toString(36).slice(2);
-    const rendered = renderWorldCard(this, card);
-    wrap.appendChild(rendered.card);
-    // Drop behavior routed through generic handler
-    const ndeck = (this._decks || {}).neighborhood; const disabled = !ndeck || !ndeck.hasMore();
-    const cardEl = rendered.card;
-    if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
-      cardEl.addEventListener('mouseenter', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: card.desc, hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
-      cardEl.addEventListener('mouseleave', () => this._hideInfoPanel());
-    }
-    cardEl.addEventListener('click', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: card.desc, hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
-    cardEl.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); cardEl.classList.add('highlight'); });
-    cardEl.addEventListener('dragleave', () => cardEl.classList.remove('highlight'));
-    cardEl.addEventListener('drop', ev => {
-      if (disabled) return;
-      ev.preventDefault(); cardEl.classList.remove('highlight');
-      const idStr = ev.dataTransfer.getData('text/plain');
-      const gid = parseInt(idStr, 10);
-      const g = this.state.gangsters.find(x => x.id === gid);
-      if (!g || g.busy) return;
-      // Use recipe generic handler
-      this._handleGenericOnDrop(card, g, cardEl);
-    });
-    this._dom.exploreWrap = wrap;
-    return wrap;
+  // Completely remove all world card DOM and reset table state
+  _resetWorld() {
+    try {
+      const map = this._dom && this._dom.cardByUid ? this._dom.cardByUid : new Map();
+      for (const [, wrap] of Array.from(map.entries())) {
+        try { wrap.remove(); } catch(e){}
+      }
+      if (this._dom && this._dom.cardByUid) this._dom.cardByUid.clear();
+    } catch(e){}
+    this.state.table = { cards: [] };
   }
+
+  // Removed neighborhood-specific explore wrapper
 
   ensureGangsterNode(g) {
     // Deprecated: kept temporarily for back-compat; use ensureCardNode with uid 'g_<gid>' instead
@@ -678,15 +653,14 @@ export class Game {
         if (dyn) dyn.textContent = computeCardDynamic(this, item) || '';
       }
     } catch(e){}
-    // Insert/reposition at appropriate position: [gangsters][explore][cards]
+    // Insert/reposition at appropriate position: [gangsters][cards]
     const container = this._worldContainer();
     if (!container) return wrap;
-    this._ensureExploreWrap();
     if (item.type === 'gangster') {
       // No special section: append naturally
       if (wrap.parentElement !== container) container.appendChild(wrap);
     } else if (typeof index === 'number') {
-      const offset = (this.state.gangsters || []).length + 1; // +1 explore
+      const offset = (this.state.gangsters || []).length;
       const desiredPosition = offset + index;
       const current = container.childNodes[desiredPosition];
       if (container.childNodes[desiredPosition] !== wrap) {
@@ -737,53 +711,7 @@ export class Game {
       desiredNodes.push(wrap);
     });
 
-    // 2) Ensure Neighborhood explore card exists and updated
-    const ndeck = (this._decks || {}).neighborhood;
-    const disabled = !ndeck || !ndeck.hasMore();
-    if (!this._dom.exploreWrap) {
-      const wrap = document.createElement('div'); wrap.className = 'ring-wrap';
-      const exploreCard = document.createElement('div'); exploreCard.className = 'card world-card';
-    exploreCard.innerHTML = `
-      <div class="world-card-title">Neighborhood</div>
-      <div class="world-card-art">
-          <img class="world-card-artImg" src="images/neighborhood.png" alt="Neighborhood">
-        <div class="world-card-artEmoji hidden">🏙️</div>
-      </div>
-      <div class="world-card-desc"><p class="world-card-descText">Your turf. Discover rackets, marks, and useful connections.</p></div>
-    `;
-    exploreCard.removeAttribute('title');
-      const img = exploreCard.querySelector('.world-card-artImg');
-      const emojiEl = exploreCard.querySelector('.world-card-artEmoji');
-      if (img) img.addEventListener('error', () => { if (emojiEl) emojiEl.classList.remove('hidden'); img.remove(); });
-    if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
-        exploreCard.addEventListener('mouseenter', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
-      exploreCard.addEventListener('mouseleave', () => this._hideInfoPanel());
-    }
-      exploreCard.addEventListener('click', () => this._showInfoPanel({ title: 'Neighborhood', stats: '', desc: 'Your turf. Discover rackets, marks, and useful connections.', hint: disabled ? 'Deck exhausted' : 'Drop a gangster to explore' }));
-    exploreCard.addEventListener('dragover', ev => { if (disabled) return; ev.preventDefault(); exploreCard.classList.add('highlight'); });
-    exploreCard.addEventListener('dragleave', () => exploreCard.classList.remove('highlight'));
-    exploreCard.addEventListener('drop', ev => {
-      if (disabled) return;
-      ev.preventDefault();
-      exploreCard.classList.remove('highlight');
-      const idStr = ev.dataTransfer.getData('text/plain');
-      const gid = parseInt(idStr, 10);
-      const g = this.state.gangsters.find(x => x.id === gid);
-      if (!g || g.busy) return;
-      const act = (ACTIONS || []).find(a => a.id === 'actExploreDeck');
-      if (!act) return;
-      const dur = this.durationWithStat(act.base, act.stat, g);
-      const ok = this.executeAction(act, g, exploreCard, dur);
-      if (!ok) this._cardMsg('Cannot explore.');
-    });
-      wrap.appendChild(exploreCard);
-      this._dom.exploreWrap = wrap;
-    }
-    const exploreCard = this._dom.exploreWrap.querySelector('.world-card');
-    if (exploreCard) exploreCard.style.opacity = disabled ? '0.5' : '1.0';
-    desiredNodes.push(this._dom.exploreWrap);
-
-    // 3) Reconcile discovered table cards
+    // 2) Reconcile discovered table cards (including any deck cards)
     const attachDrop = (cardEl, onDrop, prog) => {
       if (cardEl._dropBound) return;
       cardEl.addEventListener('dragover', ev => { ev.preventDefault(); cardEl.classList.add('highlight'); });
