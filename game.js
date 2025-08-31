@@ -1,6 +1,6 @@
 // JavaScript for Gangster Game moved from index.html
 import { ACTIONS } from './actions.js';
-import { makeCard, CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
+import { makeCard, CARD_DEFS,CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
 import { clearRing } from './progress-ring.js';
@@ -42,7 +42,6 @@ export class Game {
 
     
 
-    // Removed Pay Cops button wiring
     document.getElementById('resetGame').onclick = () => {
       localStorage.removeItem('gameState');
       location.reload();
@@ -84,7 +83,6 @@ export class Game {
     // Default recipes
     this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
     this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
-    // Removed legacy pay cops action
     this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
     this._recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
     registerDefaultRecipes(this._recipes);
@@ -146,16 +144,17 @@ export class Game {
       nextGangId: s.nextGangId,
       salaryTick: s.salaryTick,
       table: s.table || null,
-      // Persist deck states (neighborhood only for now)
+      // Persist deck states (all decks)
       decks: (() => {
         const res = {};
         const d = this._decks || {};
-        const n = d.neighborhood;
-        if (n) {
-          res.neighborhood = {
-            start: Array.isArray(n._start) ? n._start.slice() : [],
-            middle: Array.isArray(n._middle) ? n._middle.slice() : [],
-            end: Array.isArray(n._end) ? n._end.slice() : [],
+        for (const key of Object.keys(d)) {
+          const deck = d[key];
+          if (!deck) continue;
+          res[key] = {
+            start: Array.isArray(deck._start) ? deck._start.slice() : [],
+            middle: Array.isArray(deck._middle) ? deck._middle.slice() : [],
+            end: Array.isArray(deck._end) ? deck._end.slice() : [],
           };
         }
         return res;
@@ -525,22 +524,23 @@ export class Game {
     }
     // Build runtime deck objects (not saved directly)
     this._decks = this._decks || {};
-    if (!this._decks.neighborhood) {
-      const snap = (this.state.decks && this.state.decks.neighborhood) || null;
+    // Build decks from declarative card defs (any card with data.deck)
+    const deckIds = CARD_DEFS.filter(c => c && c.data && c.data.deck === true).map(c => c.id);
+    for (const id of deckIds) {
+      if (this._decks[id]) continue;
+      const snap = (this.state.decks && this.state.decks[id]) || null;
       if (snap) {
         const d = new Deck({});
         d._start = Array.isArray(snap.start) ? snap.start.slice() : [];
         d._middle = Array.isArray(snap.middle) ? snap.middle.slice() : [];
         d._end = Array.isArray(snap.end) ? snap.end.slice() : [];
-        this._decks.neighborhood = d;
+        this._decks[id] = d;
       } else {
-        this._decks.neighborhood = new Deck({
-          // First explore reveals all three stacks as a group
-          start: [ ['recruits', 'targets', 'opportunities'] ],
-          pool: [],
-          // Next explore reveals the city entrance
-          end: [ 'city_entrance' ],
-        });
+        const def = CARD_DEFS.find(c => c.id === id);
+        const start = (def && def.data && Array.isArray(def.data.deckStart)) ? def.data.deckStart.slice() : [];
+        const pool = (def && def.data && Array.isArray(def.data.exploreIds)) ? def.data.exploreIds.slice() : [];
+        const end = (def && def.data && Array.isArray(def.data.deckEnd)) ? def.data.deckEnd.slice() : [];
+        this._decks[id] = new Deck({ start, pool, end });
       }
     }
   }
@@ -828,6 +828,15 @@ export class Game {
         this._applyOnCreate(item);
         this._activateTimersForItem(item, wrap);
       }
+      // Dim any deck card that is exhausted
+      try {
+        if (item && item.data && item.data.deck === true) {
+          const d = (this._decks || {})[item.id];
+          const exhausted = !d || !d.hasMore();
+          const cardEl = wrap.querySelector && wrap.querySelector('.world-card');
+          if (cardEl) cardEl.style.opacity = exhausted ? '0.5' : '1.0';
+        }
+      } catch(e){}
       desiredNodes.push(wrap);
     });
     for (const [uid, wrap] of Array.from(this._dom.cardByUid.entries())) {
@@ -1018,9 +1027,9 @@ export class Game {
 
 
   effectiveStat(g, key) {
-    const base = (g.stats && typeof g.stats[key] === 'number') ? g.stats[key] : 0;
-    const bonus = 0; // equipment removed
-    return base + bonus;
+    if (!g || !g.stats) return 0;
+    const hasKey = (typeof key === 'string') && (typeof g.stats[key] === 'number');
+    return hasKey ? g.stats[key] : 0;
   }
 
   durationWithStat(baseMs, statKey, g) {
@@ -1326,6 +1335,13 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
 // Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
 Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
   // Scaffolding for recipe usage: match by types present in the interaction
+  // If target is a declarative deck card and it's exhausted, do nothing
+  try {
+    if (targetItem && targetItem.data && targetItem.data.deck === true) {
+      const d = (this._decks || {})[targetItem.id];
+      if (!d || !d.hasMore()) return;
+    }
+  } catch(e){}
   const stackTypes = [targetItem.type, 'gangster'];
   const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, gangster });
   // Support special ops from recipes: spawnCardId, consumeTarget
@@ -1345,11 +1361,6 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
         this.updateUI();
       } else if (op.spawnCardId) {
         this.spawnTableCard(op.spawnCardId);
-      }
-      if (op.delayMs && cardEl) {
-        // Show a short processing ring for ops with delay
-        const ms = Math.max(500, op.delayMs);
-        this.runProgress(cardEl, ms, () => {});
       }
       if (op.consumeTarget) {
         const idx = tableCards.indexOf(targetItem);
@@ -1432,8 +1443,13 @@ Game.prototype._handleCardOnCardDrop = function(targetItem, sourceItem, cardEl) 
     return;
   }
   if (actionIds.length) {
-    // No gangster context; treat as instant ops or future card-on-card actions
-    // For now, do nothing if only actions present
+    // Run the first matched action as a timed action targeting the drop target
+    const baseAct = (ACTIONS || []).find(a => a && a.id === actionIds[0]);
+    if (!baseAct) return;
+    const dur = this.durationWithStat(baseAct.base, baseAct.stat, null);
+    this._pendingAction = { targetEl: cardEl, targetItem: targetItem };
+    const ok = this.executeAction(baseAct, { stats: { face:1, fist:1, brain:1, meat:1 } }, cardEl, dur);
+    if (!ok) this._pendingAction = null;
     return;
   }
 };
