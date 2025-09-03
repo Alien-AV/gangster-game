@@ -80,6 +80,8 @@ export class Game {
     this._dom = { cardByUid: new Map() };
     // Initialize world table / deck system
     this.initTable();
+    // Enable free positioning canvas behavior
+    this._initFreePositioning();
     // Initialize recipe engine with simple single-card mappings (scaffolding)
     this._recipes = new RecipeEngine();
     // Default recipes
@@ -140,7 +142,7 @@ export class Game {
       illicit: s.illicit,
       illicitProgress: s.illicitProgress,
       unlockedIllicit: s.unlockedIllicit,
-      gangsters: (s.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), name: g.name, equipped: Array.isArray(g.equipped) ? g.equipped : [] })),
+      gangsters: (s.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), name: g.name, equipped: Array.isArray(g.equipped) ? g.equipped : [], pos: g.pos })),
       nextGangId: s.nextGangId,
       salaryTick: s.salaryTick,
       table: s.table || null,
@@ -187,7 +189,7 @@ export class Game {
       // Hard reset world/table/DOM before applying loaded state
       this._resetWorld();
       Object.assign(this.state, data);
-      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [] }));
+      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [], pos: g.pos }));
       // Ensure Boss exists
       if (!this.state.gangsters.some(x => x.type === 'boss')) {
         const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
@@ -200,7 +202,7 @@ export class Game {
       // Ensure table/deck and UI refresh after load
       // Force rebuild decks from saved snapshot
       this._decks = {};
-      this.initTable();
+      // Rebuild decks from snapshot in render path; avoid calling initTable here to prevent duplicate spawns
       this.renderWorld();
       this.updateUI();
       this._cardMsg(`Loaded slot ${n}`);
@@ -221,14 +223,13 @@ export class Game {
       // Hard reset world/table/DOM before applying loaded state
       this._resetWorld();
       Object.assign(this.state, data);
-      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type) }));
+      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), pos: g.pos }));
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
     this.updateUI();
-    // Ensure table exists
+    // Ensure decks rebuilt later; avoid duplicate spawns during constructor load
     this._decks = {};
-    this.initTable();
   }
 
   totalMoney() {
@@ -515,8 +516,10 @@ export class Game {
     if (!this.state.table || !Array.isArray(this.state.table.cards)) {
       this.state.table = { cards: [] };
     }
-    // Spawn the Neighborhood card at game start
-    this.spawnTableCard('neighborhood');
+    // Spawn the Neighborhood card only on fresh tables (avoid duplicates on load)
+    if ((this.state.table.cards || []).length === 0) {
+      this.spawnTableCard('neighborhood');
+    }
     // Build runtime deck objects (not saved directly)
     this._decks = this._decks || {};
     // Build decks from declarative card defs (any card with data.deck)
@@ -538,6 +541,93 @@ export class Game {
         this._decks[id] = new Deck({ start, pool, end });
       }
     }
+  }
+
+  // Free positioning: allow dropping cards anywhere on the table to stick there
+  _initFreePositioning() {
+    const cont = this._worldContainer();
+    if (!cont || cont._fpBound) return;
+    cont._fpBound = true;
+    // Ensure the canvas can host absolutely positioned children
+    if (!cont.style.position) cont.style.position = 'relative';
+    cont.addEventListener('dragover', (ev) => {
+      // Allow dropping anywhere on the canvas
+      ev.preventDefault();
+    });
+    cont.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      // If dropping over a different card, let that card's drop handler manage it
+      const cardTarget = ev.target && (ev.target.closest ? ev.target.closest('.world-card') : null);
+      if (cardTarget) {
+        const thisUid = this._draggingUid || '';
+        const targetUid = (cardTarget && cardTarget.dataset && cardTarget.dataset.uid) || '';
+        if (targetUid && targetUid !== thisUid) return;
+      }
+      const payload = ev.dataTransfer ? ev.dataTransfer.getData('text/plain') : '';
+      if (!payload) return;
+      const rect = cont.getBoundingClientRect();
+      const rawX = ev.clientX - rect.left + cont.scrollLeft;
+      const rawY = ev.clientY - rect.top + cont.scrollTop;
+      const dx = (this._dragOffset && typeof this._dragOffset.dx === 'number') ? this._dragOffset.dx : 0;
+      const dy = (this._dragOffset && typeof this._dragOffset.dy === 'number') ? this._dragOffset.dy : 0;
+      const x = rawX - dx;
+      const y = rawY - dy;
+      try { console.debug('[Drop@canvas]', { payload, x, y, dx, dy, draggingUid: this._draggingUid }); } catch(e){}
+      // If we know what is being dragged from our own state, prefer that over payload parsing
+      if (this._draggingUid && typeof this._draggingUid === 'string' && this._draggingUid.indexOf('g_') === 0) {
+        const gid = parseInt(this._draggingUid.slice(2), 10);
+        const g = (this.state.gangsters || []).find(x => x.id === gid);
+        if (g) {
+          let wrap = this._dom.cardByUid.get(this._draggingUid);
+          if (!wrap) {
+            const cardEl = document.querySelector('.world-card[data-uid="' + this._draggingUid + '"]');
+            wrap = cardEl && cardEl.closest ? cardEl.closest('.ring-wrap') : null;
+            if (wrap) { try { this._dom.cardByUid.set(this._draggingUid, wrap); } catch(e){} }
+          }
+          if (wrap) {
+            g.pos = { x, y };
+            try { console.debug('[Move gangster via draggingUid]', { gid: g.id, pos: g.pos, uid: this._draggingUid }); } catch(e){}
+            this._applyCardPosition({ type: 'gangster', data: { gid: g.id } }, wrap);
+            this.scheduleSave();
+            return;
+          }
+        }
+      }
+      if (payload.startsWith('uid:')) {
+        const uid = payload.slice(4);
+        const tableCards = (this.state.table && this.state.table.cards) || [];
+        const item = tableCards.find(x => x && x.uid === uid);
+        const wrap = this._dom.cardByUid.get(uid);
+        if (!wrap) return;
+        if (item) {
+          item.pos = { x, y };
+          try { console.debug('[Move card]', { uid, pos: item.pos, id: item.id }); } catch(e){}
+          this._applyCardPosition(item, wrap);
+          this.scheduleSave();
+        } else {
+          // Could be a non-table entity keyed by uid; ignore for now
+        }
+        return;
+      }
+      const gid = parseInt(payload, 10);
+      if (!isNaN(gid)) {
+        const g = (this.state.gangsters || []).find(x => x.id === gid);
+        if (!g) return;
+        const uid = 'g_' + String(g.id);
+        let wrap = this._dom.cardByUid.get(uid);
+        if (!wrap) {
+          // Fallback: find via DOM if map isn't populated for some reason
+          const cardEl = document.querySelector('.world-card[data-uid="' + uid + '"]');
+          wrap = cardEl && cardEl.closest ? cardEl.closest('.ring-wrap') : null;
+          if (wrap) { try { this._dom.cardByUid.set(uid, wrap); } catch(e){} }
+        }
+        if (!wrap) { try { console.debug('[Move gangster] no wrap found', { uid }); } catch(e){} return; }
+        g.pos = { x, y };
+        try { console.debug('[Move gangster]', { gid: g.id, pos: g.pos, uid }); } catch(e){}
+        this._applyCardPosition({ type: 'gangster', data: { gid: g.id } }, wrap);
+        this.scheduleSave();
+      }
+    });
   }
 
   // ---- Targeted DOM ops (incremental) ----
@@ -584,6 +674,10 @@ export class Game {
   }
 
   ensureCardNode(item, index) {
+    // Ensure DOM map exists to avoid crashes on early calls
+    if (!this._dom || !this._dom.cardByUid) {
+      this._dom = { cardByUid: new Map() };
+    }
     if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
     // Auto-initialize gangster cards without a linked entity
     try {
@@ -640,6 +734,8 @@ export class Game {
         return false;
       };
       this._applyDraggable(card, item, isBusyFn);
+      // Apply any stored free position
+      this._applyCardPosition(item, wrap, index);
       this._dom.cardByUid.set(item.uid, wrap);
       // Apply onCreate hook and then activate timers for items created now
       this._applyOnCreate(item);
@@ -751,6 +847,9 @@ export class Game {
         card.addEventListener('mouseleave', () => this._hideInfoPanel());
       }
       card.addEventListener('click', () => this._showInfoPanel(buildInfo()));
+        // Enable dragging and free-positioning for all cards
+        this._applyDraggable(card, item, () => false);
+        this._applyCardPosition(item, wrap, undefined);
         this._dom.cardByUid.set(item.uid, wrap);
         // Apply onCreate hook and then activate timers for items created now
         this._applyOnCreate(item);
@@ -1239,9 +1338,9 @@ Game.prototype._bindInfoPanel = function(cardEl, buildInfoFn) {
   cardEl.addEventListener('click', show);
 };
 
-// Generic draggable applier
+// Generic draggable applier (now also used for free-positioning payloads)
 Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
-  if (!cardEl || !itemLike || !itemLike.draggable) return;
+  if (!cardEl || !itemLike) return;
   const getGid = () => (itemLike.data && typeof itemLike.data.gid === 'number') ? String(itemLike.data.gid) : null;
   const isBusy = () => (typeof isBusyFn === 'function') ? !!isBusyFn() : false;
   // Make the whole card draggable (we guard in dragstart if busy)
@@ -1249,6 +1348,20 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
   cardEl.addEventListener('dragstart', (ev) => {
     if (isBusy()) { ev.preventDefault(); return; }
     const gid = getGid();
+    // Capture offset so we can drop the card in place (not snap top-left to cursor)
+    try {
+      const wrap = cardEl.closest && cardEl.closest('.ring-wrap');
+      if (wrap) {
+        const r = wrap.getBoundingClientRect();
+        this._dragOffset = { dx: ev.clientX - r.left, dy: ev.clientY - r.top };
+        // Track dragging uid to distinguish self vs other-card drops
+        const uid = (cardEl && cardEl.dataset && cardEl.dataset.uid)
+          || (gid ? ('g_' + String(gid)) : (itemLike && itemLike.uid));
+        this._draggingUid = uid || null;
+      } else {
+        this._dragOffset = null; this._draggingUid = null;
+      }
+    } catch(e) { this._dragOffset = null; this._draggingUid = null; }
     if (gid) {
       ev.dataTransfer.setData('text/plain', gid);
     } else if (itemLike && itemLike.uid) {
@@ -1258,6 +1371,59 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
     }
     ev.dataTransfer.effectAllowed = 'move';
   });
+  cardEl.addEventListener('dragend', () => {
+    this._dragOffset = null; this._draggingUid = null;
+  });
+};
+
+// Apply absolute left/top if position is stored
+Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
+  try {
+    const cont = this._worldContainer();
+    if (!cont || !wrapEl) return;
+    if (!cont.style.position) cont.style.position = 'relative';
+    let pos = null;
+    let isGang = false;
+    if (itemLike && itemLike.type === 'gangster' && itemLike.data && typeof itemLike.data.gid === 'number') {
+      const g = (this.state.gangsters || []).find(x => x.id === itemLike.data.gid);
+      pos = g && g.pos ? g.pos : null;
+      isGang = true;
+    } else {
+      pos = itemLike && itemLike.pos ? itemLike.pos : null;
+    }
+    // Assign a default absolute position if missing so every card is out of flow
+    if (!pos) {
+      const tileW = 244; // 230 card width + gap
+      const tileH = 380; // approx card height
+      const cw = cont.clientWidth || window.innerWidth || 1000;
+      const cols = Math.max(1, Math.floor(cw / tileW));
+      const existing = cont.childNodes ? cont.childNodes.length : 0;
+      // For table cards drawn after the first (neighborhood at index 0), start placement after two slots
+      // So the first pulled card (table index 1) starts at grid slot 2
+      let i;
+      if (!isGang && typeof indexOverride === 'number') {
+        i = (indexOverride >= 1) ? (2 + (indexOverride - 1)) : indexOverride;
+      } else {
+        i = (typeof indexOverride === 'number' && indexOverride >= 0) ? indexOverride : existing;
+      }
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      pos = { x: 12 + col * tileW, y: 12 + row * tileH };
+      if (isGang) {
+        const gid = itemLike.data.gid;
+        const g = (this.state.gangsters || []).find(x => x.id === gid);
+        if (g) g.pos = { x: pos.x, y: pos.y };
+      } else if (itemLike) {
+        itemLike.pos = { x: pos.x, y: pos.y };
+      }
+      this.scheduleSave();
+    }
+    // Apply absolute position
+    wrapEl.style.position = 'absolute';
+    wrapEl.style.left = pos.x + 'px';
+    wrapEl.style.top = pos.y + 'px';
+    try { console.debug('[Apply position]', { pos }); } catch(e){}
+  } catch(e) {}
 };
 
 // Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
