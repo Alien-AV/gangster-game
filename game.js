@@ -202,7 +202,7 @@ export class Game {
       // Ensure table/deck and UI refresh after load
       // Force rebuild decks from saved snapshot
       this._decks = {};
-      this.initTable();
+      // Rebuild decks from snapshot in render path; avoid calling initTable here to prevent duplicate spawns
       this.renderWorld();
       this.updateUI();
       this._cardMsg(`Loaded slot ${n}`);
@@ -228,9 +228,8 @@ export class Game {
       console.error('Failed to load saved state', e);
     }
     this.updateUI();
-    // Ensure table exists
+    // Ensure decks rebuilt later; avoid duplicate spawns during constructor load
     this._decks = {};
-    this.initTable();
   }
 
   totalMoney() {
@@ -517,8 +516,10 @@ export class Game {
     if (!this.state.table || !Array.isArray(this.state.table.cards)) {
       this.state.table = { cards: [] };
     }
-    // Spawn the Neighborhood card at game start
-    this.spawnTableCard('neighborhood');
+    // Spawn the Neighborhood card only on fresh tables (avoid duplicates on load)
+    if ((this.state.table.cards || []).length === 0) {
+      this.spawnTableCard('neighborhood');
+    }
     // Build runtime deck objects (not saved directly)
     this._decks = this._decks || {};
     // Build decks from declarative card defs (any card with data.deck)
@@ -673,6 +674,10 @@ export class Game {
   }
 
   ensureCardNode(item, index) {
+    // Ensure DOM map exists to avoid crashes on early calls
+    if (!this._dom || !this._dom.cardByUid) {
+      this._dom = { cardByUid: new Map() };
+    }
     if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
     // Auto-initialize gangster cards without a linked entity
     try {
