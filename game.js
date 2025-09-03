@@ -735,7 +735,7 @@ export class Game {
       };
       this._applyDraggable(card, item, isBusyFn);
       // Apply any stored free position
-      this._applyCardPosition(item, wrap);
+      this._applyCardPosition(item, wrap, index);
       this._dom.cardByUid.set(item.uid, wrap);
       // Apply onCreate hook and then activate timers for items created now
       this._applyOnCreate(item);
@@ -849,7 +849,7 @@ export class Game {
       card.addEventListener('click', () => this._showInfoPanel(buildInfo()));
         // Enable dragging and free-positioning for all cards
         this._applyDraggable(card, item, () => false);
-        this._applyCardPosition(item, wrap);
+        this._applyCardPosition(item, wrap, undefined);
         this._dom.cardByUid.set(item.uid, wrap);
         // Apply onCreate hook and then activate timers for items created now
         this._applyOnCreate(item);
@@ -1377,29 +1377,52 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
 };
 
 // Apply absolute left/top if position is stored
-Game.prototype._applyCardPosition = function(itemLike, wrapEl) {
+Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
   try {
     const cont = this._worldContainer();
     if (!cont || !wrapEl) return;
+    if (!cont.style.position) cont.style.position = 'relative';
     let pos = null;
+    let isGang = false;
     if (itemLike && itemLike.type === 'gangster' && itemLike.data && typeof itemLike.data.gid === 'number') {
       const g = (this.state.gangsters || []).find(x => x.id === itemLike.data.gid);
       pos = g && g.pos ? g.pos : null;
+      isGang = true;
     } else {
       pos = itemLike && itemLike.pos ? itemLike.pos : null;
     }
-    if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-      cont.style.position = cont.style.position || 'relative';
-      wrapEl.style.position = 'absolute';
-      wrapEl.style.left = pos.x + 'px';
-      wrapEl.style.top = pos.y + 'px';
-      try { console.debug('[Apply position]', { uid: wrapEl.querySelector && wrapEl.querySelector('.world-card') && (wrapEl.querySelector('.world-card').dataset && wrapEl.querySelector('.world-card').dataset.uid), pos }); } catch(e){}
-    } else {
-      // Reset to normal flow if no pos
-      wrapEl.style.position = '';
-      wrapEl.style.left = '';
-      wrapEl.style.top = '';
+    // Assign a default absolute position if missing so every card is out of flow
+    if (!pos) {
+      const tileW = 244; // 230 card width + gap
+      const tileH = 380; // approx card height
+      const cw = cont.clientWidth || window.innerWidth || 1000;
+      const cols = Math.max(1, Math.floor(cw / tileW));
+      const existing = cont.childNodes ? cont.childNodes.length : 0;
+      // For table cards drawn after the first (neighborhood at index 0), start placement after two slots
+      // So the first pulled card (table index 1) starts at grid slot 2
+      let i;
+      if (!isGang && typeof indexOverride === 'number') {
+        i = (indexOverride >= 1) ? (2 + (indexOverride - 1)) : indexOverride;
+      } else {
+        i = (typeof indexOverride === 'number' && indexOverride >= 0) ? indexOverride : existing;
+      }
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      pos = { x: 12 + col * tileW, y: 12 + row * tileH };
+      if (isGang) {
+        const gid = itemLike.data.gid;
+        const g = (this.state.gangsters || []).find(x => x.id === gid);
+        if (g) g.pos = { x: pos.x, y: pos.y };
+      } else if (itemLike) {
+        itemLike.pos = { x: pos.x, y: pos.y };
+      }
+      this.scheduleSave();
     }
+    // Apply absolute position
+    wrapEl.style.position = 'absolute';
+    wrapEl.style.left = pos.x + 'px';
+    wrapEl.style.top = pos.y + 'px';
+    try { console.debug('[Apply position]', { pos }); } catch(e){}
   } catch(e) {}
 };
 
