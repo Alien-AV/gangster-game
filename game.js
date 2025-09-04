@@ -60,6 +60,7 @@ export class Game {
     hookSlot(1); hookSlot(2); hookSlot(3);
 
     this.loadState();
+    if (!this.state.stacks || typeof this.state.stacks !== 'object') this.state.stacks = {};
     // Ensure Boss exists as a normal gangster with special stats/name
     if (!this.state.gangsters.some(g => g.type === 'boss')) {
       const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
@@ -161,6 +162,7 @@ export class Game {
         }
         return res;
       })(),
+      stacks: s.stacks || {},
     };
   }
 
@@ -189,6 +191,7 @@ export class Game {
       // Hard reset world/table/DOM before applying loaded state
       this._resetWorld();
       Object.assign(this.state, data);
+      this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
       this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [], pos: g.pos }));
       // Ensure Boss exists
       if (!this.state.gangsters.some(x => x.type === 'boss')) {
@@ -223,6 +226,7 @@ export class Game {
       // Hard reset world/table/DOM before applying loaded state
       this._resetWorld();
       Object.assign(this.state, data);
+      this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
       this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), pos: g.pos }));
     } catch (e) {
       console.error('Failed to load saved state', e);
@@ -600,6 +604,8 @@ export class Game {
         const wrap = this._dom.cardByUid.get(uid);
         if (!wrap) return;
         if (item) {
+          // Pulling a card out of any stack when dropping on canvas
+          this._removeFromAnyStack(uid);
           item.pos = { x, y };
           try { console.debug('[Move card]', { uid, pos: item.pos, id: item.id }); } catch(e){}
           this._applyCardPosition(item, wrap);
@@ -697,9 +703,16 @@ export class Game {
     } catch(e){}
     let wrap = this._dom.cardByUid.get(item.uid);
     if (!wrap) {
-      const rendered = renderWorldCard(this, item);
-      wrap = rendered.wrap;
-      const card = rendered.card;
+      let card;
+      if (item.type === 'stack') {
+        const rendered = this._renderStackCard(item);
+        wrap = rendered.wrap;
+        card = rendered.card;
+      } else {
+        const rendered = renderWorldCard(this, item);
+        wrap = rendered.wrap;
+        card = rendered.card;
+      }
       const behavior = CARD_BEHAVIORS[item.type];
       // Attach drop only for non-gangster cards
       if (item.type !== 'gangster') {
@@ -713,7 +726,9 @@ export class Game {
             const tableCards = (this.state.table && this.state.table.cards) || [];
             const sourceItem = tableCards.find(x => x && x.uid === uid);
             if (!sourceItem) return;
-            this._handleCardOnCardDrop(item, sourceItem, card);
+            // Try to match recipes; if none, add to visual stack
+            const handled = this._tryRecipeOrAddToStack(item, sourceItem, card);
+            if (!handled) this._handleCardOnCardDrop(item, sourceItem, card);
             return;
           }
           const gid = parseInt(payload, 10);
@@ -903,6 +918,132 @@ export class Game {
   }
 
   renderWorld() { if (this.reconcileWorld) this.reconcileWorld(); }
+  
+  // --- Stacking helpers ---
+  _findStackIdByUid(uid) {
+    const stacks = this.state.stacks || {};
+    for (const sid of Object.keys(stacks)) {
+      const arr = stacks[sid];
+      if (Array.isArray(arr) && arr.includes(uid)) return sid;
+    }
+    return null;
+  }
+
+  _basePosForStack(sid) {
+    const stacks = this.state.stacks || {};
+    const arr = stacks[sid] || [];
+    const baseUid = arr[0];
+    if (!baseUid) return { x: 0, y: 0 };
+    const baseItem = (this.state.table.cards || []).find(c => c && c.uid === baseUid);
+    if (baseItem && baseItem.pos && typeof baseItem.pos.x === 'number' && typeof baseItem.pos.y === 'number') {
+      return { x: baseItem.pos.x, y: baseItem.pos.y };
+    }
+    // Fallback to current DOM location
+    const wrap = this._dom.cardByUid.get(baseUid);
+    const x = wrap ? parseInt(wrap.style.left || '0', 10) : 0;
+    const y = wrap ? parseInt(wrap.style.top || '0', 10) : 0;
+    return { x, y };
+  }
+
+  _reflowStack(sid, basePos) {
+    const stacks = this.state.stacks || {};
+    const arr = stacks[sid] || [];
+    const offset = 26;
+    const { x, y } = basePos || this._basePosForStack(sid);
+    arr.forEach((uid, idx) => {
+      const item = (this.state.table.cards || []).find(c => c && c.uid === uid);
+      const wrap = this._dom.cardByUid.get(uid);
+      if (!item || !wrap) return;
+      item.pos = { x, y: y + idx * offset };
+      this._applyCardPosition(item, wrap);
+      try { wrap.style.zIndex = String(100 + idx); } catch(e){}
+    });
+  }
+
+  // Prefer recipes; otherwise add source to target's visual stack
+  _tryRecipeOrAddToStack(targetItem, sourceItem, targetCardEl) {
+    const types = [targetItem.type, sourceItem.type];
+    const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
+    if (actionOrOps && actionOrOps.length) return false;
+    // Determine existing stack for target (if any)
+    const stacks = this.state.stacks || (this.state.stacks = {});
+    const targetUid = targetItem.uid;
+    let sid = this._findStackIdByUid(targetUid);
+    if (!sid) {
+      const baseUid = targetUid || ('c_' + Math.random().toString(36).slice(2));
+      if (!targetItem.uid) targetItem.uid = baseUid;
+      sid = 's_' + baseUid;
+      stacks[sid] = [targetItem.uid];
+    }
+    // Remove source from previous stack then append if not already present
+    this._removeFromAnyStack(sourceItem.uid);
+    const arr = stacks[sid];
+    if (!arr.includes(sourceItem.uid)) arr.push(sourceItem.uid);
+    // Reflow using the stack's base position (arr[0])
+    this._reflowStack(sid, this._basePosForStack(sid));
+    this.scheduleSave();
+    return true;
+  }
+
+  _removeFromAnyStack(uid) {
+    if (!uid) return;
+    const stacks = this.state.stacks || {};
+    for (const sid of Object.keys(stacks)) {
+      const arr = stacks[sid];
+      const i = arr.indexOf(uid);
+      if (i >= 0) {
+        arr.splice(i, 1);
+        // Compact remaining positions
+        if (arr.length > 0) {
+          this._reflowStack(sid, this._basePosForStack(sid));
+        }
+        if (arr.length === 0) delete stacks[sid];
+        return;
+      }
+    }
+  }
+  // Render-time helper no longer used (we keep separate cards layered)
+
+  // Attempt recipe first; if none, combine into a stack
+  _tryRecipeOrStack(targetItem, sourceItem, targetCardEl) {
+    // First, check recipes
+    const types = [targetItem.type, sourceItem.type];
+    const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
+    if (actionOrOps && actionOrOps.length) {
+      return false; // let existing recipe path handle it
+    }
+    // No recipe: make or extend a stack anchored at the target position
+    const table = this.state.table; const cards = table && table.cards ? table.cards : [];
+    // If target is already a stack, append; otherwise create a new stack
+    let stack;
+    if (targetItem.type === 'stack') {
+      stack = targetItem;
+    } else {
+      stack = { id: 'stack_' + Math.random().toString(36).slice(2), type: 'stack', name: 'Stack', reusable: true, cards: [], pos: targetItem.pos ? { x: targetItem.pos.x, y: targetItem.pos.y } : undefined };
+      // Swap target with new stack in table
+      const tidx = cards.indexOf(targetItem);
+      if (tidx >= 0) {
+        cards.splice(tidx, 1, stack);
+      } else {
+        cards.push(stack);
+      }
+      // Move target into stack
+      stack.cards.push(targetItem);
+      // Remove target DOM; new stack node will replace it
+      if (targetItem.uid) this.removeCardByUid(targetItem.uid);
+    }
+    // Remove source from table and add into stack
+    const sidx = cards.indexOf(sourceItem);
+    if (sidx >= 0) cards.splice(sidx, 1);
+    if (sourceItem.uid) this.removeCardByUid(sourceItem.uid);
+    stack.cards.push(sourceItem);
+    // Ensure the stack has a uid and node
+    if (!stack.uid) stack.uid = 'c_' + Math.random().toString(36).slice(2);
+    const sidx2 = cards.indexOf(stack);
+    this.ensureCardNode(stack, sidx2 >= 0 ? sidx2 : undefined);
+    this.updateUI();
+    return true;
+  }
 
   _cardMsg(txt) {
     const host = this.cardEls && this.cardEls.msg ? this.cardEls.msg : null;
@@ -1372,6 +1513,7 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
     ev.dataTransfer.effectAllowed = 'move';
   });
   cardEl.addEventListener('dragend', () => {
+    // If card belonged to a stack and was dropped outside the base card, keep removal compacting
     this._dragOffset = null; this._draggingUid = null;
   });
 };
