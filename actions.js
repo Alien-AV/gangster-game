@@ -12,11 +12,13 @@ export const ACTIONS = [
       // Consume the recruit card
       const idx = cards.indexOf(targetItem);
       if (idx >= 0) { cards.splice(idx, 1); if (targetItem && targetItem.uid) game.removeCardByUid(targetItem.uid); }
-      // Create a proper gangster entity so it has stats/drag-and-drop behavior
-      const newG = { id: game.state.nextGangId++, type: t, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(t) };
-      game.state.gangsters.push(newG);
-      game.reconcileWorld();
-      game.updateUI();
+      // Spawn a gangster card directly
+      const defId = (t === 'boss') ? 'boss' : ('gangster_' + t);
+      const newCard = game.spawnTableCard(defId);
+      if (newCard) {
+        newCard.stats = game.defaultStatsForType ? game.defaultStatsForType(t) : newCard.stats;
+        game.updateUI();
+      }
     } },
   // Unified Explore for any deck-like card: expects item.data.exploreIds
   { id: 'actExploreDeck', label: 'Explore (Brain)', stat: 'brain', base: 3500,

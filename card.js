@@ -33,7 +33,7 @@ export const CARD_DEFS = [
   { id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', img: 'images/extorted-business.png', data: { count: 0 }, hint: 'Aggregated protection payouts.' },
   { id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', hint: 'Expires over time; avoid getting arrested.' },
   { id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', hint: 'Drop a gangster to explore.', data: { deck: true, deckStart: [ ['recruits','targets','opportunities'] ], exploreIds: [], deckEnd: ['city_entrance'] } },
-  { id: 'recruits', name: 'Recruits', desc: 'Potential talent waiting to be found.', reusable: true, type: 'neighborhood', img: 'images/face.png', hint: 'Drop a gangster to find recruits.', data: { deck: true, exploreIds: ['recruit_face','recruit_fist','recruit_brain'] } },
+  { id: 'recruits', name: 'Recruits', desc: 'Potential talent waiting to be found.', reusable: true, type: 'neighborhood', img: 'images/face.png', hint: 'Drop a gangster to find recruits.', data: { deck: true, exploreIds: ['recruit_face','recruit_fist','recruit_brain','small_crooks'] } },
   { id: 'targets', name: 'Targets', desc: 'Locations ripe for protection or raids.', reusable: true, type: 'neighborhood', img: 'images/laundromat.jpg', hint: 'Drop a gangster to find targets.', data: { deck: true, exploreIds: ['hot_dog_stand','bakery','diner','laundromat'] } },
   { id: 'opportunities', name: 'Opportunities', desc: 'Useful connections and services.', reusable: true, type: 'neighborhood', img: 'images/priest.jpg', hint: 'Drop a gangster to find opportunities.', data: { deck: true, exploreIds: ['corrupt_cop','priest','bookmaker','pawn_shop','newspaper'] } },
   { id: 'fake_alibi', name: 'Fake Alibi', desc: 'Papers that say you were somewhere else.', reusable: false, type: 'paperwork', img: 'images/newspaper.jpg', hint: 'Combine with Heat to clear it safely.', draggable: true },
@@ -299,10 +299,8 @@ export function renderWorldCard(game, item) {
   // If gangster, render stat badge
   if (item.type === 'gangster') {
     const stats = (() => {
-      // Prefer runtime gangster stats if gid present
-      const gid = item && item.data && typeof item.data.gid === 'number' ? item.data.gid : null;
-      const g = gid != null ? (game.state.gangsters || []).find(x => x.id === gid) : null;
-      const st = (g && g.stats) ? g.stats : (item.stats || {});
+      const def = CARD_DEF_BY_ID.get(item.id) || {};
+      const st = Object.assign({}, def.stats || {}, item.stats || {});
       return { face: st.face || 0, fist: st.fist || 0, brain: st.brain || 0, meat: st.meat != null ? st.meat : 1 };
     })();
     const badges = document.createElement('div');
@@ -360,10 +358,14 @@ export function getCardInfo(game, item) {
   const title = (item && item.name) || (def && def.name) || item.title || item.id;
   const desc = (item && item.desc) || (def && def.desc) || '';
   let statsLine = '';
-  if (item && item.type === 'gangster' && item.uid && item.uid.startsWith('g_')) {
-    const gid = parseInt(item.uid.slice(2), 10);
-    const g = (game.state.gangsters || []).find(x => x.id === gid);
-    if (g && g.stats) statsLine = `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`;
+  if (item && item.type === 'gangster') {
+    const def = CARD_DEF_BY_ID.get(item.id) || {};
+    const st = Object.assign({}, def.stats || {}, item.stats || {});
+    const face = st.face != null ? st.face : 0;
+    const fist = st.fist != null ? st.fist : 0;
+    const brain = st.brain != null ? st.brain : 0;
+    const meat = st.meat != null ? st.meat : 1;
+    statsLine = `Fist:${fist} Face:${face} Brain:${brain} Meat:${meat}`;
   }
   const hint = def && def.hint ? def.hint : '';
   const dynamic = computeCardDynamic(game, item);

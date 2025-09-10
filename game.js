@@ -26,8 +26,6 @@ export class Game {
       illicit: 0,
       illicitProgress: 0,
       unlockedIllicit: false,
-      gangsters: [],
-      nextGangId: 1,
       salaryTick: 0,
       table: null,
       // Placeholder flow stats per minute (clean): we'll compute presentation only for now
@@ -61,11 +59,6 @@ export class Game {
 
     this.loadState();
     if (!this.state.stacks || typeof this.state.stacks !== 'object') this.state.stacks = {};
-    // Ensure Boss exists as a normal gangster with special stats/name
-    if (!this.state.gangsters.some(g => g.type === 'boss')) {
-      const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
-      this.state.gangsters.unshift(bossGang);
-    }
 
     // Initialize message UI
     this.initCardUI();
@@ -143,8 +136,6 @@ export class Game {
       illicit: s.illicit,
       illicitProgress: s.illicitProgress,
       unlockedIllicit: s.unlockedIllicit,
-      gangsters: (s.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), name: g.name, equipped: Array.isArray(g.equipped) ? g.equipped : [], pos: g.pos })),
-      nextGangId: s.nextGangId,
       salaryTick: s.salaryTick,
       table: s.table || null,
       // Persist deck states (all decks)
@@ -192,12 +183,6 @@ export class Game {
       this._resetWorld();
       Object.assign(this.state, data);
       this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
-      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [], pos: g.pos }));
-      // Ensure Boss exists
-      if (!this.state.gangsters.some(x => x.type === 'boss')) {
-        const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
-        this.state.gangsters.unshift(bossGang);
-      }
       // Reset modal queues and refresh UI
       this._illicitSelect = { queue: [], active: false };
       this._equipSelect = { queue: [], active: false };
@@ -227,7 +212,6 @@ export class Game {
       this._resetWorld();
       Object.assign(this.state, data);
       this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
-      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), pos: g.pos }));
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
@@ -273,8 +257,11 @@ export class Game {
   }
 
   paySalaries() {
-    const s = this.state;
-    const due = s.gangsters.reduce((sum, g) => sum + (this.SALARY_PER_10S[g.type] || 0), 0);
+    const gang = this._allGangsterCards();
+    const due = gang.reduce((sum, it) => {
+      const sub = this._gangsterSubtypeForCard(it);
+      return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
+    }, 0);
     if (due > 0) this.spendMoney(due);
   }
 
@@ -312,9 +299,9 @@ export class Game {
     const availFronts = Math.max(0, (s.businesses || 0) - (s.illicit || 0));
     const afEl = document.getElementById('availableFronts');
     if (afEl) afEl.textContent = availFronts;
-    const faces = s.gangsters.filter(g => g.type === 'face').length;
-    const fists = s.gangsters.filter(g => g.type === 'fist').length;
-    const brains = s.gangsters.filter(g => g.type === 'brain').length;
+    const faces = this._countGangsterSubtype('face');
+    const fists = this._countGangsterSubtype('fist');
+    const brains = this._countGangsterSubtype('brain');
     const facesEl = document.getElementById('faces'); if (facesEl) facesEl.textContent = faces;
     const fistsEl = document.getElementById('fists'); if (fistsEl) fistsEl.textContent = fists;
     const brainsEl = document.getElementById('brains'); if (brainsEl) brainsEl.textContent = brains;
@@ -520,8 +507,9 @@ export class Game {
     if (!this.state.table || !Array.isArray(this.state.table.cards)) {
       this.state.table = { cards: [] };
     }
-    // Spawn the Neighborhood card only on fresh tables (avoid duplicates on load)
+    // On a fresh table, spawn a starting gangster and the Neighborhood deck
     if ((this.state.table.cards || []).length === 0) {
+      this.spawnTableCard('boss');
       this.spawnTableCard('neighborhood');
     }
     // Build runtime deck objects (not saved directly)
@@ -577,26 +565,6 @@ export class Game {
       const x = rawX - dx;
       const y = rawY - dy;
       try { console.debug('[Drop@canvas]', { payload, x, y, dx, dy, draggingUid: this._draggingUid }); } catch(e){}
-      // If we know what is being dragged from our own state, prefer that over payload parsing
-      if (this._draggingUid && typeof this._draggingUid === 'string' && this._draggingUid.indexOf('g_') === 0) {
-        const gid = parseInt(this._draggingUid.slice(2), 10);
-        const g = (this.state.gangsters || []).find(x => x.id === gid);
-        if (g) {
-          let wrap = this._dom.cardByUid.get(this._draggingUid);
-          if (!wrap) {
-            const cardEl = document.querySelector('.world-card[data-uid="' + this._draggingUid + '"]');
-            wrap = cardEl && cardEl.closest ? cardEl.closest('.ring-wrap') : null;
-            if (wrap) { try { this._dom.cardByUid.set(this._draggingUid, wrap); } catch(e){} }
-          }
-          if (wrap) {
-            g.pos = { x, y };
-            try { console.debug('[Move gangster via draggingUid]', { gid: g.id, pos: g.pos, uid: this._draggingUid }); } catch(e){}
-            this._applyCardPosition({ type: 'gangster', data: { gid: g.id } }, wrap);
-            this.scheduleSave();
-            return;
-          }
-        }
-      }
       if (payload.startsWith('uid:')) {
         const uid = payload.slice(4);
         const tableCards = (this.state.table && this.state.table.cards) || [];
@@ -614,24 +582,6 @@ export class Game {
           // Could be a non-table entity keyed by uid; ignore for now
         }
         return;
-      }
-      const gid = parseInt(payload, 10);
-      if (!isNaN(gid)) {
-        const g = (this.state.gangsters || []).find(x => x.id === gid);
-        if (!g) return;
-        const uid = 'g_' + String(g.id);
-        let wrap = this._dom.cardByUid.get(uid);
-        if (!wrap) {
-          // Fallback: find via DOM if map isn't populated for some reason
-          const cardEl = document.querySelector('.world-card[data-uid="' + uid + '"]');
-          wrap = cardEl && cardEl.closest ? cardEl.closest('.ring-wrap') : null;
-          if (wrap) { try { this._dom.cardByUid.set(uid, wrap); } catch(e){} }
-        }
-        if (!wrap) { try { console.debug('[Move gangster] no wrap found', { uid }); } catch(e){} return; }
-        g.pos = { x, y };
-        try { console.debug('[Move gangster]', { gid: g.id, pos: g.pos, uid }); } catch(e){}
-        this._applyCardPosition({ type: 'gangster', data: { gid: g.id } }, wrap);
-        this.scheduleSave();
       }
     });
   }
@@ -651,18 +601,6 @@ export class Game {
       if (this._dom && this._dom.cardByUid) this._dom.cardByUid.clear();
     } catch(e){}
     this.state.table = { cards: [] };
-  }
-
-  // Removed neighborhood-specific explore wrapper
-
-  ensureGangsterNode(g) {
-    // Deprecated: kept temporarily for back-compat; use ensureCardNode with uid 'g_<gid>' instead
-    const uid = 'g_' + String(g.id);
-    const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
-    const model = makeCard(defId);
-    model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
-    model.uid = uid;
-    return this.ensureCardNode(model, undefined);
   }
 
   spawnTableCard(idOrCard) {
@@ -685,22 +623,6 @@ export class Game {
       this._dom = { cardByUid: new Map() };
     }
     if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
-    // Auto-initialize gangster cards without a linked entity
-    try {
-      if (item.type === 'gangster') {
-        const hasGid = item.data && typeof item.data.gid === 'number';
-        if (!hasGid) {
-          let gtype = 'face';
-          if (item.id === 'boss') gtype = 'boss';
-          else if (typeof item.id === 'string' && item.id.indexOf('gangster_') === 0) {
-            gtype = item.id.slice('gangster_'.length) || 'face';
-          }
-          const g = { id: this.state.nextGangId++, type: gtype, name: gtype === 'boss' ? 'Boss' : undefined, busy: false, personalHeat: 0, stats: this.defaultStatsForType(gtype) };
-          this.state.gangsters.push(g);
-          item.data = Object.assign({}, item.data, { gid: g.id, type: gtype });
-        }
-      }
-    } catch(e){}
     let wrap = this._dom.cardByUid.get(item.uid);
     if (!wrap) {
       let card;
@@ -714,8 +636,8 @@ export class Game {
         card = rendered.card;
       }
       const behavior = CARD_BEHAVIORS[item.type];
-      // Attach drop only for non-gangster cards
-      if (item.type !== 'gangster') {
+      // Attach drop only for non-gangster, non-stack targets; source can be a gangster card (uid payload)
+      if (item.type !== 'stack' && item.type !== 'gangster') {
         card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
         card.addEventListener('dragleave', () => card.classList.remove('highlight'));
         card.addEventListener('drop', ev => {
@@ -726,28 +648,22 @@ export class Game {
             const tableCards = (this.state.table && this.state.table.cards) || [];
             const sourceItem = tableCards.find(x => x && x.uid === uid);
             if (!sourceItem) return;
+            if (sourceItem.type === 'gangster') {
+              const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
+              handler(sourceItem);
+              return;
+            }
             // Try to match recipes; if none, add to visual stack
             const handled = this._tryRecipeOrAddToStack(item, sourceItem, card);
             if (!handled) this._handleCardOnCardDrop(item, sourceItem, card);
             return;
           }
-          const gid = parseInt(payload, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
-          handler(g);
         });
       }
       const buildInfo = () => getCardInfo(this, item);
       this._bindInfoPanel(card, buildInfo);
       // Apply generic draggable when declared
-      const isBusyFn = () => {
-        if (item.type === 'gangster' && item.data && typeof item.data.gid === 'number') {
-          const g = (this.state.gangsters || []).find(x => x.id === item.data.gid);
-          return !!(g && g.busy);
-        }
-        return false;
-      };
+      const isBusyFn = () => !!(item && item.type === 'gangster' && item.busy);
       this._applyDraggable(card, item, isBusyFn);
       // Apply any stored free position
       this._applyCardPosition(item, wrap, index);
@@ -764,19 +680,16 @@ export class Game {
         if (dyn) dyn.textContent = computeCardDynamic(this, item) || '';
       }
     } catch(e){}
-    // Insert/reposition at appropriate position: [gangsters][cards]
+    // Insert/reposition at appropriate position
     const container = this._worldContainer();
     if (!container) return wrap;
-    if (item.type === 'gangster') {
-      // No special section: append naturally
-      if (wrap.parentElement !== container) container.appendChild(wrap);
-    } else if (typeof index === 'number') {
-      const offset = (this.state.gangsters || []).length;
-      const desiredPosition = offset + index;
-      const current = container.childNodes[desiredPosition];
-      if (container.childNodes[desiredPosition] !== wrap) {
+    if (typeof index === 'number') {
+      const current = container.childNodes[index];
+      if (container.childNodes[index] !== wrap) {
         container.insertBefore(wrap, current || null);
       }
+    } else if (wrap.parentElement !== container) {
+      container.appendChild(wrap);
     }
     return wrap;
   }
@@ -805,24 +718,13 @@ export class Game {
     } catch(e){}
   }
 
-  // Incremental reconciler for world and gangster cards
+  // Incremental reconciler for world cards
   reconcileWorld() {
     const container = document.getElementById('worldArea');
     if (!container) return;
     const desiredNodes = [];
 
-    // 1) Reconcile gangster cards
-    (this.state.gangsters || []).forEach(g => {
-      const uid = 'g_' + String(g.id);
-      const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
-      const model = makeCard(defId);
-      model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
-      model.uid = uid;
-      const wrap = this.ensureCardNode(model, undefined);
-      desiredNodes.push(wrap);
-    });
-
-    // 2) Reconcile discovered table cards (including any deck cards)
+    // Reconcile discovered table cards (including any deck cards)
     const attachDrop = (cardEl, onDrop, prog) => {
       if (cardEl._dropBound) return;
       cardEl.addEventListener('dragover', ev => { ev.preventDefault(); cardEl.classList.add('highlight'); });
@@ -831,10 +733,12 @@ export class Game {
         ev.preventDefault();
         cardEl.classList.remove('highlight');
         const idStr = ev.dataTransfer.getData('text/plain');
-        const gid = parseInt(idStr, 10);
-        const g = this.state.gangsters.find(x => x.id === gid);
-        if (!g || g.busy) return;
-        onDrop(g, prog, cardEl);
+        if (!idStr || !idStr.startsWith('uid:')) return;
+        const uid = idStr.slice(4);
+        const tableCards = (this.state.table && this.state.table.cards) || [];
+        const source = tableCards.find(x => x && x.uid === uid);
+        if (!source || source.type !== 'gangster') return;
+        onDrop(source, prog, cardEl);
       });
       cardEl._dropBound = true;
     };
@@ -851,11 +755,13 @@ export class Game {
         wrap = rendered.wrap;
         const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
-      attachDrop(card, (g, _prog, cardEl) => {
-        if (!g || g.busy) return;
-        if (behavior && typeof behavior.onDrop === 'function') return behavior.onDrop(this, item, g, cardEl);
-        return this._handleGenericOnDrop(item, g, cardEl);
-      }, card);
+      if (item.type !== 'gangster') {
+        attachDrop(card, (g, _prog, cardEl) => {
+          if (!g) return;
+          if (behavior && typeof behavior.onDrop === 'function') return behavior.onDrop(this, item, g, cardEl);
+          return this._handleGenericOnDrop(item, g, cardEl);
+        }, card);
+      }
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
@@ -919,6 +825,22 @@ export class Game {
 
   renderWorld() { if (this.reconcileWorld) this.reconcileWorld(); }
   
+  _allGangsterCards() {
+    const cards = (this.state.table && this.state.table.cards) || [];
+    return cards.filter(it => it && it.type === 'gangster');
+  }
+
+  _gangsterSubtypeForCard(it) {
+    if (!it || it.type !== 'gangster') return null;
+    if (it.id === 'boss') return null;
+    if (typeof it.id === 'string' && it.id.indexOf('gangster_') === 0) return it.id.slice('gangster_'.length);
+    return null;
+  }
+
+  _countGangsterSubtype(subtype) {
+    return this._allGangsterCards().reduce((n, it) => n + (this._gangsterSubtypeForCard(it) === subtype ? 1 : 0), 0);
+  }
+
   // --- Stacking helpers ---
   _findStackIdByUid(uid) {
     const stacks = this.state.stacks || {};
@@ -1101,7 +1023,10 @@ export class Game {
     }
     const cleanPerSec = (s.businesses * 20) + (s.businesses * (this.respectLevel() * 10));
     const dirtyPerSec = (s.extortedBusinesses * 10) + (s.illicit * 50);
-    const salaryPer10 = (s.gangsters || []).reduce((sum, g) => sum + (this.SALARY_PER_10S[g.type] || 0), 0);
+    const salaryPer10 = this._allGangsterCards().reduce((sum, it) => {
+      const sub = this._gangsterSubtypeForCard(it);
+      return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
+    }, 0);
     const salaryPerSec = salaryPer10 / 10;
     const arr = [];
     if (cleanPerSec) arr.push({ label: 'Fronts', value: Math.round(cleanPerSec * 60) });
@@ -1149,7 +1074,7 @@ export class Game {
     // Suspend world re-render so progress elements persist during work
     this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
     // Ensure the busy state applies even if the progress container is not the gangster card
-    this.runProgress(progEl || document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]'), durMs, () => {
+    this.runProgress(progEl || (g && g.uid ? document.querySelector('.world-card[data-uid="' + g.uid + '"]') : null), durMs, () => {
       try {
         onDone && onDone();
       } finally {
@@ -1166,7 +1091,10 @@ export class Game {
 
   _markGangsterBusy(g, isBusy) {
     try {
-      const card = document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]');
+      // g is now the gangster card item
+      const uid = g && g.uid ? g.uid : null;
+      if (!uid) return;
+      const card = document.querySelector('.world-card[data-uid="' + uid + '"]');
       if (!card) return;
       if (isBusy) {
         card.classList.add('busy');
@@ -1482,7 +1410,7 @@ Game.prototype._bindInfoPanel = function(cardEl, buildInfoFn) {
 // Generic draggable applier (now also used for free-positioning payloads)
 Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
   if (!cardEl || !itemLike) return;
-  const getGid = () => (itemLike.data && typeof itemLike.data.gid === 'number') ? String(itemLike.data.gid) : null;
+  const getGid = () => null;
   const isBusy = () => (typeof isBusyFn === 'function') ? !!isBusyFn() : false;
   // Make the whole card draggable (we guard in dragstart if busy)
   cardEl.setAttribute('draggable', 'true');
@@ -1497,15 +1425,13 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
         this._dragOffset = { dx: ev.clientX - r.left, dy: ev.clientY - r.top };
         // Track dragging uid to distinguish self vs other-card drops
         const uid = (cardEl && cardEl.dataset && cardEl.dataset.uid)
-          || (gid ? ('g_' + String(gid)) : (itemLike && itemLike.uid));
+          || (itemLike && itemLike.uid);
         this._draggingUid = uid || null;
       } else {
         this._dragOffset = null; this._draggingUid = null;
       }
     } catch(e) { this._dragOffset = null; this._draggingUid = null; }
-    if (gid) {
-      ev.dataTransfer.setData('text/plain', gid);
-    } else if (itemLike && itemLike.uid) {
+    if (itemLike && itemLike.uid) {
       ev.dataTransfer.setData('text/plain', 'uid:' + itemLike.uid);
     } else {
       ev.preventDefault(); return;
@@ -1524,15 +1450,7 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
     const cont = this._worldContainer();
     if (!cont || !wrapEl) return;
     if (!cont.style.position) cont.style.position = 'relative';
-    let pos = null;
-    let isGang = false;
-    if (itemLike && itemLike.type === 'gangster' && itemLike.data && typeof itemLike.data.gid === 'number') {
-      const g = (this.state.gangsters || []).find(x => x.id === itemLike.data.gid);
-      pos = g && g.pos ? g.pos : null;
-      isGang = true;
-    } else {
-      pos = itemLike && itemLike.pos ? itemLike.pos : null;
-    }
+    let pos = itemLike && itemLike.pos ? itemLike.pos : null;
     // Assign a default absolute position if missing so every card is out of flow
     if (!pos) {
       const tileW = 244; // 230 card width + gap
@@ -1543,7 +1461,7 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
       // For table cards drawn after the first (neighborhood at index 0), start placement after two slots
       // So the first pulled card (table index 1) starts at grid slot 2
       let i;
-      if (!isGang && typeof indexOverride === 'number') {
+      if (typeof indexOverride === 'number') {
         i = (indexOverride >= 1) ? (2 + (indexOverride - 1)) : indexOverride;
       } else {
         i = (typeof indexOverride === 'number' && indexOverride >= 0) ? indexOverride : existing;
@@ -1551,11 +1469,7 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
       const col = i % cols;
       const row = Math.floor(i / cols);
       pos = { x: 12 + col * tileW, y: 12 + row * tileH };
-      if (isGang) {
-        const gid = itemLike.data.gid;
-        const g = (this.state.gangsters || []).find(x => x.id === gid);
-        if (g) g.pos = { x: pos.x, y: pos.y };
-      } else if (itemLike) {
+      if (itemLike) {
         itemLike.pos = { x: pos.x, y: pos.y };
       }
       this.scheduleSave();
@@ -1590,11 +1504,11 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
     for (const op of ops) {
       if (op.spawnGangsterType) {
         const type = op.spawnGangsterType;
-        const stats = this.defaultStatsForType ? this.defaultStatsForType(type) : (type === 'face' ? { face: 3, fist: 1, brain: 1, meat: 1 } : type === 'fist' ? { face: 1, fist: 3, brain: 1, meat: 1 } : { face: 1, fist: 1, brain: 3, meat: 1 });
-        const g = { id: this.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats };
-        this.state.gangsters.push(g);
-        this.reconcileWorld();
-        this.updateUI();
+        const defId = (type === 'boss') ? 'boss' : ('gangster_' + type);
+        const card = this.spawnTableCard(defId);
+        if (card) {
+          card.stats = this.defaultStatsForType ? this.defaultStatsForType(type) : card.stats;
+        }
       } else if (op.spawnCardId) {
         this.spawnTableCard(op.spawnCardId);
       }
