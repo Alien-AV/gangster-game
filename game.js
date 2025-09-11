@@ -1,6 +1,6 @@
 // JavaScript for Gangster Game moved from index.html
 import { ACTIONS } from './actions.js';
-import { makeCard, CARD_DEFS,CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
+import { makeCard, CARD_DEFS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
 import { clearRing } from './progress-ring.js';
@@ -78,11 +78,7 @@ export class Game {
     this._initFreePositioning();
     // Initialize recipe engine with simple single-card mappings (scaffolding)
     this._recipes = new RecipeEngine();
-    // Default recipes
-    this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
-    this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
-    this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
-    this._recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
+    // Default recipes (symmetric, defined in recipe.js)
     registerDefaultRecipes(this._recipes);
     this.reconcileWorld && this.reconcileWorld();
 
@@ -635,7 +631,6 @@ export class Game {
         wrap = rendered.wrap;
         card = rendered.card;
       }
-      const behavior = CARD_BEHAVIORS[item.type];
       // Attach drop for any non-stack targets; source can be any card (uid payload)
       if (item.type !== 'stack') {
         card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
@@ -648,9 +643,9 @@ export class Game {
             const tableCards = (this.state.table && this.state.table.cards) || [];
             const sourceItem = tableCards.find(x => x && x.uid === uid);
             if (!sourceItem) return;
-            // Always prefer recipe/stack flow regardless of source type
+            // Always prefer stack-first, then run recipe on full stack
             const handled = this._tryRecipeOrAddToStack(item, sourceItem, card);
-            if (!handled) this._handleCardOnCardDrop(item, sourceItem, card);
+            if (!handled) this._handleGenericOnDrop(item, sourceItem, card);
             return;
           }
         });
@@ -663,8 +658,7 @@ export class Game {
       // Apply any stored free position
       this._applyCardPosition(item, wrap, index);
       this._dom.cardByUid.set(item.uid, wrap);
-      // Apply onCreate hook and then activate timers for items created now
-      this._applyOnCreate(item);
+      // Activate timers for items created now
       this._activateTimersForItem(item, wrap);
     }
     // Update dynamic text if available
@@ -749,7 +743,6 @@ export class Game {
         const rendered = renderWorldCard(this, item);
         wrap = rendered.wrap;
         const card = rendered.card;
-      const behavior = CARD_BEHAVIORS[item.type];
       attachDrop(card, (src, _prog, cardEl) => {
         if (!src) return;
         const stacked = this._tryRecipeOrAddToStack(item, src, cardEl);
@@ -773,8 +766,7 @@ export class Game {
         this._applyDraggable(card, item, () => false);
         this._applyCardPosition(item, wrap, undefined);
         this._dom.cardByUid.set(item.uid, wrap);
-        // Apply onCreate hook and then activate timers for items created now
-        this._applyOnCreate(item);
+        // Activate timers for items created now
         this._activateTimersForItem(item, wrap);
       }
       // Dim any deck card that is exhausted
@@ -840,6 +832,56 @@ export class Game {
 
   _countGangsterSubtype(subtype) {
     return this._allGangsterCards().reduce((n, it) => n + (this._gangsterSubtypeForCard(it) === subtype ? 1 : 0), 0);
+  }
+
+  // ---- Aggregate stats/requirements (symmetric stack) ----
+  _aggregateStats(items) {
+    const agg = { face: 0, fist: 0, brain: 0, meat: 0 };
+    (Array.isArray(items) ? items : []).forEach(it => {
+      const st = (it && it.stats) ? it.stats : null;
+      if (!st) return;
+      if (typeof st.face === 'number') agg.face += st.face;
+      if (typeof st.fist === 'number') agg.fist += st.fist;
+      if (typeof st.brain === 'number') agg.brain += st.brain;
+      if (typeof st.meat === 'number') agg.meat += st.meat;
+    });
+    return agg;
+  }
+
+  checkAggregateRequirements(action, items) {
+    const req = action && action.requires;
+    if (!req) return { ok: true };
+    const agg = this._aggregateStats(items);
+    const evalOne = (r) => {
+      if (!r) return { ok: true };
+      if (typeof r === 'function') {
+        const out = r(this, { stackItems: items, aggregate: agg });
+        if (out === true) return { ok: true };
+        if (out === false) return { ok: false, reason: 'Requirements not met' };
+        if (typeof out === 'string') return { ok: false, reason: out };
+        return { ok: !!out };
+      }
+      if (typeof r === 'object') {
+        if (r.stat && typeof r.min === 'number') {
+          const val = typeof agg[r.stat] === 'number' ? agg[r.stat] : 0;
+          if (val >= r.min) return { ok: true };
+          return { ok: false, reason: `${r.stat[0].toUpperCase()}${r.stat.slice(1)} ${r.min} required` };
+        }
+      }
+      return { ok: true };
+    };
+    if (Array.isArray(req)) {
+      for (const r of req) { const res = evalOne(r); if (!res.ok) return res; }
+      return { ok: true };
+    }
+    return evalOne(req);
+  }
+
+  durationWithAggregateStat(baseMs, statKey, items) {
+    const agg = this._aggregateStats(items);
+    const s = (statKey && typeof agg[statKey] === 'number') ? agg[statKey] : 0;
+    const scale = 1 + 0.1 * s;
+    return Math.max(500, Math.floor((typeof baseMs === 'number' ? baseMs : 2000) / scale));
   }
 
   // --- Stacking helpers ---
@@ -1128,53 +1170,7 @@ export class Game {
   }
 
 
-  effectiveStat(g, key) {
-    if (!g || !g.stats) return 0;
-    const hasKey = (typeof key === 'string') && (typeof g.stats[key] === 'number');
-    return hasKey ? g.stats[key] : 0;
-  }
-
-  durationWithStat(baseMs, statKey, g) {
-    const s = this.effectiveStat(g, statKey) || 0;
-    const scale = 1 + 0.1 * s; // 10% faster per point
-    return Math.max(500, Math.floor(baseMs / scale));
-  }
-
-  // Uniform requirements checker for actions
-  // Supports:
-  // - function(game, gangster, ctx) → boolean | string (reason)
-  // - object { stat: 'fist'|'face'|'brain'|'meat', min: number }
-  // - array of the above (all must pass)
-  checkRequirements(action, gangster, ctx) {
-    const req = action && action.requires;
-    if (!req) return { ok: true };
-    const evalOne = (r) => {
-      if (!r) return { ok: true };
-      if (typeof r === 'function') {
-        const out = r(this, gangster, ctx);
-        if (out === true) return { ok: true };
-        if (out === false) return { ok: false, reason: 'Requirements not met' };
-        if (typeof out === 'string') return { ok: false, reason: out };
-        return { ok: !!out };
-      }
-      if (typeof r === 'object') {
-        if (r.stat && typeof r.min === 'number') {
-          const val = this.effectiveStat(gangster, r.stat) || 0;
-          if (val >= r.min) return { ok: true };
-          return { ok: false, reason: `${r.stat[0].toUpperCase()}${r.stat.slice(1)} ${r.min} required` };
-        }
-      }
-      return { ok: true };
-    };
-    if (Array.isArray(req)) {
-      for (const r of req) {
-        const res = evalOne(r);
-        if (!res.ok) return res;
-      }
-      return { ok: true };
-    }
-    return evalOne(req);
-  }
+  // Deprecated single-actor helpers removed. New aggregate stat/requirements will be introduced with stack engine.
 
   tick() {
     const s = this.state;
@@ -1219,11 +1215,7 @@ export class Game {
     }
 
     // Stat/other requirements
-    if (action && action.requires) {
-      const ctx = this._pendingAction && this._pendingAction.targetItem ? this._pendingAction.targetItem : null;
-      const res = this.checkRequirements(action, g, ctx);
-      if (!res.ok) { this._cardMsg(res.reason || 'Requirements not met'); return false; }
-    }
+    // Requirements will be validated by the new stack engine (aggregate) in future steps
 
     // Costs
     if (action && action.cost) {
@@ -1246,12 +1238,15 @@ export class Game {
       }
     }
 
-    // Start timed work and apply effect (capture context now to avoid race with concurrent actions)
+    // Start timed work and apply effect; keep _pendingAction available during effect
     const capturedCtx = this._pendingAction || {};
-    this._pendingAction = null;
     return this._startCardWork(g, progEl, durMs, () => {
-      if (action && typeof action.effect === 'function') {
-        action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem);
+      try {
+        if (action && typeof action.effect === 'function') {
+          action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem);
+        }
+      } finally {
+        this._pendingAction = null;
       }
     });
   }
@@ -1490,137 +1485,105 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
 
 // Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
 Game.prototype._handleGenericOnDrop = function(targetItem, sourceItem, cardEl) {
-  // Scaffolding for recipe usage: match by types present in the interaction
-  // If target is a declarative deck card and it's exhausted, do nothing
+  // After stacking, match against the full stack (unordered)
+  const stacks = this.state.stacks || {};
+  const sid = this._findStackIdByUid(targetItem.uid);
+  const uids = sid ? (stacks[sid] || []) : [targetItem.uid, sourceItem.uid].filter(Boolean);
+  const items = uids.map(uid => (this.state.table.cards || []).find(c => c && c.uid === uid)).filter(Boolean);
+  // Prevent actions on exhausted deck-like cards
   try {
-    if (targetItem && targetItem.data && targetItem.data.deck === true) {
-      const d = (this._decks || {})[targetItem.id];
+    const deckCard = items.find(it => it && it.data && it.data.deck === true);
+    if (deckCard) {
+      const d = (this._decks || {})[deckCard.id];
       if (!d || !d.hasMore()) return;
     }
   } catch(e){}
-  const stackTypes = [targetItem.type, sourceItem.type];
-  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, source: sourceItem });
-  // Support special ops from recipes: spawnCardId, consumeTarget
+  const stackTypes = items.map(it => it.type);
+  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, stackItems: items, stackUids: uids });
   const ops = actionOrOps.filter(x => typeof x === 'object');
   const actionIds = actionOrOps.filter(x => typeof x === 'string');
+  // Anchor UI on topmost card
+  const topUid = uids[uids.length - 1];
+  const topWrap = this._dom.cardByUid.get(topUid);
+  const topCardEl = topWrap ? (topWrap.querySelector && topWrap.querySelector('.world-card')) : cardEl;
   // Apply ops first
   if (ops.length) {
-    const table = this.state.table;
-    const tableCards = table && table.cards ? table.cards : [];
+    const tableCards = (this.state.table && this.state.table.cards) || [];
     for (const op of ops) {
       if (op.spawnGangsterType) {
         const type = op.spawnGangsterType;
         const defId = (type === 'boss') ? 'boss' : ('gangster_' + type);
         const card = this.spawnTableCard(defId);
-        if (card) {
-          card.stats = this.defaultStatsForType ? this.defaultStatsForType(type) : card.stats;
-        }
+        if (card) card.stats = this.defaultStatsForType ? this.defaultStatsForType(type) : card.stats;
       } else if (op.spawnCardId) {
         this.spawnTableCard(op.spawnCardId);
       }
-      if (op.consumeTarget) {
-        const idx = tableCards.indexOf(targetItem);
-        if (idx >= 0) {
-          // Stop any heat countdown on the target before removal
-          if (targetItem && targetItem.type === 'heat') {
-            const wrap = this._dom.cardByUid.get(targetItem.uid);
-            if (wrap) { try { clearRing(wrap, 'heat'); } catch(e){} }
-          }
-          tableCards.splice(idx, 1);
-          if (targetItem.uid) this.removeCardByUid(targetItem.uid);
+      if (op.consume) {
+        // consume is an array of selectors: { uid } | { id } | { type }
+        const toRemove = [];
+        for (const sel of (Array.isArray(op.consume) ? op.consume : [])) {
+          let it = null;
+          if (sel.uid) it = items.find(x => x && x.uid === sel.uid);
+          else if (sel.id) it = items.find(x => x && x.id === sel.id);
+          else if (sel.type) it = items.find(x => x && x.type === sel.type);
+          if (it) toRemove.push(it);
+        }
+        for (const it of toRemove) {
+          const idx = tableCards.indexOf(it);
+          if (idx >= 0) tableCards.splice(idx, 1);
+          if (it && it.uid) this.removeCardByUid(it.uid);
         }
       }
     }
-    // After ops, we’re done for this interaction
+    // Dismantle stack after ops
+    if (sid && stacks[sid]) delete stacks[sid];
+    this.updateUI();
     return;
   }
   const baseActions = (ACTIONS || []).filter(a => actionIds.includes(a.id));
   if (!baseActions.length) return;
-  // If one candidate → execute; if multiple → chooser
   const runAction = (baseAct) => {
-    const actor = (sourceItem && sourceItem.type === 'gangster') ? sourceItem : ((targetItem && targetItem.type === 'gangster') ? targetItem : null);
-    const dur = this.durationWithStat(baseAct.base, baseAct.stat, actor);
-    // Stash context for actions that need the drop target/item (e.g., explore deck)
-    this._pendingAction = { targetEl: cardEl, targetItem };
-    const ok = this.executeAction(baseAct, actor, cardEl, dur);
+    const dur = this.durationWithAggregateStat(baseAct && baseAct.base, baseAct && baseAct.stat, items);
+    // Pass symmetric context (full stack) via _pendingAction
+    this._pendingAction = { targetEl: topCardEl, targetItem: null, stackItems: items, stackUids: uids, stackId: sid };
+    const wrapped = {
+      ...baseAct,
+      effect: (game, g, targetEl, targetItem) => {
+        try { if (typeof baseAct.effect === 'function') baseAct.effect(game, g, targetEl, targetItem); } finally {
+          // Auto-dismantle stack after action (non-repeatable)
+          if (sid && stacks[sid]) delete stacks[sid];
+          game.updateUI();
+        }
+      }
+    };
+    const ok = this.executeAction(wrapped, null, topCardEl, dur);
     if (!ok) this._pendingAction = null;
   };
   if (baseActions.length === 1) {
-    runAction(baseActions[0]);
+    const only = baseActions[0];
+    const chk = this.checkAggregateRequirements(only, items);
+    if (!chk.ok) { this._cardMsg(chk.reason || 'Requirements not met'); return; }
+    runAction(only);
     return;
   }
   const options = baseActions.map(a => {
-    const actor = (sourceItem && sourceItem.type === 'gangster') ? sourceItem : ((targetItem && targetItem.type === 'gangster') ? targetItem : null);
-    const res = (typeof this.checkRequirements === 'function') ? this.checkRequirements(a, actor, targetItem) : { ok: true };
+    const chk = this.checkAggregateRequirements(a, items);
     const baseLabel = a.label || a.id;
-    const label = res && !res.ok && res.reason ? `${baseLabel} (${res.reason})` : baseLabel;
-    return { id: a.id, label, disabled: res && !res.ok, title: res && !res.ok ? res.reason : '' };
+    const label = chk && !chk.ok && chk.reason ? `${baseLabel} (${chk.reason})` : baseLabel;
+    return { id: a.id, label, disabled: chk && !chk.ok, title: chk && !chk.ok ? chk.reason : '' };
   });
-  this.showInlineActionChoice(cardEl, options, (choiceId) => {
+  this.showInlineActionChoice(topCardEl, options, (choiceId) => {
     const chosen = baseActions.find(a => a.id === choiceId);
     if (!chosen) return;
+    const chk = this.checkAggregateRequirements(chosen, items);
+    if (!chk.ok) { this._cardMsg(chk.reason || 'Requirements not met'); return; }
     runAction(chosen);
   });
 };
 
-// Card-on-card recipe application
-Game.prototype._handleCardOnCardDrop = function(targetItem, sourceItem, cardEl) {
-  // Match by types of both cards
-  const types = [targetItem.type, sourceItem.type];
-  const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
-  const ops = actionOrOps.filter(x => typeof x === 'object');
-  const actionIds = actionOrOps.filter(x => typeof x === 'string');
-  const table = this.state.table; const tableCards = table && table.cards ? table.cards : [];
-  if (ops.length) {
-    for (const op of ops) {
-      if (op.spawnCardId) this.spawnTableCard(op.spawnCardId);
-      if (op.consumeTarget) {
-        const idx = tableCards.indexOf(targetItem);
-        if (idx >= 0) {
-          if (targetItem && targetItem.type === 'heat') {
-            const tw = this._dom.cardByUid.get(targetItem.uid);
-            if (tw) { try { clearRing(tw, 'heat'); } catch(e){} }
-          }
-          tableCards.splice(idx, 1);
-          if (targetItem.uid) this.removeCardByUid(targetItem.uid);
-        }
-      }
-      if (op.consumeSource) {
-        const sidx = tableCards.indexOf(sourceItem);
-        if (sidx >= 0) {
-          if (sourceItem && sourceItem.type === 'heat') {
-            const sw = this._dom.cardByUid.get(sourceItem.uid);
-            if (sw) { try { clearRing(sw, 'heat'); } catch(e){} }
-          }
-          tableCards.splice(sidx, 1);
-          if (sourceItem.uid) this.removeCardByUid(sourceItem.uid);
-        }
-      }
-    }
-    this.updateUI();
-    return;
-  }
-  if (actionIds.length) {
-    // Run the first matched action as a timed action targeting the drop target
-    const baseAct = (ACTIONS || []).find(a => a && a.id === actionIds[0]);
-    if (!baseAct) return;
-    const dur = this.durationWithStat(baseAct.base, baseAct.stat, null);
-    this._pendingAction = { targetEl: cardEl, targetItem: targetItem };
-    const ok = this.executeAction(baseAct, { stats: { face:1, fist:1, brain:1, meat:1 } }, cardEl, dur);
-    if (!ok) this._pendingAction = null;
-    return;
-  }
-};
+// Removed directional card-on-card handler: replaced by stack-first symmetric flow
 
-// Hook runner for card creation behaviors
-Game.prototype._applyOnCreate = function(item) {
-  try {
-    const behavior = (CARD_BEHAVIORS && item) ? CARD_BEHAVIORS[item.type] : null;
-    if (behavior && typeof behavior.onCreate === 'function') {
-      behavior.onCreate(this, item);
-    }
-  } catch(e){}
-};
+// onCreate hook removed; timers/initialization handled in _activateTimersForItem
 
 // Convenience spawner for table cards; returns the created card
 Game.prototype.spawnTableCard = function(idOrCard) {

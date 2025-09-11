@@ -57,7 +57,7 @@ Open questions
 - Declarative syntax for consumption rules (types vs ids vs counts).
 
 Examples
-- Explore: stack contains {neighborhood, gangster_face}. Aggregate stats Meat ≥ 1 satisfied. Action draws from neighborhood deck. Cards remain; stack can be dismantled manually (non-repeatable).
+- Explore: stack contains {neighborhood, gangster_face}. Aggregate stats Meat ≥ 1 satisfied. Action draws from neighborhood deck. Stack dismantles automatically (non-repeatable).
 - Use Alibi: stack contains {heat, fake_alibi}. Action consumes both and removes them from the table.
 - Raid: stack contains {business, gangster_fist, pistol}. Aggregate stats Fist ≥ 3 (gangster 3 + pistol 2, recipe requires 2), Meat ≥ 1 (gangster). Action runs; applies cooldown/heat, stack breaks unless marked repeatable.
 

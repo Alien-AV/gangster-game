@@ -17,12 +17,23 @@ export class RecipeEngine {
   }
   // Return array of candidate actions. Builder can dynamically return ACTION ids based on context
   matchAll(types, context) {
-    const key = this._keyFor(types);
-    const matches = this.recipes.filter(r => r.key === key && r.size === types.length);
+    // Symmetric subset match: any recipe whose pattern is a subset of provided types
+    const bag = Object.create(null);
+    for (const t of types) bag[t] = (bag[t] || 0) + 1;
+    const isSubset = (pattern) => {
+      const need = Object.create(null);
+      for (const t of pattern) need[t] = (need[t] || 0) + 1;
+      for (const k in need) { if ((bag[k] || 0) < need[k]) return false; }
+      return true;
+    };
     const results = [];
-    for (const rec of matches) {
+    for (const rec of this.recipes) {
+      // Recover original pattern from key (approximate by splitting); size is exact
+      const pat = rec.key.split('+');
+      if (pat.length !== rec.size) continue;
+      if (!isSubset(pat)) continue;
       if (rec.builder) {
-        const out = rec.builder(context);
+        const out = rec.builder(context || {});
         if (Array.isArray(out)) results.push(...out);
         else if (out) results.push(out);
       } else if (rec.outputs) {
@@ -49,13 +60,14 @@ export function registerDefaultRecipes(recipes) {
   recipes.addRecipe(['cop','gangster'], ['actForgeAlibi']);
   // Fake alibi + heat → timed action
   recipes.addRecipe(['paperwork','heat'], ['actUseAlibi']);
-  // Services map directly to single actions
+  // Services map directly to single actions (symmetric)
   recipes.addRecipe(['service','gangster'], (ctx) => {
-    const target = ctx && ctx.target;
-    if (!target) return [];
-    if (target.id === 'bookmaker') return ['actLaunder'];
-    if (target.id === 'newspaper') return ['actPromo'];
-    if (target.id === 'pawn_shop') return ['actProcureEquipment'];
+    const items = (ctx && Array.isArray(ctx.stackItems)) ? ctx.stackItems : [];
+    const svc = items.find(it => it && it.type === 'service');
+    if (!svc) return [];
+    if (svc.id === 'bookmaker') return ['actLaunder'];
+    if (svc.id === 'newspaper') return ['actPromo'];
+    if (svc.id === 'pawn_shop') return ['actProcureEquipment'];
     return [];
   });
 }
