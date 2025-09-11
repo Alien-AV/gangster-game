@@ -636,7 +636,7 @@ export class Game {
         card = rendered.card;
       }
       const behavior = CARD_BEHAVIORS[item.type];
-      // Attach drop only for non-gangster, non-stack targets; source can be a gangster card (uid payload)
+      // Attach drop only for non-gangster, non-stack targets; source can be any card (uid payload)
       if (item.type !== 'stack' && item.type !== 'gangster') {
         card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
         card.addEventListener('dragleave', () => card.classList.remove('highlight'));
@@ -648,12 +648,7 @@ export class Game {
             const tableCards = (this.state.table && this.state.table.cards) || [];
             const sourceItem = tableCards.find(x => x && x.uid === uid);
             if (!sourceItem) return;
-            if (sourceItem.type === 'gangster') {
-              const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
-              handler(sourceItem);
-              return;
-            }
-            // Try to match recipes; if none, add to visual stack
+            // Always prefer recipe/stack flow regardless of source type
             const handled = this._tryRecipeOrAddToStack(item, sourceItem, card);
             if (!handled) this._handleCardOnCardDrop(item, sourceItem, card);
             return;
@@ -737,7 +732,7 @@ export class Game {
         const uid = idStr.slice(4);
         const tableCards = (this.state.table && this.state.table.cards) || [];
         const source = tableCards.find(x => x && x.uid === uid);
-        if (!source || source.type !== 'gangster') return;
+        if (!source) return;
         onDrop(source, prog, cardEl);
       });
       cardEl._dropBound = true;
@@ -756,10 +751,18 @@ export class Game {
         const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
       if (item.type !== 'gangster') {
-        attachDrop(card, (g, _prog, cardEl) => {
-          if (!g) return;
-          if (behavior && typeof behavior.onDrop === 'function') return behavior.onDrop(this, item, g, cardEl);
-          return this._handleGenericOnDrop(item, g, cardEl);
+        attachDrop(card, (src, _prog, cardEl) => {
+          if (!src) return;
+          const stacked = this._tryRecipeOrAddToStack(item, src, cardEl);
+          if (!stacked) {
+            // Recipe matched; run action(s)
+            return this._handleGenericOnDrop(item, src, cardEl);
+          }
+          // No recipe matched: allow any residual single-card behavior (heat/owner), else nothing
+          if (behavior && typeof behavior.onDrop === 'function') {
+            return behavior.onDrop(this, item, src, cardEl);
+          }
+          return;
         }, card);
       }
       const buildInfo = () => getCardInfo(this, item);
@@ -886,7 +889,7 @@ export class Game {
   _tryRecipeOrAddToStack(targetItem, sourceItem, targetCardEl) {
     const types = [targetItem.type, sourceItem.type];
     const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
-    if (actionOrOps && actionOrOps.length) return false;
+    const hasRecipe = !!(actionOrOps && actionOrOps.length);
     // Determine existing stack for target (if any)
     const stacks = this.state.stacks || (this.state.stacks = {});
     const targetUid = targetItem.uid;
@@ -904,7 +907,8 @@ export class Game {
     // Reflow using the stack's base position (arr[0])
     this._reflowStack(sid, this._basePosForStack(sid));
     this.scheduleSave();
-    return true;
+    // Return false if recipes matched so caller can proceed to handle actions
+    return !hasRecipe;
   }
 
   _removeFromAnyStack(uid) {
@@ -1483,7 +1487,7 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
 };
 
 // Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
-Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
+Game.prototype._handleGenericOnDrop = function(targetItem, sourceItem, cardEl) {
   // Scaffolding for recipe usage: match by types present in the interaction
   // If target is a declarative deck card and it's exhausted, do nothing
   try {
@@ -1492,8 +1496,8 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
       if (!d || !d.hasMore()) return;
     }
   } catch(e){}
-  const stackTypes = [targetItem.type, 'gangster'];
-  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, gangster });
+  const stackTypes = [targetItem.type, sourceItem.type];
+  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, source: sourceItem });
   // Support special ops from recipes: spawnCardId, consumeTarget
   const ops = actionOrOps.filter(x => typeof x === 'object');
   const actionIds = actionOrOps.filter(x => typeof x === 'string');
@@ -1532,10 +1536,10 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
   if (!baseActions.length) return;
   // If one candidate → execute; if multiple → chooser
   const runAction = (baseAct) => {
-    const dur = this.durationWithStat(baseAct.base, baseAct.stat, gangster);
+    const dur = this.durationWithStat(baseAct.base, baseAct.stat, (sourceItem && sourceItem.type === 'gangster') ? sourceItem : null);
     // Stash context for actions that need the drop target/item (e.g., explore deck)
     this._pendingAction = { targetEl: cardEl, targetItem };
-    const ok = this.executeAction(baseAct, gangster, cardEl, dur);
+    const ok = this.executeAction(baseAct, (sourceItem && sourceItem.type === 'gangster') ? sourceItem : null, cardEl, dur);
     if (!ok) this._pendingAction = null;
   };
   if (baseActions.length === 1) {
@@ -1543,7 +1547,8 @@ Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
     return;
   }
   const options = baseActions.map(a => {
-    const res = (typeof this.checkRequirements === 'function') ? this.checkRequirements(a, gangster, targetItem) : { ok: true };
+    const actor = (sourceItem && sourceItem.type === 'gangster') ? sourceItem : null;
+    const res = (typeof this.checkRequirements === 'function') ? this.checkRequirements(a, actor, targetItem) : { ok: true };
     const baseLabel = a.label || a.id;
     const label = res && !res.ok && res.reason ? `${baseLabel} (${res.reason})` : baseLabel;
     return { id: a.id, label, disabled: res && !res.ok, title: res && !res.ok ? res.reason : '' };
