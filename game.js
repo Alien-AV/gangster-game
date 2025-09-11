@@ -1071,8 +1071,10 @@ export class Game {
   
 
   _startCardWork(g, progEl, durMs, onDone) {
-    g.busy = true;
-    this._markGangsterBusy(g, true);
+    if (g && g.type === 'gangster') {
+      g.busy = true;
+      this._markGangsterBusy(g, true);
+    }
     // Suspend world re-render so progress elements persist during work
     this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
     // Ensure the busy state applies even if the progress container is not the gangster card
@@ -1080,8 +1082,10 @@ export class Game {
       try {
         onDone && onDone();
       } finally {
-        g.busy = false;
-        this._markGangsterBusy(g, false);
+        if (g && g.type === 'gangster') {
+          g.busy = false;
+          this._markGangsterBusy(g, false);
+        }
         // Resume world render if this is the last active work
         this._suspendWorldRender = Math.max(0, (this._suspendWorldRender || 1) - 1);
         this.renderWorld();
@@ -1534,10 +1538,11 @@ Game.prototype._handleGenericOnDrop = function(targetItem, sourceItem, cardEl) {
   if (!baseActions.length) return;
   // If one candidate → execute; if multiple → chooser
   const runAction = (baseAct) => {
-    const dur = this.durationWithStat(baseAct.base, baseAct.stat, (sourceItem && sourceItem.type === 'gangster') ? sourceItem : null);
+    const actor = (sourceItem && sourceItem.type === 'gangster') ? sourceItem : ((targetItem && targetItem.type === 'gangster') ? targetItem : null);
+    const dur = this.durationWithStat(baseAct.base, baseAct.stat, actor);
     // Stash context for actions that need the drop target/item (e.g., explore deck)
     this._pendingAction = { targetEl: cardEl, targetItem };
-    const ok = this.executeAction(baseAct, (sourceItem && sourceItem.type === 'gangster') ? sourceItem : null, cardEl, dur);
+    const ok = this.executeAction(baseAct, actor, cardEl, dur);
     if (!ok) this._pendingAction = null;
   };
   if (baseActions.length === 1) {
@@ -1545,7 +1550,7 @@ Game.prototype._handleGenericOnDrop = function(targetItem, sourceItem, cardEl) {
     return;
   }
   const options = baseActions.map(a => {
-    const actor = (sourceItem && sourceItem.type === 'gangster') ? sourceItem : null;
+    const actor = (sourceItem && sourceItem.type === 'gangster') ? sourceItem : ((targetItem && targetItem.type === 'gangster') ? targetItem : null);
     const res = (typeof this.checkRequirements === 'function') ? this.checkRequirements(a, actor, targetItem) : { ok: true };
     const baseLabel = a.label || a.id;
     const label = res && !res.ok && res.reason ? `${baseLabel} (${res.reason})` : baseLabel;
