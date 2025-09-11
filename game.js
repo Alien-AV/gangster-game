@@ -636,8 +636,8 @@ export class Game {
         card = rendered.card;
       }
       const behavior = CARD_BEHAVIORS[item.type];
-      // Attach drop only for non-gangster, non-stack targets; source can be any card (uid payload)
-      if (item.type !== 'stack' && item.type !== 'gangster') {
+      // Attach drop for any non-stack targets; source can be any card (uid payload)
+      if (item.type !== 'stack') {
         card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
         card.addEventListener('dragleave', () => card.classList.remove('highlight'));
         card.addEventListener('drop', ev => {
@@ -750,21 +750,19 @@ export class Game {
         wrap = rendered.wrap;
         const card = rendered.card;
       const behavior = CARD_BEHAVIORS[item.type];
-      if (item.type !== 'gangster') {
-        attachDrop(card, (src, _prog, cardEl) => {
-          if (!src) return;
-          const stacked = this._tryRecipeOrAddToStack(item, src, cardEl);
-          if (!stacked) {
-            // Recipe matched; run action(s)
-            return this._handleGenericOnDrop(item, src, cardEl);
-          }
-          // No recipe matched: allow any residual single-card behavior (heat/owner), else nothing
-          if (behavior && typeof behavior.onDrop === 'function') {
-            return behavior.onDrop(this, item, src, cardEl);
-          }
-          return;
-        }, card);
-      }
+      attachDrop(card, (src, _prog, cardEl) => {
+        if (!src) return;
+        const stacked = this._tryRecipeOrAddToStack(item, src, cardEl);
+        if (!stacked) {
+          // Recipe matched; run action(s)
+          return this._handleGenericOnDrop(item, src, cardEl);
+        }
+        // No recipe matched: allow any residual single-card behavior (heat/owner), else nothing
+        if (behavior && typeof behavior.onDrop === 'function') {
+          return behavior.onDrop(this, item, src, cardEl);
+        }
+        return;
+      }, card);
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
         card.addEventListener('mouseenter', () => this._showInfoPanel(buildInfo()));
