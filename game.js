@@ -1243,7 +1243,7 @@ export class Game {
     return this._startCardWork(g, progEl, durMs, () => {
       try {
         if (action && typeof action.effect === 'function') {
-          action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem);
+          action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem, capturedCtx);
         }
       } finally {
         this._pendingAction = null;
@@ -1548,8 +1548,8 @@ Game.prototype._handleGenericOnDrop = function(targetItem, sourceItem, cardEl) {
     this._pendingAction = { targetEl: topCardEl, targetItem: null, stackItems: items, stackUids: uids, stackId: sid };
     const wrapped = {
       ...baseAct,
-      effect: (game, g, targetEl, targetItem) => {
-        try { if (typeof baseAct.effect === 'function') baseAct.effect(game, g, targetEl, targetItem); } finally {
+      effect: (game, g, targetEl, targetItem, ctx) => {
+        try { if (typeof baseAct.effect === 'function') baseAct.effect(game, g, targetEl, targetItem, ctx); } finally {
           // Auto-dismantle stack after action (non-repeatable)
           if (sid && stacks[sid]) delete stacks[sid];
           game.updateUI();

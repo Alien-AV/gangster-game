@@ -6,8 +6,8 @@ import { startCountdown, clearRing } from './progress-ring.js';
 export const ACTIONS = [
   // Timed recruit from a recruit card
   { id: 'actRecruitFromCard', label: 'Recruit (Face)', stat: 'face', base: 2500,
-    effect: (game) => {
-      const ctx = game._pendingAction || {};
+    effect: (game, _g, _el, _it, ctx) => {
+      ctx = ctx || {};
       const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
       const table = game.state.table; const cards = table && table.cards ? table.cards : [];
       const recruit = items.find(it => it && it.type === 'recruit');
@@ -25,8 +25,8 @@ export const ACTIONS = [
     } },
   // Unified Explore for any deck-like card: expects item.data.exploreIds
   { id: 'actExploreDeck', label: 'Explore (Brain)', stat: 'brain', base: 3500,
-    effect: (game) => {
-      const ctx = game._pendingAction || {};
+    effect: (game, _g, _el, _it, ctx) => {
+      ctx = ctx || {};
       const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
       // Identify deck card from stack
       const deckCard = items.find(it => it && it.data && it.data.deck === true);
@@ -93,8 +93,8 @@ export const ACTIONS = [
     } },
   { id: 'actRaid', label: 'Raid Business', base: 3500,
     requires: { stat: 'fist', min: 2 },
-    effect: (game, g) => {
-      const ctx = game._pendingAction || {};
+    effect: (game, g, _el, _it, ctx) => {
+      ctx = ctx || {};
       const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
       const targetItem = items.find(it => it && it.type === 'business');
       const targetEl = (() => {
@@ -142,8 +142,8 @@ export const ACTIONS = [
       game.spawnTableCard('heat');
     } },
   { id: 'actExtort', label: 'Extort', base: 4000,
-    effect: (game, g) => {
-      const ctx = game._pendingAction || {};
+    effect: (game, g, _el, _it, ctx) => {
+      ctx = ctx || {};
       const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
       const tableCards = game.state.table.cards;
       const targetItem = items.find(it => it && it.type === 'business');
@@ -220,9 +220,9 @@ export const ACTIONS = [
     } },
   // Timed use of a fake alibi on heat
   { id: 'actUseAlibi', label: 'Use Alibi', base: 2500,
-    effect: (game) => {
+    effect: (game, _g, _el, _it, ctx) => {
+      ctx = ctx || {};
       const table = game.state.table; const cards = table && table.cards ? table.cards : [];
-      const ctx = game._pendingAction || {};
       const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
       const heat = items.find(it => it && it.type === 'heat');
       const alibi = items.find(it => it && it.id === 'fake_alibi');
