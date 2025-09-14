@@ -33,7 +33,7 @@ export const CARD_DEFS = [
   { id: 'extorted_business', name: 'Extorted Businesses', desc: 'Shops paying protection under your wing.', reusable: true, type: 'extorted_business', img: 'images/extorted-business.png', data: { count: 0 }, hint: 'Aggregated protection payouts.' },
   { id: 'heat', name: 'Police Heat', desc: 'The cops are onto you. Handle it before it blows over.', reusable: false, type: 'heat', img: 'images/heat.png', hint: 'Expires over time; avoid getting arrested.' },
   { id: 'neighborhood', name: 'Neighborhood', desc: 'Your turf. Discover rackets, marks, and useful connections.', reusable: true, type: 'neighborhood', img: 'images/neighborhood.png', hint: 'Drop a gangster to explore.', data: { deck: true, deckStart: [ ['recruits','targets','opportunities'] ], exploreIds: [], deckEnd: ['city_entrance'] } },
-  { id: 'recruits', name: 'Recruits', desc: 'Potential talent waiting to be found.', reusable: true, type: 'neighborhood', img: 'images/face.png', hint: 'Drop a gangster to find recruits.', data: { deck: true, exploreIds: ['recruit_face','recruit_fist','recruit_brain'] } },
+  { id: 'recruits', name: 'Recruits', desc: 'Potential talent waiting to be found.', reusable: true, type: 'neighborhood', img: 'images/face.png', hint: 'Drop a gangster to find recruits.', data: { deck: true, exploreIds: ['recruit_face','recruit_fist','recruit_brain','small_crooks'] } },
   { id: 'targets', name: 'Targets', desc: 'Locations ripe for protection or raids.', reusable: true, type: 'neighborhood', img: 'images/laundromat.jpg', hint: 'Drop a gangster to find targets.', data: { deck: true, exploreIds: ['hot_dog_stand','bakery','diner','laundromat'] } },
   { id: 'opportunities', name: 'Opportunities', desc: 'Useful connections and services.', reusable: true, type: 'neighborhood', img: 'images/priest.jpg', hint: 'Drop a gangster to find opportunities.', data: { deck: true, exploreIds: ['corrupt_cop','priest','bookmaker','pawn_shop','newspaper'] } },
   { id: 'fake_alibi', name: 'Fake Alibi', desc: 'Papers that say you were somewhere else.', reusable: false, type: 'paperwork', img: 'images/newspaper.jpg', hint: 'Combine with Heat to clear it safely.', draggable: true },
@@ -74,201 +74,6 @@ export function computeCardDynamic(game, item) {
   return '';
 }
 
-export const CARD_BEHAVIORS = {
-  heat: {
-    onCreate: function(game, item) {
-      // Initialize standard heat countdown if not already set
-      if (!item.heatEndMs) {
-        const nowMs = Date.now();
-        item.heatStartMs = nowMs;
-        item.heatEndMs = nowMs + 20000; // default 20s real-time
-      }
-    },
-    onDrop: function(game, item, gangster, cardEl) {
-      // Deflect Heat: short action that resets countdown to start and shows working badge
-      const actionMs = 5000;
-      const wrap = item._ringWrapEl || (cardEl && cardEl.parentElement);
-      // Show deflecting badge and change ring color to alarming
-      if (wrap) {
-        try { wrap.classList.add('heat-active'); wrap.classList.add('deflecting'); } catch(e){}
-        const card = wrap.querySelector && wrap.querySelector('.world-card');
-        if (card) {
-          let badge = card.querySelector('.world-card-center-badge.badge-deflect');
-          if (!badge) {
-            badge = document.createElement('div');
-            badge.className = 'world-card-center-badge badge-deflect';
-            badge.textContent = 'Deflecting Heat';
-            card.appendChild(badge);
-          }
-        }
-        // Stop any existing heat countdown visuals immediately
-        try { clearRing(wrap, 'heat'); } catch(e){}
-      }
-      // Start timed work (marks gangster busy via existing infra)
-      const act = { id: 'actDeflectHeat', label: 'Deflect Heat', stat: 'brain', base: actionMs };
-      const dur = game.durationWithStat(act.base, act.stat, gangster);
-      game.executeAction(act, gangster, cardEl, dur);
-      // Reset timer on completion
-      setTimeout(() => {
-        const now = Date.now();
-        item.heatStartMs = now;
-        item.heatEndMs = now + 20000;
-        // Restart countdown fresh
-        if (wrap) {
-          try { wrap.classList.add('heat-active'); } catch(e){}
-          startCountdown(wrap, {
-            startMs: item.heatStartMs,
-            endMs: item.heatEndMs,
-            mode: 'heat',
-            showBadge: true,
-            onDone: () => {
-              const disc = (game.state.table && game.state.table.cards) || [];
-              const idx = disc.indexOf(item);
-              if (idx >= 0) disc.splice(idx, 1);
-              if (item.uid) { try { game.removeCardByUid(item.uid); } catch(e){} }
-              game._cardMsg('You got arrested');
-            }
-          });
-        } else {
-          game._activateTimersForItem(item, wrap);
-        }
-        // Clear badge
-        if (wrap) {
-          const card = wrap.querySelector && wrap.querySelector('.world-card');
-          const badge = card && card.querySelector ? card.querySelector('.world-card-center-badge.badge-deflect') : null;
-          if (badge) { try { badge.remove(); } catch(e){} }
-          try { wrap.classList.remove('deflecting'); } catch(e){}
-        }
-      }, dur);
-    }
-  },
-  business: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const now = game.state.time || 0;
-      if (item.cooldownUntil && now < item.cooldownUntil) { game._cardMsg('Business is recovering after a raid.'); return; }
-      // Otherwise, delegate to recipe-driven generic handler (e.g., Extort/Raid)
-      game._handleGenericOnDrop(item, gangster, cardEl);
-    }
-  },
-  crooks: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const recruitAct = (ACTIONS || []).find(a => a.id === 'actRecruitEnforcer');
-      const vigilAct = (ACTIONS || []).find(a => a.id === 'actVigilante');
-      if (!recruitAct && !vigilAct) return;
-      const options = [];
-      if (recruitAct) options.push({ id: 'recruit', label: 'Recruit' });
-      if (vigilAct) {
-        const req = (typeof game.checkRequirements === 'function') ? game.checkRequirements(vigilAct, gangster) : { ok: true };
-        const reason = req && req.reason ? ` (${req.reason})` : '';
-        options.push({ id: 'vigilante', label: req && req.ok ? 'Beat Up' : ('Beat Up' + reason), disabled: !(req && req.ok), title: req && !req.ok ? req.reason : '' });
-      }
-      if (!options.length) return;
-      game.showInlineActionChoice(cardEl, options, (choiceId) => {
-        if (choiceId === 'recruit' && recruitAct) {
-          const act = {
-            ...recruitAct, id: 'actRecruitCrooks', label: 'Recruit Local Crooks', stat: 'face',
-            effect: (gme, gg) => {
-              recruitAct.effect(gme, gg);
-              const tableCards = gme.state.table.cards;
-              let ef = tableCards.find(x => x.id === 'enforcers');
-              if (!ef) { ef = makeCard('enforcers'); tableCards.push(ef); }
-              ef.data = ef.data || {}; ef.data.count = (ef.data.count || 0) + 1;
-              gme.updateCardDynamic(ef);
-              { const idx = tableCards.indexOf(ef); gme.ensureCardNode(ef, idx); }
-            }
-          };
-          const dur = game.durationWithStat(act.base, act.stat, gangster);
-          game.executeAction(act, gangster, cardEl, dur);
-        } else if (choiceId === 'vigilante' && vigilAct) {
-          const act = { ...vigilAct };
-          const dur = game.durationWithStat(act.base, act.stat, gangster);
-          game.executeAction(act, gangster, cardEl, dur);
-        }
-      });
-    }
-  },
-  // Simple single-action cases now handled by unified infra (recipes + generic onDrop)
-  owner: {
-    onDrop: function (game, item, gangster, cardEl) {
-      const baseMs = 3500;
-      const convinceAct = {
-        id: 'actConvinceOwner', label: 'Convince Owner (Face)', stat: 'face', base: baseMs,
-        cost: { money: 500 },
-        effect: (gme, gg) => {
-          const tableCards = gme.state.table.cards;
-          const idx = tableCards.indexOf(item);
-          let xb = tableCards.find(x => x.id === 'extorted_business');
-          if (!xb) {
-            xb = makeCard('extorted_business');
-            xb.data = xb.data || {}; xb.data.count = 1;
-            if (idx >= 0) tableCards.splice(idx, 1);
-            tableCards.push(xb);
-            if (item && item.uid) { gme.removeCardByUid(item.uid); }
-            { const nidx = tableCards.indexOf(xb); gme.ensureCardNode(xb, nidx); }
-          } else {
-            xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-            if (idx >= 0) {
-              tableCards.splice(idx, 1);
-              if (item && item.uid) { gme.removeCardByUid(item.uid); }
-            }
-            { const nidx = tableCards.indexOf(xb); gme.ensureCardNode(xb, nidx); }
-          }
-          if (xb) {
-            game.updateCardDynamic(xb);
-          }
-          if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
-          gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
-        }
-      };
-      const threatenAct = {
-        id: 'actThreatenOwner', label: 'Threaten Owner (Fist)', stat: 'fist', base: baseMs,
-        requires: { stat: 'fist', min: 3 },
-        effect: (gme, gg) => {
-          const tableCards = gme.state.table.cards;
-          const idx = tableCards.indexOf(item);
-          let xb = tableCards.find(x => x.id === 'extorted_business');
-          if (!xb) {
-            xb = makeCard('extorted_business');
-            xb.data = xb.data || {}; xb.data.count = 1;
-            if (idx >= 0) tableCards.splice(idx, 1);
-            tableCards.push(xb);
-            if (item && item.uid) { gme.removeCardByUid(item.uid); }
-            { const nidx = tableCards.indexOf(xb); gme.ensureCardNode(xb, nidx); }
-          } else {
-            xb.data = xb.data || {}; xb.data.count = (xb.data.count || 0) + 1;
-            if (idx >= 0) {
-              tableCards.splice(idx, 1);
-              if (item && item.uid) { gme.removeCardByUid(item.uid); }
-            }
-            { const nidx = tableCards.indexOf(xb); gme.ensureCardNode(xb, nidx); }
-          }
-          if (xb) {
-            game.updateCardDynamic(xb);
-          }
-          if (gme.state.disagreeableOwners > 0) gme.state.disagreeableOwners -= 1;
-          gme.state.extortedBusinesses = (gme.state.extortedBusinesses || 0) + 1;
-          gme.spawnTableCard('heat');
-        }
-      };
-      const reqThreat = (typeof game.checkRequirements === 'function') ? game.checkRequirements(threatenAct, gangster) : { ok: true };
-      const options = [
-        { id: 'convince_owner', label: 'Convince Owner (Face)' },
-        { id: 'threaten_owner', label: reqThreat.ok ? 'Threaten Owner (Fist)' : ('Threaten Owner (Fist) (' + (reqThreat.reason || 'Requires Fist 3') + ')'), disabled: !reqThreat.ok, title: reqThreat.reason || '' },
-      ];
-      game.showInlineActionChoice(cardEl, options, (choiceId) => {
-        if (choiceId === 'convince_owner') {
-          const dur = game.durationWithStat(convinceAct.base, convinceAct.stat, gangster);
-          game.executeAction(convinceAct, gangster, cardEl, dur);
-        }
-        if (choiceId === 'threaten_owner') {
-          const dur = game.durationWithStat(threatenAct.base, threatenAct.stat, gangster);
-          game.executeAction(threatenAct, gangster, cardEl, dur);
-        }
-      });
-    }
-  }
-};
-
 // Renderer for a world card element and wrapper
 export function renderWorldCard(game, item) {
   const wrap = document.createElement('div');
@@ -299,10 +104,8 @@ export function renderWorldCard(game, item) {
   // If gangster, render stat badge
   if (item.type === 'gangster') {
     const stats = (() => {
-      // Prefer runtime gangster stats if gid present
-      const gid = item && item.data && typeof item.data.gid === 'number' ? item.data.gid : null;
-      const g = gid != null ? (game.state.gangsters || []).find(x => x.id === gid) : null;
-      const st = (g && g.stats) ? g.stats : (item.stats || {});
+      const def = CARD_DEF_BY_ID.get(item.id) || {};
+      const st = Object.assign({}, def.stats || {}, item.stats || {});
       return { face: st.face || 0, fist: st.fist || 0, brain: st.brain || 0, meat: st.meat != null ? st.meat : 1 };
     })();
     const badges = document.createElement('div');
@@ -360,10 +163,14 @@ export function getCardInfo(game, item) {
   const title = (item && item.name) || (def && def.name) || item.title || item.id;
   const desc = (item && item.desc) || (def && def.desc) || '';
   let statsLine = '';
-  if (item && item.type === 'gangster' && item.uid && item.uid.startsWith('g_')) {
-    const gid = parseInt(item.uid.slice(2), 10);
-    const g = (game.state.gangsters || []).find(x => x.id === gid);
-    if (g && g.stats) statsLine = `Fist:${g.stats.fist} Face:${g.stats.face} Brain:${g.stats.brain} Meat:${g.stats.meat ?? 1}`;
+  if (item && item.type === 'gangster') {
+    const def = CARD_DEF_BY_ID.get(item.id) || {};
+    const st = Object.assign({}, def.stats || {}, item.stats || {});
+    const face = st.face != null ? st.face : 0;
+    const fist = st.fist != null ? st.fist : 0;
+    const brain = st.brain != null ? st.brain : 0;
+    const meat = st.meat != null ? st.meat : 1;
+    statsLine = `Fist:${fist} Face:${face} Brain:${brain} Meat:${meat}`;
   }
   const hint = def && def.hint ? def.hint : '';
   const dynamic = computeCardDynamic(game, item);

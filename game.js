@@ -1,6 +1,6 @@
 // JavaScript for Gangster Game moved from index.html
 import { ACTIONS } from './actions.js';
-import { makeCard, CARD_DEFS,CARD_BEHAVIORS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
+import { makeCard, CARD_DEFS, renderWorldCard, getCardInfo, computeCardDynamic } from './card.js';
 import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
 import { clearRing } from './progress-ring.js';
@@ -26,8 +26,6 @@ export class Game {
       illicit: 0,
       illicitProgress: 0,
       unlockedIllicit: false,
-      gangsters: [],
-      nextGangId: 1,
       salaryTick: 0,
       table: null,
       // Placeholder flow stats per minute (clean): we'll compute presentation only for now
@@ -60,11 +58,7 @@ export class Game {
     hookSlot(1); hookSlot(2); hookSlot(3);
 
     this.loadState();
-    // Ensure Boss exists as a normal gangster with special stats/name
-    if (!this.state.gangsters.some(g => g.type === 'boss')) {
-      const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
-      this.state.gangsters.unshift(bossGang);
-    }
+    if (!this.state.stacks || typeof this.state.stacks !== 'object') this.state.stacks = {};
 
     // Initialize message UI
     this.initCardUI();
@@ -84,11 +78,7 @@ export class Game {
     this._initFreePositioning();
     // Initialize recipe engine with simple single-card mappings (scaffolding)
     this._recipes = new RecipeEngine();
-    // Default recipes
-    this._recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
-    this._recipes.addRecipe(['bookmaker','gangster'], ['actLaunder']);
-    this._recipes.addRecipe(['priest','gangster'], ['actDonate']);
-    this._recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
+    // Default recipes (symmetric, defined in recipe.js)
     registerDefaultRecipes(this._recipes);
     this.reconcileWorld && this.reconcileWorld();
 
@@ -142,8 +132,6 @@ export class Game {
       illicit: s.illicit,
       illicitProgress: s.illicitProgress,
       unlockedIllicit: s.unlockedIllicit,
-      gangsters: (s.gangsters || []).map(g => ({ id: g.id, type: g.type, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), name: g.name, equipped: Array.isArray(g.equipped) ? g.equipped : [], pos: g.pos })),
-      nextGangId: s.nextGangId,
       salaryTick: s.salaryTick,
       table: s.table || null,
       // Persist deck states (all decks)
@@ -161,6 +149,7 @@ export class Game {
         }
         return res;
       })(),
+      stacks: s.stacks || {},
     };
   }
 
@@ -189,12 +178,7 @@ export class Game {
       // Hard reset world/table/DOM before applying loaded state
       this._resetWorld();
       Object.assign(this.state, data);
-      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), equipped: Array.isArray(g.equipped) ? g.equipped : [], pos: g.pos }));
-      // Ensure Boss exists
-      if (!this.state.gangsters.some(x => x.type === 'boss')) {
-        const bossGang = { id: this.state.nextGangId++, type: 'boss', name: 'Boss', busy: false, personalHeat: 0, stats: { face: 2, fist: 2, brain: 2 } };
-        this.state.gangsters.unshift(bossGang);
-      }
+      this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
       // Reset modal queues and refresh UI
       this._illicitSelect = { queue: [], active: false };
       this._equipSelect = { queue: [], active: false };
@@ -223,7 +207,7 @@ export class Game {
       // Hard reset world/table/DOM before applying loaded state
       this._resetWorld();
       Object.assign(this.state, data);
-      this.state.gangsters = (data.gangsters || []).map(g => ({ id: g.id, type: g.type, name: g.name, busy: false, personalHeat: g.personalHeat || 0, stats: g.stats || this.defaultStatsForType(g.type), pos: g.pos }));
+      this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
@@ -269,8 +253,11 @@ export class Game {
   }
 
   paySalaries() {
-    const s = this.state;
-    const due = s.gangsters.reduce((sum, g) => sum + (this.SALARY_PER_10S[g.type] || 0), 0);
+    const gang = this._allGangsterCards();
+    const due = gang.reduce((sum, it) => {
+      const sub = this._gangsterSubtypeForCard(it);
+      return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
+    }, 0);
     if (due > 0) this.spendMoney(due);
   }
 
@@ -308,9 +295,9 @@ export class Game {
     const availFronts = Math.max(0, (s.businesses || 0) - (s.illicit || 0));
     const afEl = document.getElementById('availableFronts');
     if (afEl) afEl.textContent = availFronts;
-    const faces = s.gangsters.filter(g => g.type === 'face').length;
-    const fists = s.gangsters.filter(g => g.type === 'fist').length;
-    const brains = s.gangsters.filter(g => g.type === 'brain').length;
+    const faces = this._countGangsterSubtype('face');
+    const fists = this._countGangsterSubtype('fist');
+    const brains = this._countGangsterSubtype('brain');
     const facesEl = document.getElementById('faces'); if (facesEl) facesEl.textContent = faces;
     const fistsEl = document.getElementById('fists'); if (fistsEl) fistsEl.textContent = fists;
     const brainsEl = document.getElementById('brains'); if (brainsEl) brainsEl.textContent = brains;
@@ -516,8 +503,9 @@ export class Game {
     if (!this.state.table || !Array.isArray(this.state.table.cards)) {
       this.state.table = { cards: [] };
     }
-    // Spawn the Neighborhood card only on fresh tables (avoid duplicates on load)
+    // On a fresh table, spawn a starting gangster and the Neighborhood deck
     if ((this.state.table.cards || []).length === 0) {
+      this.spawnTableCard('boss');
       this.spawnTableCard('neighborhood');
     }
     // Build runtime deck objects (not saved directly)
@@ -573,26 +561,6 @@ export class Game {
       const x = rawX - dx;
       const y = rawY - dy;
       try { console.debug('[Drop@canvas]', { payload, x, y, dx, dy, draggingUid: this._draggingUid }); } catch(e){}
-      // If we know what is being dragged from our own state, prefer that over payload parsing
-      if (this._draggingUid && typeof this._draggingUid === 'string' && this._draggingUid.indexOf('g_') === 0) {
-        const gid = parseInt(this._draggingUid.slice(2), 10);
-        const g = (this.state.gangsters || []).find(x => x.id === gid);
-        if (g) {
-          let wrap = this._dom.cardByUid.get(this._draggingUid);
-          if (!wrap) {
-            const cardEl = document.querySelector('.world-card[data-uid="' + this._draggingUid + '"]');
-            wrap = cardEl && cardEl.closest ? cardEl.closest('.ring-wrap') : null;
-            if (wrap) { try { this._dom.cardByUid.set(this._draggingUid, wrap); } catch(e){} }
-          }
-          if (wrap) {
-            g.pos = { x, y };
-            try { console.debug('[Move gangster via draggingUid]', { gid: g.id, pos: g.pos, uid: this._draggingUid }); } catch(e){}
-            this._applyCardPosition({ type: 'gangster', data: { gid: g.id } }, wrap);
-            this.scheduleSave();
-            return;
-          }
-        }
-      }
       if (payload.startsWith('uid:')) {
         const uid = payload.slice(4);
         const tableCards = (this.state.table && this.state.table.cards) || [];
@@ -600,6 +568,8 @@ export class Game {
         const wrap = this._dom.cardByUid.get(uid);
         if (!wrap) return;
         if (item) {
+          // Pulling a card out of any stack when dropping on canvas
+          this._removeFromAnyStack(uid);
           item.pos = { x, y };
           try { console.debug('[Move card]', { uid, pos: item.pos, id: item.id }); } catch(e){}
           this._applyCardPosition(item, wrap);
@@ -608,24 +578,6 @@ export class Game {
           // Could be a non-table entity keyed by uid; ignore for now
         }
         return;
-      }
-      const gid = parseInt(payload, 10);
-      if (!isNaN(gid)) {
-        const g = (this.state.gangsters || []).find(x => x.id === gid);
-        if (!g) return;
-        const uid = 'g_' + String(g.id);
-        let wrap = this._dom.cardByUid.get(uid);
-        if (!wrap) {
-          // Fallback: find via DOM if map isn't populated for some reason
-          const cardEl = document.querySelector('.world-card[data-uid="' + uid + '"]');
-          wrap = cardEl && cardEl.closest ? cardEl.closest('.ring-wrap') : null;
-          if (wrap) { try { this._dom.cardByUid.set(uid, wrap); } catch(e){} }
-        }
-        if (!wrap) { try { console.debug('[Move gangster] no wrap found', { uid }); } catch(e){} return; }
-        g.pos = { x, y };
-        try { console.debug('[Move gangster]', { gid: g.id, pos: g.pos, uid }); } catch(e){}
-        this._applyCardPosition({ type: 'gangster', data: { gid: g.id } }, wrap);
-        this.scheduleSave();
       }
     });
   }
@@ -645,18 +597,6 @@ export class Game {
       if (this._dom && this._dom.cardByUid) this._dom.cardByUid.clear();
     } catch(e){}
     this.state.table = { cards: [] };
-  }
-
-  // Removed neighborhood-specific explore wrapper
-
-  ensureGangsterNode(g) {
-    // Deprecated: kept temporarily for back-compat; use ensureCardNode with uid 'g_<gid>' instead
-    const uid = 'g_' + String(g.id);
-    const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
-    const model = makeCard(defId);
-    model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
-    model.uid = uid;
-    return this.ensureCardNode(model, undefined);
   }
 
   spawnTableCard(idOrCard) {
@@ -679,30 +619,20 @@ export class Game {
       this._dom = { cardByUid: new Map() };
     }
     if (!item.uid) item.uid = 'c_' + Math.random().toString(36).slice(2);
-    // Auto-initialize gangster cards without a linked entity
-    try {
-      if (item.type === 'gangster') {
-        const hasGid = item.data && typeof item.data.gid === 'number';
-        if (!hasGid) {
-          let gtype = 'face';
-          if (item.id === 'boss') gtype = 'boss';
-          else if (typeof item.id === 'string' && item.id.indexOf('gangster_') === 0) {
-            gtype = item.id.slice('gangster_'.length) || 'face';
-          }
-          const g = { id: this.state.nextGangId++, type: gtype, name: gtype === 'boss' ? 'Boss' : undefined, busy: false, personalHeat: 0, stats: this.defaultStatsForType(gtype) };
-          this.state.gangsters.push(g);
-          item.data = Object.assign({}, item.data, { gid: g.id, type: gtype });
-        }
-      }
-    } catch(e){}
     let wrap = this._dom.cardByUid.get(item.uid);
     if (!wrap) {
-      const rendered = renderWorldCard(this, item);
-      wrap = rendered.wrap;
-      const card = rendered.card;
-      const behavior = CARD_BEHAVIORS[item.type];
-      // Attach drop only for non-gangster cards
-      if (item.type !== 'gangster') {
+      let card;
+      if (item.type === 'stack') {
+        const rendered = this._renderStackCard(item);
+        wrap = rendered.wrap;
+        card = rendered.card;
+      } else {
+        const rendered = renderWorldCard(this, item);
+        wrap = rendered.wrap;
+        card = rendered.card;
+      }
+      // Attach drop for any non-stack targets; source can be any card (uid payload)
+      if (item.type !== 'stack') {
         card.addEventListener('dragover', ev => { ev.preventDefault(); card.classList.add('highlight'); });
         card.addEventListener('dragleave', () => card.classList.remove('highlight'));
         card.addEventListener('drop', ev => {
@@ -713,32 +643,22 @@ export class Game {
             const tableCards = (this.state.table && this.state.table.cards) || [];
             const sourceItem = tableCards.find(x => x && x.uid === uid);
             if (!sourceItem) return;
-            this._handleCardOnCardDrop(item, sourceItem, card);
+            // Always prefer stack-first, then run recipe on full stack
+            const handled = this._tryRecipeOrAddToStack(item, sourceItem, card);
+            if (!handled) this._handleGenericOnDrop(item, sourceItem, card);
             return;
           }
-          const gid = parseInt(payload, 10);
-          const g = this.state.gangsters.find(x => x.id === gid);
-          if (!g || g.busy) return;
-          const handler = (behavior && typeof behavior.onDrop === 'function') ? (gg => behavior.onDrop(this, item, gg, card)) : (gg => this._handleGenericOnDrop(item, gg, card));
-          handler(g);
         });
       }
       const buildInfo = () => getCardInfo(this, item);
       this._bindInfoPanel(card, buildInfo);
       // Apply generic draggable when declared
-      const isBusyFn = () => {
-        if (item.type === 'gangster' && item.data && typeof item.data.gid === 'number') {
-          const g = (this.state.gangsters || []).find(x => x.id === item.data.gid);
-          return !!(g && g.busy);
-        }
-        return false;
-      };
+      const isBusyFn = () => !!(item && item.type === 'gangster' && item.busy);
       this._applyDraggable(card, item, isBusyFn);
       // Apply any stored free position
       this._applyCardPosition(item, wrap, index);
       this._dom.cardByUid.set(item.uid, wrap);
-      // Apply onCreate hook and then activate timers for items created now
-      this._applyOnCreate(item);
+      // Activate timers for items created now
       this._activateTimersForItem(item, wrap);
     }
     // Update dynamic text if available
@@ -749,19 +669,16 @@ export class Game {
         if (dyn) dyn.textContent = computeCardDynamic(this, item) || '';
       }
     } catch(e){}
-    // Insert/reposition at appropriate position: [gangsters][cards]
+    // Insert/reposition at appropriate position
     const container = this._worldContainer();
     if (!container) return wrap;
-    if (item.type === 'gangster') {
-      // No special section: append naturally
-      if (wrap.parentElement !== container) container.appendChild(wrap);
-    } else if (typeof index === 'number') {
-      const offset = (this.state.gangsters || []).length;
-      const desiredPosition = offset + index;
-      const current = container.childNodes[desiredPosition];
-      if (container.childNodes[desiredPosition] !== wrap) {
+    if (typeof index === 'number') {
+      const current = container.childNodes[index];
+      if (container.childNodes[index] !== wrap) {
         container.insertBefore(wrap, current || null);
       }
+    } else if (wrap.parentElement !== container) {
+      container.appendChild(wrap);
     }
     return wrap;
   }
@@ -790,24 +707,13 @@ export class Game {
     } catch(e){}
   }
 
-  // Incremental reconciler for world and gangster cards
+  // Incremental reconciler for world cards
   reconcileWorld() {
     const container = document.getElementById('worldArea');
     if (!container) return;
     const desiredNodes = [];
 
-    // 1) Reconcile gangster cards
-    (this.state.gangsters || []).forEach(g => {
-      const uid = 'g_' + String(g.id);
-      const defId = (g.type === 'boss') ? 'boss' : (`gangster_${g.type}`);
-      const model = makeCard(defId);
-      model.data = Object.assign({}, model.data, { gid: g.id, type: g.type });
-      model.uid = uid;
-      const wrap = this.ensureCardNode(model, undefined);
-      desiredNodes.push(wrap);
-    });
-
-    // 2) Reconcile discovered table cards (including any deck cards)
+    // Reconcile discovered table cards (including any deck cards)
     const attachDrop = (cardEl, onDrop, prog) => {
       if (cardEl._dropBound) return;
       cardEl.addEventListener('dragover', ev => { ev.preventDefault(); cardEl.classList.add('highlight'); });
@@ -816,10 +722,12 @@ export class Game {
         ev.preventDefault();
         cardEl.classList.remove('highlight');
         const idStr = ev.dataTransfer.getData('text/plain');
-        const gid = parseInt(idStr, 10);
-        const g = this.state.gangsters.find(x => x.id === gid);
-        if (!g || g.busy) return;
-        onDrop(g, prog, cardEl);
+        if (!idStr || !idStr.startsWith('uid:')) return;
+        const uid = idStr.slice(4);
+        const tableCards = (this.state.table && this.state.table.cards) || [];
+        const source = tableCards.find(x => x && x.uid === uid);
+        if (!source) return;
+        onDrop(source, prog, cardEl);
       });
       cardEl._dropBound = true;
     };
@@ -835,11 +743,18 @@ export class Game {
         const rendered = renderWorldCard(this, item);
         wrap = rendered.wrap;
         const card = rendered.card;
-      const behavior = CARD_BEHAVIORS[item.type];
-      attachDrop(card, (g, _prog, cardEl) => {
-        if (!g || g.busy) return;
-        if (behavior && typeof behavior.onDrop === 'function') return behavior.onDrop(this, item, g, cardEl);
-        return this._handleGenericOnDrop(item, g, cardEl);
+      attachDrop(card, (src, _prog, cardEl) => {
+        if (!src) return;
+        const stacked = this._tryRecipeOrAddToStack(item, src, cardEl);
+        if (!stacked) {
+          // Recipe matched; run action(s)
+          return this._handleGenericOnDrop(item, src, cardEl);
+        }
+        // No recipe matched: allow any residual single-card behavior (heat/owner), else nothing
+        if (behavior && typeof behavior.onDrop === 'function') {
+          return behavior.onDrop(this, item, src, cardEl);
+        }
+        return;
       }, card);
       const buildInfo = () => getCardInfo(this, item);
       if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
@@ -851,8 +766,7 @@ export class Game {
         this._applyDraggable(card, item, () => false);
         this._applyCardPosition(item, wrap, undefined);
         this._dom.cardByUid.set(item.uid, wrap);
-        // Apply onCreate hook and then activate timers for items created now
-        this._applyOnCreate(item);
+        // Activate timers for items created now
         this._activateTimersForItem(item, wrap);
       }
       // Dim any deck card that is exhausted
@@ -903,6 +817,199 @@ export class Game {
   }
 
   renderWorld() { if (this.reconcileWorld) this.reconcileWorld(); }
+  
+  _allGangsterCards() {
+    const cards = (this.state.table && this.state.table.cards) || [];
+    return cards.filter(it => it && it.type === 'gangster');
+  }
+
+  _gangsterSubtypeForCard(it) {
+    if (!it || it.type !== 'gangster') return null;
+    if (it.id === 'boss') return null;
+    if (typeof it.id === 'string' && it.id.indexOf('gangster_') === 0) return it.id.slice('gangster_'.length);
+    return null;
+  }
+
+  _countGangsterSubtype(subtype) {
+    return this._allGangsterCards().reduce((n, it) => n + (this._gangsterSubtypeForCard(it) === subtype ? 1 : 0), 0);
+  }
+
+  // ---- Aggregate stats/requirements (symmetric stack) ----
+  _aggregateStats(items) {
+    const agg = { face: 0, fist: 0, brain: 0, meat: 0 };
+    (Array.isArray(items) ? items : []).forEach(it => {
+      const st = (it && it.stats) ? it.stats : null;
+      if (!st) return;
+      if (typeof st.face === 'number') agg.face += st.face;
+      if (typeof st.fist === 'number') agg.fist += st.fist;
+      if (typeof st.brain === 'number') agg.brain += st.brain;
+      if (typeof st.meat === 'number') agg.meat += st.meat;
+    });
+    return agg;
+  }
+
+  checkAggregateRequirements(action, items) {
+    const req = action && action.requires;
+    if (!req) return { ok: true };
+    const agg = this._aggregateStats(items);
+    const evalOne = (r) => {
+      if (!r) return { ok: true };
+      if (typeof r === 'function') {
+        const out = r(this, { stackItems: items, aggregate: agg });
+        if (out === true) return { ok: true };
+        if (out === false) return { ok: false, reason: 'Requirements not met' };
+        if (typeof out === 'string') return { ok: false, reason: out };
+        return { ok: !!out };
+      }
+      if (typeof r === 'object') {
+        if (r.stat && typeof r.min === 'number') {
+          const val = typeof agg[r.stat] === 'number' ? agg[r.stat] : 0;
+          if (val >= r.min) return { ok: true };
+          return { ok: false, reason: `${r.stat[0].toUpperCase()}${r.stat.slice(1)} ${r.min} required` };
+        }
+      }
+      return { ok: true };
+    };
+    if (Array.isArray(req)) {
+      for (const r of req) { const res = evalOne(r); if (!res.ok) return res; }
+      return { ok: true };
+    }
+    return evalOne(req);
+  }
+
+  durationWithAggregateStat(baseMs, statKey, items) {
+    const agg = this._aggregateStats(items);
+    const s = (statKey && typeof agg[statKey] === 'number') ? agg[statKey] : 0;
+    const scale = 1 + 0.1 * s;
+    return Math.max(500, Math.floor((typeof baseMs === 'number' ? baseMs : 2000) / scale));
+  }
+
+  // --- Stacking helpers ---
+  _findStackIdByUid(uid) {
+    const stacks = this.state.stacks || {};
+    for (const sid of Object.keys(stacks)) {
+      const arr = stacks[sid];
+      if (Array.isArray(arr) && arr.includes(uid)) return sid;
+    }
+    return null;
+  }
+
+  _basePosForStack(sid) {
+    const stacks = this.state.stacks || {};
+    const arr = stacks[sid] || [];
+    const baseUid = arr[0];
+    if (!baseUid) return { x: 0, y: 0 };
+    const baseItem = (this.state.table.cards || []).find(c => c && c.uid === baseUid);
+    if (baseItem && baseItem.pos && typeof baseItem.pos.x === 'number' && typeof baseItem.pos.y === 'number') {
+      return { x: baseItem.pos.x, y: baseItem.pos.y };
+    }
+    // Fallback to current DOM location
+    const wrap = this._dom.cardByUid.get(baseUid);
+    const x = wrap ? parseInt(wrap.style.left || '0', 10) : 0;
+    const y = wrap ? parseInt(wrap.style.top || '0', 10) : 0;
+    return { x, y };
+  }
+
+  _reflowStack(sid, basePos) {
+    const stacks = this.state.stacks || {};
+    const arr = stacks[sid] || [];
+    const offset = 26;
+    const { x, y } = basePos || this._basePosForStack(sid);
+    arr.forEach((uid, idx) => {
+      const item = (this.state.table.cards || []).find(c => c && c.uid === uid);
+      const wrap = this._dom.cardByUid.get(uid);
+      if (!item || !wrap) return;
+      item.pos = { x, y: y + idx * offset };
+      this._applyCardPosition(item, wrap);
+      try { wrap.style.zIndex = String(100 + idx); } catch(e){}
+    });
+  }
+
+  // Prefer recipes; otherwise add source to target's visual stack
+  _tryRecipeOrAddToStack(targetItem, sourceItem, targetCardEl) {
+    const types = [targetItem.type, sourceItem.type];
+    const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
+    const hasRecipe = !!(actionOrOps && actionOrOps.length);
+    // Determine existing stack for target (if any)
+    const stacks = this.state.stacks || (this.state.stacks = {});
+    const targetUid = targetItem.uid;
+    let sid = this._findStackIdByUid(targetUid);
+    if (!sid) {
+      const baseUid = targetUid || ('c_' + Math.random().toString(36).slice(2));
+      if (!targetItem.uid) targetItem.uid = baseUid;
+      sid = 's_' + baseUid;
+      stacks[sid] = [targetItem.uid];
+    }
+    // Remove source from previous stack then append if not already present
+    this._removeFromAnyStack(sourceItem.uid);
+    const arr = stacks[sid];
+    if (!arr.includes(sourceItem.uid)) arr.push(sourceItem.uid);
+    // Reflow using the stack's base position (arr[0])
+    this._reflowStack(sid, this._basePosForStack(sid));
+    this.scheduleSave();
+    // Return false if recipes matched so caller can proceed to handle actions
+    return !hasRecipe;
+  }
+
+  _removeFromAnyStack(uid) {
+    if (!uid) return;
+    const stacks = this.state.stacks || {};
+    for (const sid of Object.keys(stacks)) {
+      const arr = stacks[sid];
+      const i = arr.indexOf(uid);
+      if (i >= 0) {
+        arr.splice(i, 1);
+        // Compact remaining positions
+        if (arr.length > 0) {
+          this._reflowStack(sid, this._basePosForStack(sid));
+        }
+        if (arr.length === 0) delete stacks[sid];
+        return;
+      }
+    }
+  }
+  // Render-time helper no longer used (we keep separate cards layered)
+
+  // Attempt recipe first; if none, combine into a stack
+  _tryRecipeOrStack(targetItem, sourceItem, targetCardEl) {
+    // First, check recipes
+    const types = [targetItem.type, sourceItem.type];
+    const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
+    if (actionOrOps && actionOrOps.length) {
+      return false; // let existing recipe path handle it
+    }
+    // No recipe: make or extend a stack anchored at the target position
+    const table = this.state.table; const cards = table && table.cards ? table.cards : [];
+    // If target is already a stack, append; otherwise create a new stack
+    let stack;
+    if (targetItem.type === 'stack') {
+      stack = targetItem;
+    } else {
+      stack = { id: 'stack_' + Math.random().toString(36).slice(2), type: 'stack', name: 'Stack', reusable: true, cards: [], pos: targetItem.pos ? { x: targetItem.pos.x, y: targetItem.pos.y } : undefined };
+      // Swap target with new stack in table
+      const tidx = cards.indexOf(targetItem);
+      if (tidx >= 0) {
+        cards.splice(tidx, 1, stack);
+      } else {
+        cards.push(stack);
+      }
+      // Move target into stack
+      stack.cards.push(targetItem);
+      // Remove target DOM; new stack node will replace it
+      if (targetItem.uid) this.removeCardByUid(targetItem.uid);
+    }
+    // Remove source from table and add into stack
+    const sidx = cards.indexOf(sourceItem);
+    if (sidx >= 0) cards.splice(sidx, 1);
+    if (sourceItem.uid) this.removeCardByUid(sourceItem.uid);
+    stack.cards.push(sourceItem);
+    // Ensure the stack has a uid and node
+    if (!stack.uid) stack.uid = 'c_' + Math.random().toString(36).slice(2);
+    const sidx2 = cards.indexOf(stack);
+    this.ensureCardNode(stack, sidx2 >= 0 ? sidx2 : undefined);
+    this.updateUI();
+    return true;
+  }
 
   _cardMsg(txt) {
     const host = this.cardEls && this.cardEls.msg ? this.cardEls.msg : null;
@@ -960,7 +1067,10 @@ export class Game {
     }
     const cleanPerSec = (s.businesses * 20) + (s.businesses * (this.respectLevel() * 10));
     const dirtyPerSec = (s.extortedBusinesses * 10) + (s.illicit * 50);
-    const salaryPer10 = (s.gangsters || []).reduce((sum, g) => sum + (this.SALARY_PER_10S[g.type] || 0), 0);
+    const salaryPer10 = this._allGangsterCards().reduce((sum, it) => {
+      const sub = this._gangsterSubtypeForCard(it);
+      return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
+    }, 0);
     const salaryPerSec = salaryPer10 / 10;
     const arr = [];
     if (cleanPerSec) arr.push({ label: 'Fronts', value: Math.round(cleanPerSec * 60) });
@@ -1003,17 +1113,21 @@ export class Game {
   
 
   _startCardWork(g, progEl, durMs, onDone) {
-    g.busy = true;
-    this._markGangsterBusy(g, true);
+    if (g && g.type === 'gangster') {
+      g.busy = true;
+      this._markGangsterBusy(g, true);
+    }
     // Suspend world re-render so progress elements persist during work
     this._suspendWorldRender = (this._suspendWorldRender || 0) + 1;
     // Ensure the busy state applies even if the progress container is not the gangster card
-    this.runProgress(progEl || document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]'), durMs, () => {
+    this.runProgress(progEl || (g && g.uid ? document.querySelector('.world-card[data-uid="' + g.uid + '"]') : null), durMs, () => {
       try {
         onDone && onDone();
       } finally {
-        g.busy = false;
-        this._markGangsterBusy(g, false);
+        if (g && g.type === 'gangster') {
+          g.busy = false;
+          this._markGangsterBusy(g, false);
+        }
         // Resume world render if this is the last active work
         this._suspendWorldRender = Math.max(0, (this._suspendWorldRender || 1) - 1);
         this.renderWorld();
@@ -1025,7 +1139,10 @@ export class Game {
 
   _markGangsterBusy(g, isBusy) {
     try {
-      const card = document.querySelector('.world-card[data-uid="' + 'g_' + String(g.id) + '"]');
+      // g is now the gangster card item
+      const uid = g && g.uid ? g.uid : null;
+      if (!uid) return;
+      const card = document.querySelector('.world-card[data-uid="' + uid + '"]');
       if (!card) return;
       if (isBusy) {
         card.classList.add('busy');
@@ -1053,53 +1170,7 @@ export class Game {
   }
 
 
-  effectiveStat(g, key) {
-    if (!g || !g.stats) return 0;
-    const hasKey = (typeof key === 'string') && (typeof g.stats[key] === 'number');
-    return hasKey ? g.stats[key] : 0;
-  }
-
-  durationWithStat(baseMs, statKey, g) {
-    const s = this.effectiveStat(g, statKey) || 0;
-    const scale = 1 + 0.1 * s; // 10% faster per point
-    return Math.max(500, Math.floor(baseMs / scale));
-  }
-
-  // Uniform requirements checker for actions
-  // Supports:
-  // - function(game, gangster, ctx) → boolean | string (reason)
-  // - object { stat: 'fist'|'face'|'brain'|'meat', min: number }
-  // - array of the above (all must pass)
-  checkRequirements(action, gangster, ctx) {
-    const req = action && action.requires;
-    if (!req) return { ok: true };
-    const evalOne = (r) => {
-      if (!r) return { ok: true };
-      if (typeof r === 'function') {
-        const out = r(this, gangster, ctx);
-        if (out === true) return { ok: true };
-        if (out === false) return { ok: false, reason: 'Requirements not met' };
-        if (typeof out === 'string') return { ok: false, reason: out };
-        return { ok: !!out };
-      }
-      if (typeof r === 'object') {
-        if (r.stat && typeof r.min === 'number') {
-          const val = this.effectiveStat(gangster, r.stat) || 0;
-          if (val >= r.min) return { ok: true };
-          return { ok: false, reason: `${r.stat[0].toUpperCase()}${r.stat.slice(1)} ${r.min} required` };
-        }
-      }
-      return { ok: true };
-    };
-    if (Array.isArray(req)) {
-      for (const r of req) {
-        const res = evalOne(r);
-        if (!res.ok) return res;
-      }
-      return { ok: true };
-    }
-    return evalOne(req);
-  }
+  // Deprecated single-actor helpers removed. New aggregate stat/requirements will be introduced with stack engine.
 
   tick() {
     const s = this.state;
@@ -1144,11 +1215,7 @@ export class Game {
     }
 
     // Stat/other requirements
-    if (action && action.requires) {
-      const ctx = this._pendingAction && this._pendingAction.targetItem ? this._pendingAction.targetItem : null;
-      const res = this.checkRequirements(action, g, ctx);
-      if (!res.ok) { this._cardMsg(res.reason || 'Requirements not met'); return false; }
-    }
+    // Requirements will be validated by the new stack engine (aggregate) in future steps
 
     // Costs
     if (action && action.cost) {
@@ -1171,12 +1238,15 @@ export class Game {
       }
     }
 
-    // Start timed work and apply effect (capture context now to avoid race with concurrent actions)
+    // Start timed work and apply effect; keep _pendingAction available during effect
     const capturedCtx = this._pendingAction || {};
-    this._pendingAction = null;
     return this._startCardWork(g, progEl, durMs, () => {
-      if (action && typeof action.effect === 'function') {
-        action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem);
+      try {
+        if (action && typeof action.effect === 'function') {
+          action.effect(this, g, capturedCtx.targetEl, capturedCtx.targetItem, capturedCtx);
+        }
+      } finally {
+        this._pendingAction = null;
       }
     });
   }
@@ -1341,7 +1411,7 @@ Game.prototype._bindInfoPanel = function(cardEl, buildInfoFn) {
 // Generic draggable applier (now also used for free-positioning payloads)
 Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
   if (!cardEl || !itemLike) return;
-  const getGid = () => (itemLike.data && typeof itemLike.data.gid === 'number') ? String(itemLike.data.gid) : null;
+  const getGid = () => null;
   const isBusy = () => (typeof isBusyFn === 'function') ? !!isBusyFn() : false;
   // Make the whole card draggable (we guard in dragstart if busy)
   cardEl.setAttribute('draggable', 'true');
@@ -1356,15 +1426,13 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
         this._dragOffset = { dx: ev.clientX - r.left, dy: ev.clientY - r.top };
         // Track dragging uid to distinguish self vs other-card drops
         const uid = (cardEl && cardEl.dataset && cardEl.dataset.uid)
-          || (gid ? ('g_' + String(gid)) : (itemLike && itemLike.uid));
+          || (itemLike && itemLike.uid);
         this._draggingUid = uid || null;
       } else {
         this._dragOffset = null; this._draggingUid = null;
       }
     } catch(e) { this._dragOffset = null; this._draggingUid = null; }
-    if (gid) {
-      ev.dataTransfer.setData('text/plain', gid);
-    } else if (itemLike && itemLike.uid) {
+    if (itemLike && itemLike.uid) {
       ev.dataTransfer.setData('text/plain', 'uid:' + itemLike.uid);
     } else {
       ev.preventDefault(); return;
@@ -1372,6 +1440,7 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
     ev.dataTransfer.effectAllowed = 'move';
   });
   cardEl.addEventListener('dragend', () => {
+    // If card belonged to a stack and was dropped outside the base card, keep removal compacting
     this._dragOffset = null; this._draggingUid = null;
   });
 };
@@ -1382,15 +1451,7 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
     const cont = this._worldContainer();
     if (!cont || !wrapEl) return;
     if (!cont.style.position) cont.style.position = 'relative';
-    let pos = null;
-    let isGang = false;
-    if (itemLike && itemLike.type === 'gangster' && itemLike.data && typeof itemLike.data.gid === 'number') {
-      const g = (this.state.gangsters || []).find(x => x.id === itemLike.data.gid);
-      pos = g && g.pos ? g.pos : null;
-      isGang = true;
-    } else {
-      pos = itemLike && itemLike.pos ? itemLike.pos : null;
-    }
+    let pos = itemLike && itemLike.pos ? itemLike.pos : null;
     // Assign a default absolute position if missing so every card is out of flow
     if (!pos) {
       const tileW = 244; // 230 card width + gap
@@ -1401,7 +1462,7 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
       // For table cards drawn after the first (neighborhood at index 0), start placement after two slots
       // So the first pulled card (table index 1) starts at grid slot 2
       let i;
-      if (!isGang && typeof indexOverride === 'number') {
+      if (typeof indexOverride === 'number') {
         i = (indexOverride >= 1) ? (2 + (indexOverride - 1)) : indexOverride;
       } else {
         i = (typeof indexOverride === 'number' && indexOverride >= 0) ? indexOverride : existing;
@@ -1409,11 +1470,7 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
       const col = i % cols;
       const row = Math.floor(i / cols);
       pos = { x: 12 + col * tileW, y: 12 + row * tileH };
-      if (isGang) {
-        const gid = itemLike.data.gid;
-        const g = (this.state.gangsters || []).find(x => x.id === gid);
-        if (g) g.pos = { x: pos.x, y: pos.y };
-      } else if (itemLike) {
+      if (itemLike) {
         itemLike.pos = { x: pos.x, y: pos.y };
       }
       this.scheduleSave();
@@ -1427,136 +1484,106 @@ Game.prototype._applyCardPosition = function(itemLike, wrapEl, indexOverride) {
 };
 
 // Generic onDrop handler that uses ACTIONS and recipes as a single source of truth
-Game.prototype._handleGenericOnDrop = function(targetItem, gangster, cardEl) {
-  // Scaffolding for recipe usage: match by types present in the interaction
-  // If target is a declarative deck card and it's exhausted, do nothing
+Game.prototype._handleGenericOnDrop = function(targetItem, sourceItem, cardEl) {
+  // After stacking, match against the full stack (unordered)
+  const stacks = this.state.stacks || {};
+  const sid = this._findStackIdByUid(targetItem.uid);
+  const uids = sid ? (stacks[sid] || []) : [targetItem.uid, sourceItem.uid].filter(Boolean);
+  const items = uids.map(uid => (this.state.table.cards || []).find(c => c && c.uid === uid)).filter(Boolean);
+  // Prevent actions on exhausted deck-like cards
   try {
-    if (targetItem && targetItem.data && targetItem.data.deck === true) {
-      const d = (this._decks || {})[targetItem.id];
+    const deckCard = items.find(it => it && it.data && it.data.deck === true);
+    if (deckCard) {
+      const d = (this._decks || {})[deckCard.id];
       if (!d || !d.hasMore()) return;
     }
   } catch(e){}
-  const stackTypes = [targetItem.type, 'gangster'];
-  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, target: targetItem, gangster });
-  // Support special ops from recipes: spawnCardId, consumeTarget
+  const stackTypes = items.map(it => it.type);
+  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, stackItems: items, stackUids: uids });
   const ops = actionOrOps.filter(x => typeof x === 'object');
   const actionIds = actionOrOps.filter(x => typeof x === 'string');
+  // Anchor UI on topmost card
+  const topUid = uids[uids.length - 1];
+  const topWrap = this._dom.cardByUid.get(topUid);
+  const topCardEl = topWrap ? (topWrap.querySelector && topWrap.querySelector('.world-card')) : cardEl;
   // Apply ops first
   if (ops.length) {
-    const table = this.state.table;
-    const tableCards = table && table.cards ? table.cards : [];
+    const tableCards = (this.state.table && this.state.table.cards) || [];
     for (const op of ops) {
       if (op.spawnGangsterType) {
         const type = op.spawnGangsterType;
-        const stats = this.defaultStatsForType ? this.defaultStatsForType(type) : (type === 'face' ? { face: 3, fist: 1, brain: 1, meat: 1 } : type === 'fist' ? { face: 1, fist: 3, brain: 1, meat: 1 } : { face: 1, fist: 1, brain: 3, meat: 1 });
-        const g = { id: this.state.nextGangId++, type, name: undefined, busy: false, personalHeat: 0, stats };
-        this.state.gangsters.push(g);
-        this.reconcileWorld();
-        this.updateUI();
+        const defId = (type === 'boss') ? 'boss' : ('gangster_' + type);
+        const card = this.spawnTableCard(defId);
+        if (card) card.stats = this.defaultStatsForType ? this.defaultStatsForType(type) : card.stats;
       } else if (op.spawnCardId) {
         this.spawnTableCard(op.spawnCardId);
       }
-      if (op.consumeTarget) {
-        const idx = tableCards.indexOf(targetItem);
-        if (idx >= 0) {
-          // Stop any heat countdown on the target before removal
-          if (targetItem && targetItem.type === 'heat') {
-            const wrap = this._dom.cardByUid.get(targetItem.uid);
-            if (wrap) { try { clearRing(wrap, 'heat'); } catch(e){} }
-          }
-          tableCards.splice(idx, 1);
-          if (targetItem.uid) this.removeCardByUid(targetItem.uid);
+      if (op.consume) {
+        // consume is an array of selectors: { uid } | { id } | { type }
+        const toRemove = [];
+        for (const sel of (Array.isArray(op.consume) ? op.consume : [])) {
+          let it = null;
+          if (sel.uid) it = items.find(x => x && x.uid === sel.uid);
+          else if (sel.id) it = items.find(x => x && x.id === sel.id);
+          else if (sel.type) it = items.find(x => x && x.type === sel.type);
+          if (it) toRemove.push(it);
+        }
+        for (const it of toRemove) {
+          const idx = tableCards.indexOf(it);
+          if (idx >= 0) tableCards.splice(idx, 1);
+          if (it && it.uid) this.removeCardByUid(it.uid);
         }
       }
     }
-    // After ops, we’re done for this interaction
+    // Dismantle stack after ops
+    if (sid && stacks[sid]) delete stacks[sid];
+    this.updateUI();
     return;
   }
   const baseActions = (ACTIONS || []).filter(a => actionIds.includes(a.id));
   if (!baseActions.length) return;
-  // If one candidate → execute; if multiple → chooser
   const runAction = (baseAct) => {
-    const dur = this.durationWithStat(baseAct.base, baseAct.stat, gangster);
-    // Stash context for actions that need the drop target/item (e.g., explore deck)
-    this._pendingAction = { targetEl: cardEl, targetItem };
-    const ok = this.executeAction(baseAct, gangster, cardEl, dur);
+    const dur = this.durationWithAggregateStat(baseAct && baseAct.base, baseAct && baseAct.stat, items);
+    // Pass symmetric context (full stack) via _pendingAction
+    this._pendingAction = { targetEl: topCardEl, targetItem: null, stackItems: items, stackUids: uids, stackId: sid };
+    const wrapped = {
+      ...baseAct,
+      effect: (game, g, targetEl, targetItem, ctx) => {
+        try { if (typeof baseAct.effect === 'function') baseAct.effect(game, g, targetEl, targetItem, ctx); } finally {
+          // Auto-dismantle stack after action (non-repeatable)
+          if (sid && stacks[sid]) delete stacks[sid];
+          game.updateUI();
+        }
+      }
+    };
+    const ok = this.executeAction(wrapped, null, topCardEl, dur);
     if (!ok) this._pendingAction = null;
   };
   if (baseActions.length === 1) {
-    runAction(baseActions[0]);
+    const only = baseActions[0];
+    const chk = this.checkAggregateRequirements(only, items);
+    if (!chk.ok) { this._cardMsg(chk.reason || 'Requirements not met'); return; }
+    runAction(only);
     return;
   }
   const options = baseActions.map(a => {
-    const res = (typeof this.checkRequirements === 'function') ? this.checkRequirements(a, gangster, targetItem) : { ok: true };
+    const chk = this.checkAggregateRequirements(a, items);
     const baseLabel = a.label || a.id;
-    const label = res && !res.ok && res.reason ? `${baseLabel} (${res.reason})` : baseLabel;
-    return { id: a.id, label, disabled: res && !res.ok, title: res && !res.ok ? res.reason : '' };
+    const label = chk && !chk.ok && chk.reason ? `${baseLabel} (${chk.reason})` : baseLabel;
+    return { id: a.id, label, disabled: chk && !chk.ok, title: chk && !chk.ok ? chk.reason : '' };
   });
-  this.showInlineActionChoice(cardEl, options, (choiceId) => {
+  this.showInlineActionChoice(topCardEl, options, (choiceId) => {
     const chosen = baseActions.find(a => a.id === choiceId);
     if (!chosen) return;
+    const chk = this.checkAggregateRequirements(chosen, items);
+    if (!chk.ok) { this._cardMsg(chk.reason || 'Requirements not met'); return; }
     runAction(chosen);
   });
 };
 
-// Card-on-card recipe application
-Game.prototype._handleCardOnCardDrop = function(targetItem, sourceItem, cardEl) {
-  // Match by types of both cards
-  const types = [targetItem.type, sourceItem.type];
-  const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
-  const ops = actionOrOps.filter(x => typeof x === 'object');
-  const actionIds = actionOrOps.filter(x => typeof x === 'string');
-  const table = this.state.table; const tableCards = table && table.cards ? table.cards : [];
-  if (ops.length) {
-    for (const op of ops) {
-      if (op.spawnCardId) this.spawnTableCard(op.spawnCardId);
-      if (op.consumeTarget) {
-        const idx = tableCards.indexOf(targetItem);
-        if (idx >= 0) {
-          if (targetItem && targetItem.type === 'heat') {
-            const tw = this._dom.cardByUid.get(targetItem.uid);
-            if (tw) { try { clearRing(tw, 'heat'); } catch(e){} }
-          }
-          tableCards.splice(idx, 1);
-          if (targetItem.uid) this.removeCardByUid(targetItem.uid);
-        }
-      }
-      if (op.consumeSource) {
-        const sidx = tableCards.indexOf(sourceItem);
-        if (sidx >= 0) {
-          if (sourceItem && sourceItem.type === 'heat') {
-            const sw = this._dom.cardByUid.get(sourceItem.uid);
-            if (sw) { try { clearRing(sw, 'heat'); } catch(e){} }
-          }
-          tableCards.splice(sidx, 1);
-          if (sourceItem.uid) this.removeCardByUid(sourceItem.uid);
-        }
-      }
-    }
-    this.updateUI();
-    return;
-  }
-  if (actionIds.length) {
-    // Run the first matched action as a timed action targeting the drop target
-    const baseAct = (ACTIONS || []).find(a => a && a.id === actionIds[0]);
-    if (!baseAct) return;
-    const dur = this.durationWithStat(baseAct.base, baseAct.stat, null);
-    this._pendingAction = { targetEl: cardEl, targetItem: targetItem };
-    const ok = this.executeAction(baseAct, { stats: { face:1, fist:1, brain:1, meat:1 } }, cardEl, dur);
-    if (!ok) this._pendingAction = null;
-    return;
-  }
-};
+// Removed directional card-on-card handler: replaced by stack-first symmetric flow
 
-// Hook runner for card creation behaviors
-Game.prototype._applyOnCreate = function(item) {
-  try {
-    const behavior = (CARD_BEHAVIORS && item) ? CARD_BEHAVIORS[item.type] : null;
-    if (behavior && typeof behavior.onCreate === 'function') {
-      behavior.onCreate(this, item);
-    }
-  } catch(e){}
-};
+// onCreate hook removed; timers/initialization handled in _activateTimersForItem
 
 // Convenience spawner for table cards; returns the created card
 Game.prototype.spawnTableCard = function(idOrCard) {

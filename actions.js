@@ -6,38 +6,40 @@ import { startCountdown, clearRing } from './progress-ring.js';
 export const ACTIONS = [
   // Timed recruit from a recruit card
   { id: 'actRecruitFromCard', label: 'Recruit (Face)', stat: 'face', base: 2500,
-    effect: (game, g, targetEl, targetItem) => {
-      const t = (targetItem && targetItem.data && targetItem.data.type) || 'face';
+    effect: (game, _g, _el, _it, ctx) => {
+      ctx = ctx || {};
+      const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
       const table = game.state.table; const cards = table && table.cards ? table.cards : [];
-      // Consume the recruit card
-      const idx = cards.indexOf(targetItem);
-      if (idx >= 0) { cards.splice(idx, 1); if (targetItem && targetItem.uid) game.removeCardByUid(targetItem.uid); }
-      // Create a proper gangster entity so it has stats/drag-and-drop behavior
-      const newG = { id: game.state.nextGangId++, type: t, name: undefined, busy: false, personalHeat: 0, stats: game.defaultStatsForType(t) };
-      game.state.gangsters.push(newG);
-      game.reconcileWorld();
+      const recruit = items.find(it => it && it.type === 'recruit');
+      const t = (recruit && recruit.data && recruit.data.type) || 'face';
+      // Consume the recruit card found in stack
+      if (recruit) {
+        const idx = cards.indexOf(recruit);
+        if (idx >= 0) { cards.splice(idx, 1); if (recruit && recruit.uid) game.removeCardByUid(recruit.uid); }
+      }
+      // Spawn a gangster card directly
+      const defId = (t === 'boss') ? 'boss' : ('gangster_' + t);
+      const newCard = game.spawnTableCard(defId);
+      if (newCard) newCard.stats = game.defaultStatsForType ? game.defaultStatsForType(t) : newCard.stats;
       game.updateUI();
     } },
   // Unified Explore for any deck-like card: expects item.data.exploreIds
   { id: 'actExploreDeck', label: 'Explore (Brain)', stat: 'brain', base: 3500,
-    effect: (game, g, targetEl) => {
-      // Identify which deck to draw from (card id on the DOM), then use deck system
-      const wrap = targetEl && targetEl.closest ? targetEl.closest('.ring-wrap') : null;
-      const cardEl = wrap ? wrap.querySelector('.world-card') : targetEl;
-      if (!cardEl || !cardEl.dataset || !cardEl.dataset.cardId) return;
-      // Use deck model: ensure deck exists with start/pool/end seeded from the deck card
-      const deckId = cardEl.dataset.cardId;
+    effect: (game, _g, _el, _it, ctx) => {
+      ctx = ctx || {};
+      const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
+      // Identify deck card from stack
+      const deckCard = items.find(it => it && it.data && it.data.deck === true);
+      if (!deckCard) return;
+      // Ensure deck exists
+      const deckId = deckCard.id;
       game._decks = game._decks || {};
       if (!game._decks[deckId]) {
-        const idsStr = cardEl.dataset.exploreIds || '';
-        const pool = idsStr.split(',').map(s => s.trim()).filter(Boolean);
-        // Neighborhood retains a final city_entrance in end per initTable; others empty end
+        const ids = (deckCard && deckCard.data && Array.isArray(deckCard.data.exploreIds)) ? deckCard.data.exploreIds.slice() : [];
         const end = (deckId === 'neighborhood') ? ['city_entrance'] : [];
-        game._decks[deckId] = new Deck({ start: [], pool, end });
+        game._decks[deckId] = new Deck({ start: [], pool: ids, end });
       }
-      // Draw one group (one or more ids), respecting start → pool(shuffled) → end, and exhaustion
       game.drawFromDeck(deckId);
-      if (g) g.personalHeat = (g.personalHeat || 0) + 1;
       game.updateUI();
     }
   },
@@ -87,11 +89,18 @@ export const ACTIONS = [
       game.state.respect += 1;
       game.state.fear = (game.state.fear || 0) + 1;
       game.state.heat += 2;
-      g.personalHeat = (g.personalHeat || 0) + 2;
+      if (g) g.personalHeat = (g.personalHeat || 0) + 2;
     } },
   { id: 'actRaid', label: 'Raid Business', base: 3500,
     requires: { stat: 'fist', min: 2 },
-    effect: (game, g, targetEl, targetItem) => {
+    effect: (game, g, _el, _it, ctx) => {
+      ctx = ctx || {};
+      const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
+      const targetItem = items.find(it => it && it.type === 'business');
+      const targetEl = (() => {
+        const wrap = targetItem && targetItem.uid ? game._dom && game._dom.cardByUid && game._dom.cardByUid.get(targetItem.uid) : null;
+        return wrap ? (wrap.querySelector && wrap.querySelector('.world-card')) : null;
+      })();
       game.state.dirtyMoney += 1500;
       game.state.heat += 2;
       if (g) g.personalHeat = (g.personalHeat || 0) + 2;
@@ -133,8 +142,11 @@ export const ACTIONS = [
       game.spawnTableCard('heat');
     } },
   { id: 'actExtort', label: 'Extort', base: 4000,
-    effect: (game, g, targetEl, targetItem) => {
+    effect: (game, g, _el, _it, ctx) => {
+      ctx = ctx || {};
+      const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
       const tableCards = game.state.table.cards;
+      const targetItem = items.find(it => it && it.type === 'business');
       const idx = tableCards.indexOf(targetItem);
       game._extortAttemptCount = (game._extortAttemptCount || 0) + 1;
       const forceFail = (game._extortAttemptCount === 2);
@@ -208,24 +220,25 @@ export const ACTIONS = [
     } },
   // Timed use of a fake alibi on heat
   { id: 'actUseAlibi', label: 'Use Alibi', base: 2500,
-    effect: (game, g, targetEl, targetItem) => {
+    effect: (game, _g, _el, _it, ctx) => {
+      ctx = ctx || {};
       const table = game.state.table; const cards = table && table.cards ? table.cards : [];
-      // Clear any heat countdown ring on the specific target heat card
-      const wrap = targetEl && targetEl.closest ? targetEl.closest('.ring-wrap') : null;
-      if (wrap) { try { clearRing(wrap, 'heat'); } catch(e){} }
-      // Remove the exact target heat card
-      const tidx = cards.indexOf(targetItem);
-      if (tidx >= 0) { const it = cards[tidx]; cards.splice(tidx, 1); if (it && it.uid) game.removeCardByUid(it.uid); }
-      // Remove one fake_alibi from table
-      const aidx = cards.findIndex(x => x && x.id === 'fake_alibi');
-      if (aidx >= 0) { const it2 = cards[aidx]; cards.splice(aidx, 1); if (it2 && it2.uid) game.removeCardByUid(it2.uid); }
+      const items = Array.isArray(ctx.stackItems) ? ctx.stackItems : [];
+      const heat = items.find(it => it && it.type === 'heat');
+      const alibi = items.find(it => it && it.id === 'fake_alibi');
+      if (heat && heat.uid) {
+        const wrap = game._dom && game._dom.cardByUid && game._dom.cardByUid.get(heat.uid);
+        if (wrap) { try { clearRing(wrap, 'heat'); } catch(e){} }
+      }
+      if (heat) { const i = cards.indexOf(heat); if (i >= 0) { const it = cards[i]; cards.splice(i, 1); if (it && it.uid) game.removeCardByUid(it.uid); } }
+      if (alibi) { const j = cards.indexOf(alibi); if (j >= 0) { const it2 = cards[j]; cards.splice(j, 1); if (it2 && it2.uid) game.removeCardByUid(it2.uid); } }
       game.updateUI();
     } },
   { id: 'actIntimidate', label: 'Intimidate', base: 3000,
     effect: (game, g) => {
       if (game.state.disagreeableOwners > 0) game.state.disagreeableOwners -= 1;
       game.state.fear = (game.state.fear || 0) + 1;
-      g.personalHeat = (g.personalHeat || 0) + 1;
+      if (g) g.personalHeat = (g.personalHeat || 0) + 1;
       game.spawnTableCard('heat');
     } },
 ];
