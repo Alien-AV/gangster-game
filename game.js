@@ -927,8 +927,11 @@ export class Game {
 
   // Prefer recipes; otherwise add source to target's visual stack
   _tryRecipeOrAddToStack(targetItem, sourceItem, targetCardEl) {
-    const types = [targetItem.type, sourceItem.type];
-    const actionOrOps = this._recipes.matchAll(types, { game: this, target: targetItem, source: sourceItem });
+    // Determine if a recipe matches this pair using symmetric tokens (types + ids)
+    const tokens = [];
+    if (targetItem) { if (targetItem.type) tokens.push(targetItem.type); if (targetItem.id) tokens.push(targetItem.id); }
+    if (sourceItem) { if (sourceItem.type) tokens.push(sourceItem.type); if (sourceItem.id) tokens.push(sourceItem.id); }
+    const actionOrOps = this._recipes.matchAll(tokens, { game: this, target: targetItem, source: sourceItem });
     const hasRecipe = !!(actionOrOps && actionOrOps.length);
     // Determine existing stack for target (if any)
     const stacks = this.state.stacks || (this.state.stacks = {});
@@ -1498,8 +1501,10 @@ Game.prototype._handleGenericOnDrop = function(targetItem, sourceItem, cardEl) {
       if (!d || !d.hasMore()) return;
     }
   } catch(e){}
-  const stackTypes = items.map(it => it.type);
-  const actionOrOps = this._recipes.matchAll(stackTypes, { game: this, stackItems: items, stackUids: uids });
+  // Build symmetric token set including both types and ids so recipes can match either
+  const stackTokens = [];
+  for (const it of items) { if (it && it.type) stackTokens.push(it.type); if (it && it.id) stackTokens.push(it.id); }
+  const actionOrOps = this._recipes.matchAll(stackTokens, { game: this, stackItems: items, stackUids: uids });
   const ops = actionOrOps.filter(x => typeof x === 'object');
   const actionIds = actionOrOps.filter(x => typeof x === 'string');
   // Anchor UI on topmost card
