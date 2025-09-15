@@ -1,4 +1,5 @@
 import { Deck } from './deck.js';
+import { scaleDurationMs } from './time.js';
 import { startCountdown, clearRing } from './progress-ring.js';
 // Declarative action registry for card UI
 // Each action: { id, label, stat, base, handler(game, gangster, progressEl, durationMs) }
@@ -111,7 +112,7 @@ export const ACTIONS = [
         targetItem.cooldownTotal = 60;
         targetItem.cooldownUntil = nowSec + targetItem.cooldownTotal;
         targetItem.cooldownStartMs = nowMs;
-        targetItem.cooldownEndMs = nowMs + targetItem.cooldownTotal * 1000;
+        targetItem.cooldownEndMs = nowMs + scaleDurationMs(targetItem.cooldownTotal * 1000);
         if (wrap) {
           try {
             startCountdown(wrap, {

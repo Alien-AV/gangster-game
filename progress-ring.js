@@ -70,6 +70,8 @@ export function clearRing(el, mode) {
   timers[mode] = null;
 }
 
+import { scaleDurationMs } from './time.js';
+
 export function startTimer(el, { durationMs, mode = 'action', showBadge = true, onTick, onDone } = {}) {
   const wrap = resolveWrap(el);
   if (!wrap || !durationMs || durationMs <= 0) {
@@ -85,15 +87,16 @@ export function startTimer(el, { durationMs, mode = 'action', showBadge = true, 
   try { wrap.classList.add(cls); } catch(e){}
   const badge = showBadge ? ensureLeftBadge(wrap) : null;
   const start = performance.now();
+  const scaledDuration = scaleDurationMs(durationMs);
   const controller = { rafId: 0 };
   const step = (now) => {
     const elapsed = now - start;
-    const remaining = Math.max(0, durationMs - elapsed);
-    const p = clamp01(elapsed / durationMs);
+    const remaining = Math.max(0, scaledDuration - elapsed);
+    const p = clamp01(elapsed / scaledDuration);
     try { wrap.style.setProperty('--p', String(p)); } catch(e){}
     if (badge) badge.textContent = `${Math.ceil(remaining / 1000)}s`;
     if (typeof onTick === 'function') onTick(p, remaining);
-    if (elapsed >= durationMs) {
+    if (elapsed >= scaledDuration) {
       if (typeof onDone === 'function') onDone();
       // Clear only for action rings by default
       if (mode === 'action') {

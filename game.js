@@ -5,6 +5,7 @@ import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
 import { clearRing } from './progress-ring.js';
 import { RecipeEngine, registerDefaultRecipes } from './recipe.js';
+import { scaledInterval, scaledTimeout, scaleDurationMs } from './time.js';
 
 // behaviors and renderer moved to card.js
 
@@ -63,7 +64,7 @@ export class Game {
     // Initialize message UI
     this.initCardUI();
     this._initLog();
-    this.interval = setInterval(() => this.tick(), 1000);
+    this.interval = scaledInterval(() => this.tick(), 1000);
 
     // Queued selection managers to avoid overlapping popups
     this._illicitSelect = { queue: [], active: false };
@@ -108,7 +109,7 @@ export class Game {
   scheduleSave(delayMs = 1500) {
     // Coalesce frequent UI saves; write at most every delayMs
     if (this._saveTimer) return;
-    this._saveTimer = setTimeout(() => {
+    this._saveTimer = scaledTimeout(() => {
       this._saveTimer = null;
       try { this.saveState(); } catch(e){}
     }, delayMs);
@@ -1026,7 +1027,7 @@ export class Game {
     // Scroll to bottom
     host.scrollTop = host.scrollHeight;
     // Remove flash class after animation
-    setTimeout(() => { try { entry.classList.remove('log-flash'); } catch(e){} }, 700);
+    scaledTimeout(() => { try { entry.classList.remove('log-flash'); } catch(e){} }, 700);
   }
 
   _updateFlowDisplay() {
@@ -1320,7 +1321,7 @@ export class Game {
       if (!item.heatEndMs && item.data && typeof item.data.expiresAt === 'number') {
         const remainSec = Math.max(0, (item.data.expiresAt - (this.state.time || 0)));
         item.heatStartMs = Date.now();
-        item.heatEndMs = Date.now() + (remainSec * 1000);
+        item.heatEndMs = Date.now() + scaleDurationMs(remainSec * 1000);
         try { delete item.data.expiresAt; } catch(e){}
       }
       if (item.heatEndMs && Date.now() < item.heatEndMs) {
