@@ -61,4 +61,13 @@ Examples
 - Use Alibi: stack contains {heat, fake_alibi}. Action consumes both and removes them from the table.
 - Raid: stack contains {business, gangster_fist, pistol}. Aggregate stats Fist ≥ 3 (gangster 3 + pistol 2, recipe requires 2), Meat ≥ 1 (gangster). Action runs; applies cooldown/heat, stack breaks unless marked repeatable.
 
+## Playtesting time scaling
+
+- A global time multiplier controls action durations, cooldowns, save throttling, and UI timeouts.
+- Use from console:
+  - `enableFastMode10x()` to make timers 10× faster.
+  - `disableFastMode()` to restore real-time.
+  - `setTimeScale(n)` to set an arbitrary multiplier (e.g., 5 for 5× faster).
+  - `getTimeScale()` to read the current multiplier.
+
  

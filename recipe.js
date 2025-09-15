@@ -56,6 +56,7 @@ export function registerDefaultRecipes(recipes) {
   recipes.addRecipe(['business','gangster'], ['actExtort','actRaid']);
   // Recruit: recruit_* + gangster → timed action to recruit from card
   recipes.addRecipe(['recruit','gangster'], ['actRecruitFromCard']);
+  recipes.addRecipe(['small_crooks','gangster'], ['actRecruitEnforcer','actVigilante']);
   // Corrupt Cop + gangster → forge fake alibi (costs money)
   recipes.addRecipe(['cop','gangster'], ['actForgeAlibi']);
   // Fake alibi + heat → timed action
