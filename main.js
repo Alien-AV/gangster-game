@@ -1,5 +1,6 @@
 import { Game } from './game.js';
 import { enableFastMode10x, disableFastMode, setTimeScale, getTimeScale } from './time.js';
+import { setUiScale, getUiScale, increaseUiScale, decreaseUiScale } from './ui-scale.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   // Bootstrap the game
@@ -11,4 +12,9 @@ window.addEventListener('DOMContentLoaded', () => {
   window.disableFastMode = disableFastMode;
   window.setTimeScale = setTimeScale;
   window.getTimeScale = getTimeScale;
+  // UI scale helpers
+  window.setUiScale = setUiScale;
+  window.getUiScale = getUiScale;
+  window.increaseUiScale = increaseUiScale;
+  window.decreaseUiScale = decreaseUiScale;
 });
