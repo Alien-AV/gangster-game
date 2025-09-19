@@ -61,6 +61,7 @@ export class Game {
 
     this.loadState();
     if (!this.state.stacks || typeof this.state.stacks !== 'object') this.state.stacks = {};
+    if (!Array.isArray(this.state.hireStack)) this.state.hireStack = [];
 
     // Initialize message UI
     this.initCardUI();
@@ -152,6 +153,7 @@ export class Game {
         return res;
       })(),
       stacks: s.stacks || {},
+      hireStack: Array.isArray(s.hireStack) ? s.hireStack.slice() : [],
     };
   }
 
@@ -181,6 +183,7 @@ export class Game {
       this._resetWorld();
       Object.assign(this.state, data);
       this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
+      this.state.hireStack = Array.isArray(data.hireStack) ? data.hireStack.slice() : [];
       // Reset modal queues and refresh UI
       this._illicitSelect = { queue: [], active: false };
       this._equipSelect = { queue: [], active: false };
@@ -210,6 +213,7 @@ export class Game {
       this._resetWorld();
       Object.assign(this.state, data);
       this.state.stacks = (data.stacks && typeof data.stacks === 'object') ? data.stacks : {};
+      this.state.hireStack = Array.isArray(data.hireStack) ? data.hireStack.slice() : [];
     } catch (e) {
       console.error('Failed to load saved state', e);
     }
@@ -261,6 +265,48 @@ export class Game {
       return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
     }, 0);
     if (due > 0) this.spendMoney(due);
+  }
+
+  _currentPerMinuteFlow() {
+    const breakdown = this._computeFlowBreakdown();
+    return breakdown.reduce((sum, row) => sum + (row && typeof row.value === 'number' ? row.value : 0), 0);
+  }
+
+  _autoLayoffUntilNonNegativeFlow() {
+    const s = this.state;
+    const stack = Array.isArray(s.hireStack) ? s.hireStack : (s.hireStack = []);
+    const removeLastOfType = (type) => {
+      if (!stack.length) return false;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const h = stack[i];
+        if (!h || h.t !== type) continue;
+        stack.splice(i, 1);
+        if (type === 'enforcer') {
+          s.patrol = Math.max(0, (s.patrol || 0) - 1);
+        } else if (type === 'gangster') {
+          // Remove the most recently hired non-boss gangster card from table
+          const cards = (s.table && s.table.cards) ? s.table.cards : [];
+          for (let j = cards.length - 1; j >= 0; j--) {
+            const it = cards[j];
+            if (!it || it.type !== 'gangster' || it.id === 'boss') continue;
+            cards.splice(j, 1);
+            if (it && it.uid) { try { this.removeCardByUid(it.uid); } catch(e){} }
+            break;
+          }
+        }
+        return true;
+      }
+      return false;
+    };
+    // Keep removing last hired enforcers, then gangsters, until per-minute flow >= 0 or nothing remains
+    let guard = 100;
+    while (guard-- > 0) {
+      const flow = this._currentPerMinuteFlow();
+      if (flow >= 0) break;
+      if (!removeLastOfType('enforcer')) {
+        if (!removeLastOfType('gangster')) break;
+      }
+    }
   }
 
   spendMoney(amount) {
@@ -1043,6 +1089,22 @@ export class Game {
     const total = (providedBreakdown.length > 0 && providedTotal != null) ? providedTotal : computedTotal;
     const sign = (total || 0) >= 0 ? '+' : '-';
     el.textContent = `${sign}$${Math.abs(total || 0)}/m`;
+    // Apply negative/soon-negative styles
+    try {
+      el.classList.remove('neg');
+      el.classList.remove('warn');
+      const perMinute = total || 0;
+      const perSecond = perMinute / 60;
+      const cash = (s.cleanMoney || 0) + (s.dirtyMoney || 0);
+      if (perMinute < 0) {
+        el.classList.add('neg');
+        // If cash will hit zero within ~30s, warn
+        if (perSecond < 0) {
+          const timeToZeroSec = cash > 0 ? (cash / Math.abs(perSecond)) : 0;
+          if (timeToZeroSec > 0 && timeToZeroSec <= 30) el.classList.add('warn');
+        }
+      }
+    } catch(e){}
     // Bind tooltip with lazy content computation so it reflects latest state at hover time
     const anchor = (el.parentElement) ? el.parentElement : el;
     this.showTooltip(anchor, () => this.buildFlowTooltip(this._computeFlowBreakdown()));
@@ -1205,6 +1267,10 @@ export class Game {
     }
     // Heat/cooldown visuals handled by progress-ring per item
     // Update cooldown badges in-place
+    // Insolvency handling: if cash is zero or below, lay off last-hired units until flow >= 0
+    if (this.totalMoney() <= 0) {
+      this._autoLayoffUntilNonNegativeFlow();
+    }
     this.updateUI();
   }
   
