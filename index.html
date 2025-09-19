@@ -235,6 +235,20 @@
       <div id="infoPanelHint" class="info-row"></div>
     </div>
 
+    <!-- View controls (Zoom) -->
+    <div id="viewPanel" style="background:#111; border:1px solid #333; border-radius:10px; padding:12px; margin-bottom:16px;">
+      <div style="font-weight:800; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">View</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div>Zoom: <span id="zoomValue">100%</span></div>
+        <div style="display:flex; gap:6px;">
+          <button id="zoomOutBtn" title="Zoom out (-)">-</button>
+          <button id="zoomResetBtn" title="Reset zoom (100%)">100%</button>
+          <button id="zoomInBtn" title="Zoom in (+)">+</button>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:12px; color:#c2a86a;">Alt+Scroll to zoom</div>
+    </div>
+
     
 
     <!-- Log / Messages -->
