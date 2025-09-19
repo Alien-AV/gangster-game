@@ -755,10 +755,7 @@ export class Game {
           // Recipe matched; run action(s)
           return this._handleGenericOnDrop(item, src, cardEl);
         }
-        // No recipe matched: allow any residual single-card behavior (heat/owner), else nothing
-        if (behavior && typeof behavior.onDrop === 'function') {
-          return behavior.onDrop(this, item, src, cardEl);
-        }
+        // No recipe matched: nothing else to do
         return;
       }, card);
       const buildInfo = () => getCardInfo(this, item);
