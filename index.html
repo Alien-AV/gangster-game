@@ -23,6 +23,8 @@
       /* Badges on dark */
       --badge-warn: #ffd54f;
       --badge-disabled: #ff8a80;
+      /* Runtime UI scale (affects table/card rendering) */
+      --ui-scale: 1;
     }
 
     body {
@@ -167,7 +169,7 @@
         /* Stat badges on gangster cards - subtle and centered over art */
         .world-card-art .world-card-stats { position:absolute; left:50%; bottom:8px; transform: translateX(-50%); display:flex; gap:0; z-index:5; pointer-events:none; }
         .world-card-stats .stat-badge { font-size:12px; padding:3px 10px; border-radius:999px; background: rgba(0,0,0,0.75); border:1px solid rgba(255,255,255,0.18); color:#e0e0e0; text-shadow:0 1px 0 #000; }
-        .ring-wrap { position: relative; }
+        .ring-wrap { position: relative; transform: scale(var(--ui-scale, 1)); transform-origin: top left; }
         .ring-wrap .world-card{ position: relative; z-index: 1; }
         .ring-wrap.ring-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#b49a63 calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
         .ring-wrap.cooldown-active::before{ content:""; position:absolute; inset:-6px; border-radius: calc(var(--card-radius) + 6px); background: conic-gradient(#cc5d5d calc(var(--p,0)*1turn), #333 0); pointer-events:none; z-index: 0; }
@@ -231,6 +233,20 @@
       <div id="infoPanelStats" class="info-row"></div>
       <div id="infoPanelDesc" class="info-row"></div>
       <div id="infoPanelHint" class="info-row"></div>
+    </div>
+
+    <!-- View controls (Zoom) -->
+    <div id="viewPanel" style="background:#111; border:1px solid #333; border-radius:10px; padding:12px; margin-bottom:16px;">
+      <div style="font-weight:800; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">View</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div>Zoom: <span id="zoomValue">100%</span></div>
+        <div style="display:flex; gap:6px;">
+          <button id="zoomOutBtn" title="Zoom out (-)">-</button>
+          <button id="zoomResetBtn" title="Reset zoom (100%)">100%</button>
+          <button id="zoomInBtn" title="Zoom in (+)">+</button>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:12px; color:#c2a86a;">Alt+Scroll to zoom</div>
     </div>
 
     

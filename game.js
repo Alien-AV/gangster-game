@@ -5,6 +5,7 @@ import { Deck } from './deck.js';
 import { startTimer, startCountdown } from './progress-ring.js';
 import { clearRing } from './progress-ring.js';
 import { RecipeEngine, registerDefaultRecipes } from './recipe.js';
+import { getUiScale } from './ui-scale.js';
 import { scaledInterval, scaledTimeout, scaleDurationMs } from './time.js';
 
 // behaviors and renderer moved to card.js
@@ -557,8 +558,11 @@ export class Game {
       const rect = cont.getBoundingClientRect();
       const rawX = ev.clientX - rect.left + cont.scrollLeft;
       const rawY = ev.clientY - rect.top + cont.scrollTop;
-      const dx = (this._dragOffset && typeof this._dragOffset.dx === 'number') ? this._dragOffset.dx : 0;
-      const dy = (this._dragOffset && typeof this._dragOffset.dy === 'number') ? this._dragOffset.dy : 0;
+      const scale = (typeof getUiScale === 'function') ? (getUiScale() || 1) : 1;
+      const dxRaw = (this._dragOffset && typeof this._dragOffset.dx === 'number') ? this._dragOffset.dx : 0;
+      const dyRaw = (this._dragOffset && typeof this._dragOffset.dy === 'number') ? this._dragOffset.dy : 0;
+      const dx = dxRaw / (scale || 1);
+      const dy = dyRaw / (scale || 1);
       const x = rawX - dx;
       const y = rawY - dy;
       try { console.debug('[Drop@canvas]', { payload, x, y, dx, dy, draggingUid: this._draggingUid }); } catch(e){}
@@ -1427,7 +1431,8 @@ Game.prototype._applyDraggable = function(cardEl, itemLike, isBusyFn) {
       const wrap = cardEl.closest && cardEl.closest('.ring-wrap');
       if (wrap) {
         const r = wrap.getBoundingClientRect();
-        this._dragOffset = { dx: ev.clientX - r.left, dy: ev.clientY - r.top };
+        const scale = (typeof getUiScale === 'function') ? (getUiScale() || 1) : 1;
+        this._dragOffset = { dx: (ev.clientX - r.left) / (scale || 1), dy: (ev.clientY - r.top) / (scale || 1) };
         // Track dragging uid to distinguish self vs other-card drops
         const uid = (cardEl && cardEl.dataset && cardEl.dataset.uid)
           || (itemLike && itemLike.uid);
