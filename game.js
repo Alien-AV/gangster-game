@@ -66,7 +66,8 @@ export class Game {
     // Initialize message UI
     this.initCardUI();
     this._initLog();
-    this.interval = scaledInterval(() => this.tick(), 1000);
+    this._lastTickWallMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    this.interval = scaledInterval(() => this.tick(), 100);
 
     // Queued selection managers to avoid overlapping popups
     this._illicitSelect = { queue: [], active: false };
@@ -245,7 +246,7 @@ export class Game {
     return Math.max(10, 50 - level * 10);
   }
 
-  enforcerSalaryPer10s() { return 0; }
+  enforcerSalaryPer10s() { return 20; }
 
   gangsterCost() {
     const level = this.fearLevel();
@@ -260,11 +261,28 @@ export class Game {
 
   paySalaries() {
     const gang = this._allGangsterCards();
+    const enforcers = (this.state.patrol || 0);
     const due = gang.reduce((sum, it) => {
       const sub = this._gangsterSubtypeForCard(it);
       return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
-    }, 0);
+    }, 0) + (enforcers * this.enforcerSalaryPer10s());
     if (due > 0) this.spendMoney(due);
+  }
+
+  _computeIncomePerSecond() {
+    const s = this.state;
+    const cleanPerSec = (s.businesses * 20) + (s.businesses * (this.respectLevel() * 10));
+    const dirtyPerSec = (s.extortedBusinesses * 10) + (s.illicit * 50);
+    return { cleanPerSec, dirtyPerSec };
+  }
+
+  _computeSalaryPerSecond() {
+    const gangsterPer10 = this._allGangsterCards().reduce((sum, it) => {
+      const sub = this._gangsterSubtypeForCard(it);
+      return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
+    }, 0);
+    const enforcerPer10 = (this.state.patrol || 0) * this.enforcerSalaryPer10s();
+    return (gangsterPer10 + enforcerPer10) / 10;
   }
 
   _currentPerMinuteFlow() {
@@ -289,8 +307,20 @@ export class Game {
           for (let j = cards.length - 1; j >= 0; j--) {
             const it = cards[j];
             if (!it || it.type !== 'gangster' || it.id === 'boss') continue;
-            cards.splice(j, 1);
-            if (it && it.uid) { try { this.removeCardByUid(it.uid); } catch(e){} }
+            // Convert to a recruit card of the same type (face/fist/brain) so it can be rehired
+            const subtype = this._gangsterSubtypeForCard(it);
+            const recruitId = subtype ? ('recruit_' + subtype) : null;
+            if (recruitId) {
+              const recruit = { id: recruitId, name: 'Recruit: ' + (subtype || ''), type: 'recruit', reusable: false, data: { type: subtype }, img: it && it.img ? it.img : undefined };
+              cards.splice(j, 1, recruit);
+              if (it && it.uid) { try { this.removeCardByUid(it.uid); } catch(e){} }
+              // Ensure DOM for new recruit card
+              this.ensureCardNode(recruit, j);
+            } else {
+              // Fallback: remove
+              cards.splice(j, 1);
+              if (it && it.uid) { try { this.removeCardByUid(it.uid); } catch(e){} }
+            }
             break;
           }
         }
@@ -322,9 +352,9 @@ export class Game {
 
   updateUI() {
     const s = this.state;
-    const timeEl = document.getElementById('time'); if (timeEl) timeEl.textContent = s.time;
-    const cmEl = document.getElementById('cleanMoney'); if (cmEl) cmEl.textContent = s.cleanMoney;
-    const dmEl = document.getElementById('dirtyMoney'); if (dmEl) dmEl.textContent = s.dirtyMoney;
+    const timeEl = document.getElementById('time'); if (timeEl) timeEl.textContent = String(Math.floor(s.time));
+    const cmEl = document.getElementById('cleanMoney'); if (cmEl) cmEl.textContent = String(Math.round(s.cleanMoney));
+    const dmEl = document.getElementById('dirtyMoney'); if (dmEl) dmEl.textContent = String(Math.round(s.dirtyMoney));
     const patrolEl = document.getElementById('patrol'); if (patrolEl) patrolEl.textContent = s.patrol;
     const extEl = document.getElementById('extortedBusinesses'); if (extEl) extEl.textContent = s.extortedBusinesses;
     const heatEl = document.getElementById('heat'); if (heatEl) heatEl.textContent = s.heat;
@@ -979,11 +1009,12 @@ export class Game {
     const tokens = [];
     if (targetItem) { if (targetItem.type) tokens.push(targetItem.type); if (targetItem.id) tokens.push(targetItem.id); }
     if (sourceItem) { if (sourceItem.type) tokens.push(sourceItem.type); if (sourceItem.id) tokens.push(sourceItem.id); }
-    const actionOrOps = this._recipes.matchAll(tokens, { game: this, target: targetItem, source: sourceItem });
+    const actionOrOps = this._recipes.matchAll(tokens, { game: this, target: targetItem, source: sourceItem }) || [];
     const hasRecipe = !!(actionOrOps && actionOrOps.length);
     // Determine existing stack for target (if any)
     const stacks = this.state.stacks || (this.state.stacks = {});
-    const targetUid = targetItem.uid;
+    const targetUid = targetItem && targetItem.uid;
+    if (!targetUid) return true; // nothing to do
     let sid = this._findStackIdByUid(targetUid);
     if (!sid) {
       const baseUid = targetUid || ('c_' + Math.random().toString(36).slice(2));
@@ -992,9 +1023,9 @@ export class Game {
       stacks[sid] = [targetItem.uid];
     }
     // Remove source from previous stack then append if not already present
-    this._removeFromAnyStack(sourceItem.uid);
+    if (sourceItem && sourceItem.uid) this._removeFromAnyStack(sourceItem.uid);
     const arr = stacks[sid];
-    if (!arr.includes(sourceItem.uid)) arr.push(sourceItem.uid);
+    if (sourceItem && sourceItem.uid && Array.isArray(arr) && !arr.includes(sourceItem.uid)) arr.push(sourceItem.uid);
     // Reflow using the stack's base position (arr[0])
     this._reflowStack(sid, this._basePosForStack(sid));
     this.scheduleSave();
@@ -1132,17 +1163,12 @@ export class Game {
     if (s && s.flow && Array.isArray(s.flow.breakdown) && s.flow.breakdown.length) {
       return s.flow.breakdown.slice();
     }
-    const cleanPerSec = (s.businesses * 20) + (s.businesses * (this.respectLevel() * 10));
-    const dirtyPerSec = (s.extortedBusinesses * 10) + (s.illicit * 50);
-    const salaryPer10 = this._allGangsterCards().reduce((sum, it) => {
-      const sub = this._gangsterSubtypeForCard(it);
-      return sum + (sub ? (this.SALARY_PER_10S[sub] || 0) : 0);
-    }, 0);
-    const salaryPerSec = salaryPer10 / 10;
+    const inc = this._computeIncomePerSecond();
+    const salPerSec = this._computeSalaryPerSecond();
     const arr = [];
-    if (cleanPerSec) arr.push({ label: 'Fronts', value: Math.round(cleanPerSec * 60) });
-    if (dirtyPerSec) arr.push({ label: 'Rackets', value: Math.round(dirtyPerSec * 60) });
-    if (salaryPerSec) arr.push({ label: 'Salaries', value: -Math.round(salaryPerSec * 60) });
+    if (inc.cleanPerSec) arr.push({ label: 'Fronts', value: Math.round(inc.cleanPerSec * 60) });
+    if (inc.dirtyPerSec) arr.push({ label: 'Rackets', value: Math.round(inc.dirtyPerSec * 60) });
+    if (salPerSec) arr.push({ label: 'Salaries', value: -Math.round(salPerSec * 60) });
     return arr;
   }
 
@@ -1241,12 +1267,16 @@ export class Game {
 
   tick() {
     const s = this.state;
-    s.time += 1;
-    s.dirtyMoney += (s.extortedBusinesses || 0) * 10;
-    s.cleanMoney += s.businesses * 20;
-    // Respect increases front legitimacy: +$respectLevel per business per tick
-    s.cleanMoney += s.businesses * (this.respectLevel() * 10);
-    s.dirtyMoney += s.illicit * 50;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const last = this._lastTickWallMs || now;
+    this._lastTickWallMs = now;
+    const dtSec = Math.max(0.01, (now - last) / 1000);
+    s.time += dtSec;
+    {
+      const inc = this._computeIncomePerSecond();
+      s.cleanMoney += inc.cleanPerSec * dtSec;
+      s.dirtyMoney += inc.dirtyPerSec * dtSec;
+    }
     let heatTick = s.disagreeableOwners;
     const unpatrolled = (s.extortedBusinesses || 0) - s.patrol;
     if (unpatrolled > 0) heatTick += unpatrolled;
@@ -1259,11 +1289,10 @@ export class Game {
     } else {
       s.heatProgress = 0;
     }
-    // Salaries every 10 seconds
-    s.salaryTick = (s.salaryTick || 0) + 1;
-    if (s.salaryTick >= 10) {
-      s.salaryTick = 0;
-      this.paySalaries();
+    // Continuous salaries per second
+    {
+      const perSec = this._computeSalaryPerSecond();
+      if (perSec > 0) this.spendMoney(perSec * dtSec);
     }
     // Heat/cooldown visuals handled by progress-ring per item
     // Update cooldown badges in-place
