@@ -22,6 +22,7 @@ export const ACTIONS = [
       const defId = (t === 'boss') ? 'boss' : ('gangster_' + t);
       const newCard = game.spawnTableCard(defId);
       if (newCard) newCard.stats = game.defaultStatsForType ? game.defaultStatsForType(t) : newCard.stats;
+      if (Array.isArray(game.state.hireStack) && defId !== 'boss') game.state.hireStack.push({ t: 'gangster', ts: Date.now(), id: defId });
       game.updateUI();
     } },
   // Unified Explore for any deck-like card: expects item.data.exploreIds
@@ -51,7 +52,7 @@ export const ACTIONS = [
       game.spendMoney(cost);
       return true;
     },
-    effect: (game) => { game.state.patrol += 1; } },
+    effect: (game) => { game.state.patrol += 1; if (Array.isArray(game.state.hireStack)) game.state.hireStack.push({ t: 'enforcer', ts: Date.now() }); } },
   { id: 'actBuyBusiness', label: 'Buy Business (Brain)', stat: 'brain', base: 5000,
     cost: (game) => {
       const cost = game.businessCost ? game.businessCost() : 0;

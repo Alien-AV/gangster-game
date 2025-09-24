@@ -132,6 +132,10 @@
     .ui-tooltip hr { border: none; border-top: 1px solid #2a2a2f; margin: 6px 0; }
     /* Responsive: stack side panel below board on narrow screens */
     @media (max-width: 900px) { #appLayout { grid-template-columns: 1fr; } }
+    /* Cash flow indicator states */
+    #moneyFlowValue.neg { color: #ffb3b3; }
+    #moneyFlowValue.warn { font-weight: 800; animation: flowPulse 1s ease-in-out infinite; }
+    @keyframes flowPulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
